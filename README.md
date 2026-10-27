@@ -163,6 +163,9 @@ flowchart LR
 | `pensec fix-plan` | Ordered remediation steps |
 | `pensec report [--format ...]` | HTML, Markdown, JSON, SARIF 2.1.0, CSV |
 | `pensec evidence show ID \| verify` | Read or verify redacted evidence |
+| `pensec diff [FROM TO]` | New, reopened, remediated, stale and waived findings between two assessments (default: previous vs latest) |
+| `pensec export --bundle out.zip` | Report and redacted evidence with a SHA-256 manifest for a reviewer; never raw tool output |
+| `pensec verify-bundle out.zip` | Recompute every hash in a bundle; compare the printed manifest hash with the sender's |
 | `pensec scope init \| validate \| approve \| revoke` | Authorization for network tests |
 | `pensec test --profile production-observe` | Header and cookie review of approved origins |
 | `pensec doctor` | Optional scanners and their network needs |

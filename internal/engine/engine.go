@@ -485,6 +485,21 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 		res.Remediated++
 	}
 
+	// Record what this assessment observed, including findings of adapters
+	// whose decisions were carried over, so deltas compare like with like.
+	var obs []store.Observation
+	for _, f := range fs {
+		switch {
+		case seen[f.Fingerprint]:
+			obs = append(obs, store.Observation{Fingerprint: f.Fingerprint, FindingID: f.ID})
+		case carried[f.Collector] && f.Status.Active():
+			obs = append(obs, store.Observation{Fingerprint: f.Fingerprint, FindingID: f.ID, Carried: true})
+		}
+	}
+	if err := e.St.PutObservations(asmt.ID, obs); err != nil {
+		return nil, err
+	}
+
 	// Evidence integrity (R-001).
 	okN, bad, err := evidence.Verify(e.St, e.Private(), asmt.ID)
 	if err != nil {

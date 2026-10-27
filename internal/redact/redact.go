@@ -76,6 +76,15 @@ func itoa(n int) string {
 }
 
 // placeholder values that are clearly not real secrets.
+// plainWordKeys are ordinary words that start like a credential key
+// ("passed: 3", "author: x"). Only an exact match is exempt, so keys such
+// as "passed_token" or "password" are still masked.
+var plainWordKeys = map[string]bool{
+	"passed": true, "passes": true, "passing": true, "passage": true, "passive": true, "passthrough": true,
+	"author": true, "authors": true, "authored": true, "authority": true, "authorized": true,
+	"tokens": true, "tokenized": true, "secretary": true,
+}
+
 func isPlaceholder(v string) bool {
 	l := strings.ToLower(strings.Trim(v, `"'`))
 	if strings.HasPrefix(l, "${") || strings.HasPrefix(l, "process.env") || strings.HasPrefix(l, "os.") || strings.HasPrefix(l, "env.") || strings.HasPrefix(l, "$") {
@@ -90,6 +99,11 @@ func isPlaceholder(v string) bool {
 
 // Line redacts one line of text. It is safe to call repeatedly.
 func Line(s string) string {
+	return truncate(mask(s), MaxSnippet)
+}
+
+// mask sanitizes one line and masks every secret-like value in it.
+func mask(s string) string {
 	s = Sanitize(s)
 	for _, r := range SecretRules {
 		s = r.Re.ReplaceAllStringFunc(s, func(m string) string {
@@ -110,6 +124,9 @@ func Line(s string) string {
 		if isPlaceholder(sub[3]) || strings.Contains(sub[3], "REDACTED") || strings.EqualFold(sub[3], "bearer") || strings.EqualFold(sub[3], "basic") {
 			return m
 		}
+		if plainWordKeys[strings.ToLower(strings.TrimRight(sub[1], " \t:="))] {
+			return m
+		}
 		return sub[1] + sub[2] + Mask(sub[3])
 	})
 	s = cookieRe.ReplaceAllString(s, "${1}[REDACTED]")
@@ -117,7 +134,19 @@ func Line(s string) string {
 	if looksLikeKeyBody(s) {
 		return "[REDACTED key material]"
 	}
-	return truncate(s, MaxSnippet)
+	return s
+}
+
+// HasSecrets reports whether redaction would mask anything in s. Unlike
+// Line it does not truncate, so it can check whole documents before they
+// leave the machine.
+func HasSecrets(s string) bool {
+	for _, l := range strings.Split(s, "\n") {
+		if mask(l) != Sanitize(l) {
+			return true
+		}
+	}
+	return false
 }
 
 // Text redacts multi-line text line by line.

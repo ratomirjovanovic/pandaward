@@ -47,6 +47,10 @@ var migrations = []string{
 		expires_at TEXT NOT NULL, revoked INTEGER DEFAULT 0);
 	CREATE INDEX IF NOT EXISTS idx_findings_project ON findings(project_id, status);
 	CREATE INDEX IF NOT EXISTS idx_events_project ON events(project_id, seq);`,
+	// 2: which findings each assessment observed, for stable deltas.
+	`CREATE TABLE IF NOT EXISTS observations(assessment_id TEXT NOT NULL, fingerprint TEXT NOT NULL, finding_id TEXT NOT NULL, carried INTEGER DEFAULT 0,
+		PRIMARY KEY(assessment_id, fingerprint));
+	ALTER TABLE assessments ADD COLUMN observed INTEGER DEFAULT 0;`,
 }
 
 // Open opens (and migrates) the database under the private directory.
@@ -643,6 +647,121 @@ func (s *Store) Events(projectID string, n int) ([]EventRow, error) {
 			return nil, err
 		}
 		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+// Assessment returns one assessment of a project, or nil.
+func (s *Store) Assessment(projectID, id string) (*Assessment, error) {
+	row := s.DB.QueryRow(`SELECT id,seq,COALESCE(git_commit,''),COALESCE(git_dirty,0),profile,COALESCE(config_hash,''),COALESCE(catalog_version,''),started_at,COALESCE(ended_at,''),status,COALESCE(manifest_json,'')
+		FROM assessments WHERE project_id=? AND id=?`, projectID, id)
+	a := &Assessment{}
+	err := row.Scan(&a.ID, &a.Seq, &a.GitCommit, &a.GitDirty, &a.Profile, &a.ConfigHash, &a.CatalogVersion, &a.StartedAt, &a.EndedAt, &a.Status, &a.ManifestJSON)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return a, err
+}
+
+// PreviousObserved returns the latest finished assessment before seq that
+// recorded observations, or nil.
+func (s *Store) PreviousObserved(projectID string, seq int) (*Assessment, error) {
+	var id string
+	err := s.DB.QueryRow(`SELECT id FROM assessments WHERE project_id=? AND seq<? AND observed=1 AND status IN ('COMPLETE','INCOMPLETE') ORDER BY seq DESC LIMIT 1`, projectID, seq).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return s.Assessment(projectID, id)
+}
+
+// Observation records that an assessment saw a finding, directly or carried
+// over from the previous assessment by a targeted retest.
+type Observation struct {
+	Fingerprint string
+	FindingID   string
+	Carried     bool
+}
+
+// PutObservations stores the observations of an assessment and marks it as
+// tracked, so an empty set means "nothing observed", not "unknown".
+func (s *Store) PutObservations(asmt string, obs []Observation) error {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	for _, o := range obs {
+		if _, err := tx.Exec(`INSERT OR REPLACE INTO observations(assessment_id,fingerprint,finding_id,carried) VALUES(?,?,?,?)`, asmt, o.Fingerprint, o.FindingID, o.Carried); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	if _, err := tx.Exec(`UPDATE assessments SET observed=1 WHERE id=?`, asmt); err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+// Observations returns fingerprint -> observation for an assessment and
+// whether the assessment tracked observations at all.
+func (s *Store) Observations(asmt string) (map[string]Observation, bool, error) {
+	var tracked int
+	if err := s.DB.QueryRow(`SELECT COALESCE(observed,0) FROM assessments WHERE id=?`, asmt).Scan(&tracked); err != nil {
+		return nil, false, err
+	}
+	rows, err := s.DB.Query(`SELECT fingerprint,finding_id,carried FROM observations WHERE assessment_id=?`, asmt)
+	if err != nil {
+		return nil, false, err
+	}
+	defer rows.Close()
+	out := map[string]Observation{}
+	for rows.Next() {
+		var o Observation
+		if err := rows.Scan(&o.Fingerprint, &o.FindingID, &o.Carried); err != nil {
+			return nil, false, err
+		}
+		out[o.Fingerprint] = o
+	}
+	return out, tracked == 1, rows.Err()
+}
+
+// ObservedBefore returns the fingerprints observed by any assessment of the
+// project with a sequence number below seq.
+func (s *Store) ObservedBefore(projectID string, seq int) (map[string]bool, error) {
+	rows, err := s.DB.Query(`SELECT DISTINCT o.fingerprint FROM observations o JOIN assessments a ON a.id=o.assessment_id WHERE a.project_id=? AND a.seq<?`, projectID, seq)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]bool{}
+	for rows.Next() {
+		var fp string
+		if err := rows.Scan(&fp); err != nil {
+			return nil, err
+		}
+		out[fp] = true
+	}
+	return out, rows.Err()
+}
+
+// Waivers returns finding ID -> new state for findings marked false positive
+// or risk accepted at a time in (from, to].
+func (s *Store) Waivers(projectID, from, to string) (map[string]string, error) {
+	rows, err := s.DB.Query(`SELECT entity_id,new_state FROM events WHERE project_id=? AND new_state IN ('FALSE_POSITIVE','RISK_ACCEPTED') AND ts>? AND ts<=? ORDER BY seq`, projectID, from, to)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var id, st string
+		if err := rows.Scan(&id, &st); err != nil {
+			return nil, err
+		}
+		out[id] = st
 	}
 	return out, rows.Err()
 }
