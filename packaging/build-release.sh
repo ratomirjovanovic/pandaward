@@ -26,9 +26,13 @@ for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; d
 done
 
 # One SBOM covers every binary: all targets link the same modules. Short
-# PURLs, no timestamp and no serial number keep it reproducible.
+# PURLs and no timestamp keep it reproducible. The serial number is
+# required by attestation tooling, so it is derived from the version (a
+# UUID-shaped SHA-256 prefix) instead of being random.
 if command -v cyclonedx-gomod >/dev/null 2>&1; then
-	cyclonedx-gomod app -licenses -assert-licenses -json -short-purls -noserial -notimestamp \
+	h=$(printf 'pensec-%s' "$version" | sha256sum | cut -c1-32)
+	serial="urn:uuid:$(echo "$h" | cut -c1-8)-$(echo "$h" | cut -c9-12)-5$(echo "$h" | cut -c14-16)-8$(echo "$h" | cut -c18-20)-$(echo "$h" | cut -c21-32)"
+	cyclonedx-gomod app -licenses -assert-licenses -json -short-purls -notimestamp -serial "$serial" \
 		-output "$out/pensec.cdx.json" -main cmd/pensec .
 else
 	echo "cyclonedx-gomod not found; SBOM not generated" >&2
