@@ -58,6 +58,9 @@ jobs:
         with:
           subject-path: dist/pensec-*
 
+      - name: Rule benchmark
+        run: go run ./cmd/pensec benchmark --strict --json > dist/benchmark.json
+
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}

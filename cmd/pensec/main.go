@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/ratomirjovanovic/pensec/internal/adapters"
+	"github.com/ratomirjovanovic/pensec/internal/benchmark"
 	"github.com/ratomirjovanovic/pensec/internal/catalog"
 	"github.com/ratomirjovanovic/pensec/internal/config"
 	"github.com/ratomirjovanovic/pensec/internal/engine"
@@ -61,6 +62,7 @@ Network-active (human authorization required):
 Integration and tooling:
   doctor          Environment, optional scanners and their network needs
   capabilities    Control catalog with adapter maturity
+  benchmark       TP/FP/FN/TN per built-in rule on the bundled corpus (--json, --strict)
   mcp             Serve the MCP stdio interface
   hook <name>     Claude Code lifecycle hook (session-start, post-edit, pre-tool, pre-compact)
   version         Print version
@@ -128,6 +130,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		err = cmdTest(ctx, rest, stdout, stderr)
 	case "doctor":
 		err = cmdDoctor(ctx, rest, stdout)
+	case "benchmark":
+		err = cmdBenchmark(ctx, rest, stdout)
 	case "capabilities":
 		err = cmdCapabilities(rest, stdout)
 	default:
@@ -1078,3 +1082,42 @@ func cmdCapabilities(args []string, w io.Writer) error {
 
 // MaturityObserve is the maturity of the production-observe adapter.
 const MaturityObserve = adapters.MaturityUnvalidated
+
+func cmdBenchmark(ctx context.Context, args []string, w io.Writer) error {
+	fs := flag.NewFlagSet("benchmark", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "JSON output")
+	strict := fs.Bool("strict", false, "exit 1 when any rule misses a vulnerable case or fires on a safe one")
+	if _, err := parse(fs, args); err != nil {
+		return err
+	}
+	rep, err := benchmark.Run(ctx)
+	if err != nil {
+		return err
+	}
+	failed := 0
+	for _, r := range rep.Rules {
+		if r.FP+r.FN > 0 {
+			failed++
+		}
+	}
+	if *asJSON {
+		if err := printJSON(w, rep); err != nil {
+			return err
+		}
+	} else {
+		fmt.Fprintf(w, "Corpus %s, pensec %s, catalog %s\n\n", rep.CorpusVersion, rep.PensecVersion, rep.CatalogVersion)
+		fmt.Fprintf(w, "%-36s %4s %4s %3s %3s %3s %3s %5s %6s  %s\n", "rule", "vuln", "safe", "TP", "FP", "FN", "TN", "prec", "recall", "maturity")
+		for _, r := range rep.Rules {
+			fmt.Fprintf(w, "%-36s %4d %4d %3d %3d %3d %3d %5.2f %6.2f  %s\n", r.Rule, r.Vulnerable, r.Safe, r.TP, r.FP, r.FN, r.TN, r.Precision, r.Recall, r.Maturity)
+			for _, f := range r.Failures {
+				fmt.Fprintln(w, "    "+f)
+			}
+		}
+		fmt.Fprintf(w, "\n%d of %d rules benchmarked (precision >= %.2f and recall >= %.2f on at least %d vulnerable and %d safe cases).\n%s\n",
+			rep.Benchmarked, len(rep.Rules), rep.MinPrecision, rep.MinRecall, rep.MinCases, rep.MinCases, rep.Note)
+	}
+	if *strict && failed > 0 {
+		return exitErr{1, fmt.Sprintf("%d rule(s) missed a vulnerable case or fired on a safe one", failed)}
+	}
+	return nil
+}
