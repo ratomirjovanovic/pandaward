@@ -221,7 +221,7 @@ A PenSec report is an automated technical assessment. It is not a certification,
 | Milestone | Scope | State |
 |---|---|---|
 | M0 Foundation | CLI, ledger, scope policy, inventory, static report | done |
-| M1 Public alpha | built-in adapters, optional tool adapters, bundled Semgrep rules, edges, HTML/JSON/SARIF, plugin, signed reproducible releases | done (v0.1.0) |
+| M1 Public alpha | built-in adapters, optional tool adapters, bundled Semgrep rules, edges, HTML/JSON/SARIF, plugin, signed reproducible releases | done (v0.1.1) |
 | M2 Context-safe beta | per-domain invalidation, targeted retest, evidence bundles, delta reports, hostile-repository suite | done |
 | M3 Runtime beta | staging profile with role and tenant fixtures, ZAP adapter | planned |
 | M4 Mobile and AI | MobSF and emulator adapters, prompt-injection suite | planned |
