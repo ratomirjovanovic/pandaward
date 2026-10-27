@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -311,4 +312,45 @@ func (e *Engine) ChangedSinceLast(inv *inventory.Inventory) ([]string, error) {
 		}
 	}
 	return changed, nil
+}
+
+// EntrypointKinds are the asset kinds Entrypoints lists, in display order.
+var EntrypointKinds = []string{"route", "graphql_operation", "grpc_method", "queue_consumer", "cron_job"}
+
+// Entrypoints lists the entrypoints found by the latest assessment, each with
+// its file and line, optionally limited to one service root or kind.
+func (e *Engine) Entrypoints(service, kind string) ([]model.Asset, *store.Assessment, error) {
+	a, err := e.St.LatestAssessment(e.ProjectID)
+	if err != nil || a == nil {
+		return nil, a, err
+	}
+	all, err := e.St.Assets(a.ID)
+	if err != nil {
+		return nil, a, err
+	}
+	order := map[string]int{}
+	for i, k := range EntrypointKinds {
+		order[k] = i + 1
+	}
+	var out []model.Asset
+	for _, as := range all {
+		if order[as.Kind] == 0 || (kind != "" && as.Kind != kind) || (service != "" && as.Meta["service"] != service) {
+			continue
+		}
+		out = append(out, as)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		x, y := out[i], out[j]
+		if x.Meta["service"] != y.Meta["service"] {
+			return x.Meta["service"] < y.Meta["service"]
+		}
+		if x.Kind != y.Kind {
+			return order[x.Kind] < order[y.Kind]
+		}
+		if x.Meta["path"] != y.Meta["path"] {
+			return x.Meta["path"] < y.Meta["path"]
+		}
+		return x.Meta["method"] < y.Meta["method"]
+	})
+	return out, a, nil
 }

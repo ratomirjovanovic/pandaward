@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ratomirjovanovic/pensec/internal/engine"
+	"github.com/ratomirjovanovic/pensec/internal/testfixture"
 )
 
 func rpc(t *testing.T, s *Server, msgs ...string) []map[string]any {
@@ -72,5 +73,49 @@ func TestProtocol(t *testing.T) {
 	}
 	if res[6]["error"] == nil {
 		t.Errorf("parse error expected")
+	}
+}
+
+func TestListEntrypoints(t *testing.T) {
+	root := testfixture.VulnerableRepo(t)
+	e, _, err := engine.Init(root, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Close()
+	s := &Server{Root: root}
+	res := rpc(t, s,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pensec_list_entrypoints","arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"pensec_scan_passive","arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"pensec_list_entrypoints","arguments":{"kind":"bogus"}}}`,
+		`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"pensec_list_entrypoints","arguments":{"kind":"route"}}}`,
+	)
+	for _, i := range []int{0, 2} {
+		if res[i]["result"].(map[string]any)["isError"] != true {
+			t.Errorf("response %d must be an error (no assessment yet / unknown kind): %v", i, res[i])
+		}
+	}
+	txt := res[3]["result"].(map[string]any)["content"].([]any)[0].(map[string]any)["text"].(string)
+	var out struct {
+		Result struct {
+			Total       int `json:"total"`
+			Entrypoints []struct {
+				Kind    string            `json:"kind"`
+				Locator string            `json:"locator"`
+				Line    int               `json:"line"`
+				Meta    map[string]string `json:"meta"`
+			} `json:"entrypoints"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal([]byte(txt), &out); err != nil {
+		t.Fatal(err, txt)
+	}
+	if out.Result.Total == 0 || out.Result.Total != len(out.Result.Entrypoints) {
+		t.Fatalf("expected routes from the fixture: %s", txt)
+	}
+	for _, ep := range out.Result.Entrypoints {
+		if ep.Kind != "route" || ep.Locator == "" || ep.Line == 0 || ep.Meta["path"] == "" {
+			t.Errorf("entrypoint without kind filter, file or line: %+v", ep)
+		}
 	}
 }
