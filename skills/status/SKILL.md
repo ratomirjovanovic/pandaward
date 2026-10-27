@@ -5,7 +5,7 @@ description: Show resumable PenSec assessment state: latest assessment, decisive
 
 # PenSec status
 
-Call the `pensec_get_status` MCP tool (or `pensec status`). Report coverage, open confirmed vs suspected findings, stale files and blockers, then the next action the ledger recommends. If files are stale, say that results for them are outdated until `/pensec:retest`.
+Call the `pensec_get_status` MCP tool (or `pensec status`). Report coverage, open confirmed vs suspected findings, stale files and blockers, then the next action the ledger recommends. If files are stale, name the STALE controls the ledger lists and say their results are outdated until `/pensec:retest`; other controls keep their decisions.
 
 ## Ground rules (always)
 

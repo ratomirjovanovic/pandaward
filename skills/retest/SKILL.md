@@ -5,7 +5,7 @@ description: Re-run the PenSec passive scan after code changes and report the de
 
 # PenSec retest
 
-Run `pensec retest`. Report the files changed since the last assessment, then the delta: remediated, reopened and new findings, and coverage. Only call something fixed if the ledger marks it REMEDIATED.
+Run `pensec retest --changed` to re-run only the adapters whose inputs changed; the others are reported as CARRIED and keep their previous decisions. Run plain `pensec retest` for a full re-scan when the user asks for one or the config changed. Report the files changed since the last assessment, which adapters re-ran, then the delta: remediated, reopened and new findings, and coverage. Only call something fixed if the ledger marks it REMEDIATED.
 
 ## Ground rules (always)
 

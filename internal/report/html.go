@@ -47,7 +47,7 @@ func HTML(r *Report) ([]byte, error) {
 	}
 	var b bytes.Buffer
 	data := map[string]any{"R": r, "Confirmed": r.Confirmed(), "Suspected": r.Suspected(), "Closed": r.Closed(), "Untested": r.Untested(),
-		"Statuses": []string{"PASS", "FAIL", "SUSPECTED", "BLOCKED", "UNSUPPORTED", "INCONCLUSIVE", "ERROR", "NOT_APPLICABLE"}}
+		"Statuses": []string{"PASS", "FAIL", "SUSPECTED", "BLOCKED", "UNSUPPORTED", "INCONCLUSIVE", "ERROR", "STALE", "NOT_APPLICABLE"}}
 	if err := t.Execute(&b, data); err != nil {
 		return nil, err
 	}
@@ -89,7 +89,7 @@ code{font:12.5px ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:an
 <div class="tile"><span class="mut">Not decided</span><b>{{len .Untested}}</b><span class="mut">controls, never read as secure</span></div>
 <div class="tile"><span class="mut">Cross-domain edges</span><b>{{.R.Coverage.EdgesTotal}}</b><span class="mut">{{.R.Coverage.EdgesVerified}} verified · {{.R.Coverage.EdgesFailed}} failed · {{.R.Coverage.EdgesOpen}} open</span></div>
 </div>
-{{if .R.StaleFiles}}<p class="warn">{{len .R.StaleFiles}} file(s) changed after this assessment. Results for them are STALE until re-scan.</p>{{end}}
+{{if .R.StaleFiles}}<p class="warn">{{len .R.StaleFiles}} file(s) changed after this assessment. Controls and edges that depend on them are shown as STALE until <code>pensec retest</code>.</p>{{end}}
 <p class="mut">{{.R.Coverage.Note}}</p>
 
 <h2>Confirmed observations ({{len .Confirmed}})</h2>

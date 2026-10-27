@@ -67,7 +67,7 @@ func Build(e *engine.Engine) (*Report, error) {
 	if r.EvidenceIndex, err = e.St.EvidenceFor(a.ID); err != nil {
 		return nil, err
 	}
-	if r.StaleFiles, err = e.St.StaleFiles(e.ProjectID); err != nil {
+	if r.Controls, r.Edges, r.StaleFiles, err = e.StaleView(a.ID, r.Controls, r.Edges); err != nil {
 		return nil, err
 	}
 	fs, err := e.St.Findings(e.ProjectID)
@@ -142,6 +142,16 @@ func (r *Report) Untested() []model.ControlResult {
 		}
 	}
 	return out
+}
+
+func (r *Report) staleControls() int {
+	n := 0
+	for _, c := range r.Controls {
+		if c.Status == model.StatusStale {
+			n++
+		}
+	}
+	return n
 }
 
 // Write renders the requested formats into dir and returns the paths.
@@ -225,7 +235,7 @@ func Markdown(r *Report) string {
 	w("- Controls: %d applicable, %d decisive (%s decisive coverage), %d not decided\n", r.Coverage.Applicable, r.Coverage.Decisive, pct(r.Coverage.Ratio), len(r.Untested()))
 	w("- Cross-domain edges: %d instantiated, %d verified, %d failed, %d blocked/inconclusive/suspected\n", r.Coverage.EdgesTotal, r.Coverage.EdgesVerified, r.Coverage.EdgesFailed, r.Coverage.EdgesOpen)
 	if len(r.StaleFiles) > 0 {
-		w("- **%d file(s) changed after this assessment; results for them are STALE.**\n", len(r.StaleFiles))
+		w("- **%d file(s) changed after this assessment; %d dependent control(s) and their edges are STALE until `pensec retest`.**\n", len(r.StaleFiles), r.staleControls())
 	}
 	w("\n**Important:** %d applicable controls were not decisively tested. They must not be read as secure.\n\n", len(r.Untested()))
 	w("%s\n\n", r.Coverage.Note)
@@ -256,10 +266,10 @@ func Markdown(r *Report) string {
 	writeFindings("Confirmed observations", conf)
 	writeFindings("Suspected signals (hypotheses, not confirmed)", susp)
 
-	w("## Coverage by domain\n\n| Domain | PASS | FAIL | SUSPECTED | BLOCKED | UNSUPPORTED | INCONCLUSIVE | ERROR | N/A |\n|---|---|---|---|---|---|---|---|---|\n")
+	w("## Coverage by domain\n\n| Domain | PASS | FAIL | SUSPECTED | BLOCKED | UNSUPPORTED | INCONCLUSIVE | ERROR | STALE | N/A |\n|---|---|---|---|---|---|---|---|---|---|\n")
 	for _, d := range r.Domains {
 		s := r.DomainSummary[d.ID]
-		w("| %s %s | %d | %d | %d | %d | %d | %d | %d | %d |\n", d.ID, esc(d.Name), s["PASS"], s["FAIL"], s["SUSPECTED"], s["BLOCKED"], s["UNSUPPORTED"], s["INCONCLUSIVE"], s["ERROR"], s["NOT_APPLICABLE"])
+		w("| %s %s | %d | %d | %d | %d | %d | %d | %d | %d | %d |\n", d.ID, esc(d.Name), s["PASS"], s["FAIL"], s["SUSPECTED"], s["BLOCKED"], s["UNSUPPORTED"], s["INCONCLUSIVE"], s["ERROR"], s["STALE"], s["NOT_APPLICABLE"])
 	}
 	w("\n## Cross-domain edges\n\n")
 	if len(r.Edges) == 0 {

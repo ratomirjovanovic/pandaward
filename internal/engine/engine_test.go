@@ -140,7 +140,7 @@ func TestStaleAfterEdit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(s.StaleFiles) != 1 || s.Coverage.Decisive != 0 {
+	if len(s.StaleFiles) != 1 || len(s.StaleControls) == 0 {
 		t.Fatalf("stale state not reflected: %+v %+v", s.StaleFiles, s.Coverage)
 	}
 }
