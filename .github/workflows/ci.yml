@@ -31,6 +31,14 @@ jobs:
       - name: Launcher verification
         if: runner.os != 'Windows'
         run: sh packaging/test-launcher.sh
+      - name: Rule benchmark
+        if: runner.os == 'Linux'
+        run: go run ./cmd/pensec benchmark --strict --json > benchmark.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: runner.os == 'Linux'
+        with:
+          name: benchmark
+          path: benchmark.json
 
   reproducible:
     runs-on: ubuntu-latest

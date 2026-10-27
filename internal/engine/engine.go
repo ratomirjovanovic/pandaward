@@ -33,6 +33,9 @@ type Engine struct {
 	Cfg        *config.Config
 	ConfigHash string
 	St         *store.Store
+	// HashBudget bounds the time status-style reads spend hashing the
+	// working tree to find changes made outside Claude Code; 0 means none.
+	HashBudget time.Duration
 }
 
 // ProjectID derives a stable local project ID from the absolute root.
@@ -237,6 +240,15 @@ type carryState struct {
 	adapters map[string]bool // adapters whose inputs did not change
 	controls map[string]model.ControlResult
 	runs     map[string]model.Run
+	evidence []string // evidence IDs carried into the new assessment
+}
+
+// carried returns the evidence IDs carried over, or nil for a full scan.
+func (cy *carryState) carried() []string {
+	if cy == nil {
+		return nil
+	}
+	return cy.evidence
 }
 
 // Retest re-runs only the adapters that watch a changed path. Every other
@@ -251,8 +263,12 @@ func (e *Engine) Retest(ctx context.Context, progress func(string), changed []st
 	if err != nil {
 		return nil, err
 	}
-	if prev == nil || prev.Profile != "local-passive" || prev.ConfigHash != e.ConfigHash || prev.CatalogVersion != catalog.Version {
-		progress("retest: no comparable previous assessment (config or catalog changed); running a full scan")
+	switch {
+	case prev == nil:
+		progress("retest: no previous assessment; running a full scan")
+		return e.scan(ctx, progress, nil)
+	case prev.Profile != "local-passive" || prev.ConfigHash != e.ConfigHash || prev.CatalogVersion != catalog.Version:
+		progress("retest: config, catalog or profile changed since " + prev.ID + "; running a full scan")
 		return e.scan(ctx, progress, nil)
 	}
 	cs, err := e.St.Controls(prev.ID)
@@ -279,6 +295,26 @@ func (e *Engine) Retest(ctx context.Context, progress func(string), changed []st
 	return e.scan(ctx, progress, cy)
 }
 
+// RetestChanged lists the files changed since the last assessment and then
+// runs a targeted retest (changedOnly) or a full scan.
+func (e *Engine) RetestChanged(ctx context.Context, progress func(string), changedOnly bool) ([]string, *ScanResult, error) {
+	inv, err := e.Inventory()
+	if err != nil {
+		return nil, nil, err
+	}
+	changed, err := e.ChangedSinceLast(inv)
+	if err != nil {
+		return nil, nil, err
+	}
+	var res *ScanResult
+	if changedOnly {
+		res, err = e.Retest(ctx, progress, changed)
+	} else {
+		res, err = e.Scan(ctx, progress)
+	}
+	return changed, res, err
+}
+
 // carry copies an adapter's previous decisions into results. It refuses when
 // a control's applicability changed, because the old run never decided it.
 func (cy *carryState) carry(ad adapters.Adapter, results map[string]*model.ControlResult, ctrlEvidence map[string][]string) (model.Run, bool) {
@@ -299,6 +335,7 @@ func (cy *carryState) carry(ad adapters.Adapter, results map[string]*model.Contr
 			old := cy.controls[cid]
 			r.Status, r.Reason = old.Status, old.Reason
 			ctrlEvidence[cid] = old.EvidenceIDs
+			cy.evidence = append(cy.evidence, old.EvidenceIDs...)
 		}
 	}
 	prev := cy.runs[ad.Name()]
@@ -359,6 +396,7 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 	var allSignals []model.Signal
 	ranOK := map[string]bool{}   // adapter -> completed OK
 	carried := map[string]bool{} // adapter -> decisions carried over
+	var foreign []model.Signal   // signals for controls owned by another adapter
 	ctrlEvidence := map[string][]string{}
 	for _, ad := range adapters.Registry() {
 		if !enabled[ad.Name()] {
@@ -407,6 +445,7 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 			continue
 		}
 		ranOK[ad.Name()] = true
+		foreign = append(foreign, routeForeign(ad, out.Signals, results)...)
 		allSignals = append(allSignals, out.Signals...)
 		for _, cid := range ad.Controls() {
 			r := results[cid]
@@ -425,6 +464,8 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 			}
 		}
 	}
+
+	raise(results, foreign)
 
 	// Persist findings with evidence.
 	progress("findings: normalizing, fingerprinting and writing redacted evidence")
@@ -485,14 +526,32 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 		res.Remediated++
 	}
 
+	// Record what this assessment observed, including findings of adapters
+	// whose decisions were carried over, so deltas compare like with like.
+	var obs []store.Observation
+	for _, f := range fs {
+		switch {
+		case seen[f.Fingerprint]:
+			obs = append(obs, store.Observation{Fingerprint: f.Fingerprint, FindingID: f.ID})
+		case carried[f.Collector] && f.Status.Active():
+			obs = append(obs, store.Observation{Fingerprint: f.Fingerprint, FindingID: f.ID, Carried: true})
+		}
+	}
+	if err := e.St.PutObservations(asmt.ID, obs); err != nil {
+		return nil, err
+	}
+
 	// Evidence integrity (R-001).
-	okN, bad, err := evidence.Verify(e.St, e.Private(), asmt.ID)
+	okN, bad, err := evidence.Verify(e.St, e.Private(), asmt.ID, cy.carried())
 	if err != nil {
 		return nil, err
 	}
 	if r := results["R-001"]; r != nil {
 		if len(bad) == 0 {
 			r.Status, r.Reason = model.StatusPass, fmt.Sprintf("%d evidence artifacts verified against SHA-256", okN)
+			if n := len(cy.carried()); n > 0 {
+				r.Reason += fmt.Sprintf(", including %d carried from %s", n, cy.from)
+			}
 		} else {
 			r.Status, r.Reason = model.StatusFail, "integrity failure: "+strings.Join(bad, ", ")
 		}
@@ -536,6 +595,53 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 		return nil, err
 	}
 	return res, nil
+}
+
+// routeForeign returns the signals an adapter reports for controls it does
+// not own. A signal whose control is not applicable or cannot be decided is
+// moved to the adapter's first control so it still counts somewhere.
+func routeForeign(ad adapters.Adapter, sigs []model.Signal, results map[string]*model.ControlResult) []model.Signal {
+	own := map[string]bool{}
+	for _, cid := range ad.Controls() {
+		own[cid] = true
+	}
+	var out []model.Signal
+	for i := range sigs {
+		s := &sigs[i]
+		if own[s.ControlID] {
+			continue
+		}
+		r := results[s.ControlID]
+		if r == nil || r.Status == model.StatusNotApplicable || r.Status == model.StatusBlocked || r.Status == model.StatusUnsupported {
+			if len(ad.Controls()) > 0 {
+				s.ControlID = ad.Controls()[0]
+			}
+			continue
+		}
+		out = append(out, *s)
+	}
+	return out
+}
+
+// raise applies foreign signals after all adapters ran. They can move a
+// control from PASS to SUSPECTED or FAIL, or from SUSPECTED to FAIL, but never
+// lower a status, so adapter order cannot hide a FAIL.
+func raise(results map[string]*model.ControlResult, foreign []model.Signal) {
+	rank := map[model.Status]int{model.StatusPass: 1, model.StatusInconclusive: 1, model.StatusSuspected: 2, model.StatusFail: 3}
+	by := map[string][]model.Signal{}
+	for _, s := range foreign {
+		by[s.ControlID] = append(by[s.ControlID], s)
+	}
+	for cid, sigs := range by {
+		r := results[cid]
+		if r == nil || rank[r.Status] == 0 {
+			continue
+		}
+		st, why := decide(sigs, cid, "")
+		if rank[st] > rank[r.Status] {
+			r.Status, r.Reason = st, why+" from "+sigs[0].Collector+" (was "+string(r.Status)+": "+r.Reason+")"
+		}
+	}
 }
 
 // safeRun isolates adapter panics so a crashing scanner is recorded as ERROR,

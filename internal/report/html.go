@@ -46,7 +46,11 @@ func HTML(r *Report) ([]byte, error) {
 		return nil, err
 	}
 	var b bytes.Buffer
-	data := map[string]any{"R": r, "Confirmed": r.Confirmed(), "Suspected": r.Suspected(), "Closed": r.Closed(), "Untested": r.Untested(),
+	var delta []DeltaSection
+	if r.Delta != nil {
+		delta = deltaSections(r.Delta)
+	}
+	data := map[string]any{"R": r, "Confirmed": r.Confirmed(), "Suspected": r.Suspected(), "Closed": r.Closed(), "Untested": r.Untested(), "Delta": delta,
 		"Statuses": []string{"PASS", "FAIL", "SUSPECTED", "BLOCKED", "UNSUPPORTED", "INCONCLUSIVE", "ERROR", "STALE", "NOT_APPLICABLE"}}
 	if err := t.Execute(&b, data); err != nil {
 		return nil, err
@@ -91,6 +95,12 @@ code{font:12.5px ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:an
 </div>
 {{if .R.StaleFiles}}<p class="warn">{{len .R.StaleFiles}} file(s) changed after this assessment. Controls and edges that depend on them are shown as STALE until <code>pensec retest</code>.</p>{{end}}
 <p class="mut">{{.R.Coverage.Note}}</p>
+{{with .R.Delta}}
+<h2>Changes since {{.From}}</h2>
+<p>New {{len .New}}, reopened {{len .Reopened}}, remediated {{len .Remediated}}, stale {{len .Stale}}, waived {{len .Waived}}, unchanged {{.Unchanged}}.</p>
+<ul>{{range $.Delta}}{{$t := .Title}}{{range .Items}}<li><b>{{$t}}</b> {{.FindingID}} {{.Title}} ({{.Severity}}) <code>{{.File}}{{if .Line}}:{{.Line}}{{end}}</code>{{if .Note}}: {{.Note}}{{end}}</li>{{end}}{{end}}</ul>
+<p class="mut">{{.Note}}</p>
+{{end}}
 
 <h2>Confirmed observations ({{len .Confirmed}})</h2>
 {{range .Confirmed}}{{template "finding" .}}{{else}}<p>None.</p>{{end}}

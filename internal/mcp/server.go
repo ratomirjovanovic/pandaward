@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/ratomirjovanovic/pensec/internal/engine"
 	"github.com/ratomirjovanovic/pensec/internal/evidence"
 	"github.com/ratomirjovanovic/pensec/internal/model"
+	"github.com/ratomirjovanovic/pensec/internal/redact"
 	"github.com/ratomirjovanovic/pensec/internal/report"
 	"github.com/ratomirjovanovic/pensec/internal/version"
 )
@@ -84,7 +86,15 @@ func tools() []tool {
 		}), readOnly},
 		{"pensec_get_evidence", "One redacted evidence record after SHA-256 integrity verification.", obj(map[string]any{"evidence_id": str("ev_ followed by 16 hex characters")}, "evidence_id"), readOnly},
 		{"pensec_get_graph", "Cross-domain edges (AB1, CG1, ...) with status, provenance and linked tests; optionally one edge.", obj(map[string]any{"edge_id": str("e.g. CG1")}), readOnly},
+		{"pensec_list_entrypoints", "Entrypoints discovered by the latest assessment (HTTP routes with router prefixes resolved, GraphQL operations, gRPC methods, queue consumers, cron jobs), each with file, line and service.", obj(map[string]any{
+			"service": str("service root directory, e.g. services/api"),
+			"kind":    map[string]any{"type": "string", "enum": []string{"route", "graphql_operation", "grpc_method", "queue_consumer", "cron_job"}},
+			"limit":   map[string]any{"type": "integer", "minimum": 1, "maximum": 500},
+		}), readOnly},
 		{"pensec_scan_passive", "Run the local passive scan (read-only inventory and static checks; no target network traffic). Writes only to the local ledger.", obj(map[string]any{}), localWrite},
+		{"pensec_retest", "Re-assess after code changes. Lists files changed since the last assessment, then re-runs only the adapters whose inputs changed (others are CARRIED with their previous decisions) unless changed_only is false. Local only; no target network traffic.", obj(map[string]any{
+			"changed_only": map[string]any{"type": "boolean", "description": "re-run only affected adapters (default true); false runs the full passive scan"},
+		}), localWrite},
 		{"pensec_build_report", "Render reports from the ledger into .pensec/reports/.", obj(map[string]any{"formats": map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": []string{"html", "markdown", "json", "sarif", "csv"}}, "maxItems": 5}}), localWrite},
 		{"pensec_record_hypothesis", "Record a reviewer-proposed finding as HYPOTHESIS. PenSec reads and redacts the cited lines itself; it is never CONFIRMED by this call.", obj(map[string]any{
 			"control_id": str("catalog control the hypothesis belongs to"),
@@ -361,12 +371,55 @@ func (s *Server) call(ctx context.Context, name string, raw json.RawMessage) (an
 			}
 		}
 		return map[string]any{"edges": out, "note": "Edges exist only where both domains share concrete assets. BLOCKED/SUSPECTED edges are not verified."}, nil
+	case "pensec_list_entrypoints":
+		var a struct {
+			Service string `json:"service"`
+			Kind    string `json:"kind"`
+			Limit   int    `json:"limit"`
+		}
+		if err := strictArgs(raw, &a); err != nil {
+			return nil, err
+		}
+		if a.Kind != "" && !slices.Contains(engine.EntrypointKinds, a.Kind) {
+			return nil, fmt.Errorf("kind must be one of %s", strings.Join(engine.EntrypointKinds, ", "))
+		}
+		if a.Limit <= 0 || a.Limit > 500 {
+			a.Limit = 200
+		}
+		eps, asmt, err := e.Entrypoints(a.Service, a.Kind)
+		if err != nil {
+			return nil, err
+		}
+		if asmt == nil {
+			return nil, errors.New("no completed assessment; run pensec_scan_passive first")
+		}
+		total := len(eps)
+		if total > a.Limit {
+			eps = eps[:a.Limit]
+		}
+		return map[string]any{"assessment_id": asmt.ID, "total": total, "entrypoints": eps,
+			"note": "Heuristic extraction from source; completeness is not proven. Each entry has the defining file and line."}, nil
 	case "pensec_scan_passive":
 		var a struct{}
 		if err := strictArgs(raw, &a); err != nil {
 			return nil, err
 		}
 		return e.Scan(ctx, func(m string) { fmt.Fprintln(os.Stderr, "pensec:", m) })
+	case "pensec_retest":
+		var a struct {
+			ChangedOnly *bool `json:"changed_only"`
+		}
+		if err := strictArgs(raw, &a); err != nil {
+			return nil, err
+		}
+		changed, res, err := e.RetestChanged(ctx, func(m string) { fmt.Fprintln(os.Stderr, "pensec:", m) }, a.ChangedOnly == nil || *a.ChangedOnly)
+		if err != nil {
+			return nil, err
+		}
+		for i := range changed {
+			changed[i] = redact.Line(changed[i])
+		}
+		return map[string]any{"changed_files": changed, "scan": res, "note": "CARRIED adapters were not re-run; their decisions come from the previous assessment. Only REMEDIATED findings are fixed."}, nil
 	case "pensec_build_report":
 		var a struct {
 			Formats []string `json:"formats"`
