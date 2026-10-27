@@ -23,6 +23,7 @@ import (
 
 	"github.com/ratomirjovanovic/pensec/internal/adapters"
 	"github.com/ratomirjovanovic/pensec/internal/benchmark"
+	"github.com/ratomirjovanovic/pensec/internal/bundle"
 	"github.com/ratomirjovanovic/pensec/internal/catalog"
 	"github.com/ratomirjovanovic/pensec/internal/config"
 	"github.com/ratomirjovanovic/pensec/internal/engine"
@@ -54,6 +55,9 @@ Assessment (local, no target network traffic):
   fix-plan        Ordered remediation plan from open findings
   report          Render HTML, Markdown, JSON, SARIF and CSV reports
   evidence        show <id> | verify
+  diff            [FROM TO] findings new, reopened, remediated, stale, waived between assessments
+  export          --bundle out.zip [--assessment ID] redacted evidence, report and SHA-256 manifest
+  verify-bundle   <bundle.zip> recompute and check every hash in a bundle
   events          Recent audit events
 
 Network-active (human authorization required):
@@ -125,6 +129,12 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		err = cmdReport(rest, stdout)
 	case "evidence":
 		err = cmdEvidence(rest, stdout)
+	case "diff":
+		err = cmdDiff(rest, stdout)
+	case "export":
+		err = cmdExport(rest, stdout)
+	case "verify-bundle":
+		err = cmdVerifyBundle(rest, stdout)
 	case "events":
 		err = cmdEvents(rest, stdout)
 	case "scope":
@@ -1123,6 +1133,115 @@ func cmdCapabilities(args []string, w io.Writer) error {
 
 // MaturityObserve is the maturity of the production-observe adapter.
 const MaturityObserve = adapters.MaturityUnvalidated
+
+func cmdDiff(args []string, w io.Writer) error {
+	fs, root := newFS("diff")
+	asJSON := fs.Bool("json", false, "JSON output")
+	pos, err := parse(fs, args)
+	if err != nil {
+		return err
+	}
+	e, err := openProject(*root)
+	if err != nil {
+		return err
+	}
+	defer e.Close()
+	var d *engine.Delta
+	switch len(pos) {
+	case 0:
+		a, err := e.St.LatestAssessment(e.ProjectID)
+		if err != nil {
+			return err
+		}
+		if a == nil {
+			return errors.New("no completed assessment; run `pensec scan` first")
+		}
+		if d, err = e.DeltaToPrevious(a.ID); err != nil {
+			return err
+		}
+		if d == nil {
+			return errors.New("no earlier assessment with observation tracking to compare with")
+		}
+	case 2:
+		if d, err = e.Diff(pos[0], pos[1]); err != nil {
+			return err
+		}
+	default:
+		return exitErr{2, "usage: pensec diff [FROM TO] [--json]"}
+	}
+	if *asJSON {
+		return printJSON(w, d)
+	}
+	fmt.Fprintf(w, "%s -> %s: new %d, reopened %d, remediated %d, stale %d, waived %d, unchanged %d\n",
+		d.From, d.To, len(d.New), len(d.Reopened), len(d.Remediated), len(d.Stale), len(d.Waived), d.Unchanged)
+	for _, sec := range []struct {
+		title string
+		items []engine.DeltaItem
+	}{{"new", d.New}, {"reopened", d.Reopened}, {"remediated", d.Remediated}, {"stale", d.Stale}, {"waived", d.Waived}} {
+		for _, it := range sec.items {
+			fmt.Fprintf(w, "  %-10s %s %-8s %s  %s:%d\n", sec.title, it.FindingID, it.Severity, redact.Line(it.Title), redact.Line(it.File), it.Line)
+		}
+	}
+	fmt.Fprintln(w, d.Note)
+	return nil
+}
+
+func cmdExport(args []string, w io.Writer) error {
+	fs, root := newFS("export")
+	out := fs.String("bundle", "", "path of the zip to create (must not exist)")
+	id := fs.String("assessment", "", "assessment to export (default: latest)")
+	if _, err := parse(fs, args); err != nil {
+		return err
+	}
+	if *out == "" {
+		return exitErr{2, "usage: pensec export --bundle out.zip [--assessment ID]"}
+	}
+	e, err := openProject(*root)
+	if err != nil {
+		return err
+	}
+	defer e.Close()
+	var a *store.Assessment
+	if *id == "" {
+		a, err = e.St.LatestAssessment(e.ProjectID)
+	} else {
+		a, err = e.St.Assessment(e.ProjectID, *id)
+	}
+	if err != nil {
+		return err
+	}
+	if a == nil {
+		return errors.New("assessment not found; run `pensec scan` first or check the ID")
+	}
+	r, err := report.BuildFor(e, a)
+	if err != nil {
+		return err
+	}
+	sum, n, err := bundle.Export(r, e.Private(), *out)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "Wrote %s: %s with %d files (report and redacted evidence; no raw tool output).\n", *out, a.ID, n)
+	fmt.Fprintf(w, "Manifest SHA-256: %s\nShare this value with the recipient through a separate channel; they run `pensec verify-bundle %s`.\n", sum, filepath.Base(*out))
+	return nil
+}
+
+func cmdVerifyBundle(args []string, w io.Writer) error {
+	fs := flag.NewFlagSet("verify-bundle", flag.ContinueOnError)
+	pos, err := parse(fs, args)
+	if err != nil {
+		return err
+	}
+	if len(pos) != 1 {
+		return exitErr{2, "usage: pensec verify-bundle <bundle.zip>"}
+	}
+	m, sum, err := bundle.Verify(pos[0])
+	if err != nil {
+		return exitErr{1, "bundle verification FAILED: " + redact.Line(err.Error())}
+	}
+	fmt.Fprintf(w, "OK: %d files match the manifest (%s, %s).\nManifest SHA-256: %s\nCompare it with the value the sender gave you.\n", len(m.Files), redact.Line(m.Project), m.Assessment.ID, sum)
+	return nil
+}
 
 func cmdBenchmark(ctx context.Context, args []string, w io.Writer) error {
 	fs := flag.NewFlagSet("benchmark", flag.ContinueOnError)

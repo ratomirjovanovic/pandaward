@@ -39,3 +39,30 @@ func TestPlaceholdersKept(t *testing.T) {
 		t.Fatalf("placeholder should be kept: %s", s)
 	}
 }
+
+func TestHasSecrets(t *testing.T) {
+	secret := "sk_" + "live_" + strings.Repeat("Z9", 12)
+	doc := "line one\nkey: " + secret + "\nline three"
+	if !HasSecrets(doc) {
+		t.Fatal("a raw secret must be detected")
+	}
+	if HasSecrets(Text(doc)) {
+		t.Fatal("already redacted text must not be reported again")
+	}
+	if HasSecrets(strings.Repeat("a long but harmless line ", 40)) {
+		t.Fatal("length alone is not a secret")
+	}
+}
+
+func TestPlainWordsAreNotCredentialKeys(t *testing.T) {
+	for _, s := range []string{"all linked controls passed: J-001", "author: Jane Doe", "tokens: 1500"} {
+		if got := Line(s); got != s {
+			t.Errorf("Line(%q) = %q; ordinary words must not be masked", s, got)
+		}
+	}
+	for _, s := range []string{"password: hunter2222", "DB_PASSWORD=supersecret", "passed_token: abcdef123456", "dbPassword: \"s3cr3tvalue\""} {
+		if got := Line(s); got == s || !strings.Contains(got, "…") && !strings.Contains(got, "REDACTED") && !strings.Contains(got, "*") {
+			t.Errorf("Line(%q) = %q; credential assignments must still be masked", s, got)
+		}
+	}
+}
