@@ -69,7 +69,8 @@ BLOCKED/UNSUPPORTED/SUSPECTED controls are not secure; see `pensec status` and `
 
 ```text
 /plugin marketplace add ratomirjovanovic/pensec
-/plugin install pensec@pensec
+/plugin install pensec@pensec            # macOS and Linux
+/plugin install pensec-windows@pensec    # Windows
 ```
 
 Then, in your project:
@@ -82,7 +83,7 @@ Then, in your project:
 /pensec:report      # HTML, Markdown, JSON, SARIF, CSV
 ```
 
-> Prebuilt binaries for the plugin are tracked in [#4](https://github.com/ratomirjovanovic/pensec/issues/4). Until then, build the binary into the plugin's `bin/` directory as shown below.
+> The plugin installs prebuilt, checksum-verified binaries from the `plugin` and `plugin-windows` branches, which the release workflow publishes on every version tag. Until the first release is tagged those branches do not exist yet; build the binary into the plugin's `bin/` directory as shown below.
 
 ### As a CLI
 
