@@ -4,7 +4,9 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/ratomirjovanovic/pensec/internal/model"
 	"github.com/ratomirjovanovic/pensec/internal/testfixture"
@@ -87,12 +89,17 @@ func TestDeleteRenameAndNewFiles(t *testing.T) {
 	e, _ := scan(t, root)
 	defer e.Close()
 
+	// Each step is undone on disk before the next one, because changed
+	// content is detected by hash even without the hook record.
+	dockerfile, _ := os.ReadFile(filepath.Join(root, "Dockerfile"))
+
 	// Delete: the Dockerfile is known, so only adapters that read it go stale.
 	os.Remove(filepath.Join(root, "Dockerfile"))
 	markChanged(t, e, "Dockerfile")
 	cm, _ := staleView(t, e)
 	wantStatus(t, cm, map[string]model.Status{"J-001": model.StatusStale, "D-001": model.StatusFail, "N-001": model.StatusFail})
 	e.St.ClearStale(e.ProjectID)
+	os.WriteFile(filepath.Join(root, "Dockerfile"), dockerfile, 0o644)
 
 	// Rename: the old path is known, the new path is not.
 	wf := filepath.Join(root, ".github", "workflows")
@@ -101,14 +108,61 @@ func TestDeleteRenameAndNewFiles(t *testing.T) {
 	}
 	markChanged(t, e, ".github/workflows/ci.yml", ".github/workflows/build.yml")
 	cm, _ = staleView(t, e)
-	wantStatus(t, cm, map[string]model.Status{"N-001": model.StatusStale, "N-003": model.StatusStale, "D-001": model.StatusFail, "K-001": model.StatusFail})
+	wantStatus(t, cm, map[string]model.Status{"N-001": model.StatusStale, "N-003": model.StatusStale, "D-001": model.StatusFail, "K-001": model.StatusFail, "E-003": model.StatusFail})
 	e.St.ClearStale(e.ProjectID)
+	os.Rename(filepath.Join(wf, "build.yml"), filepath.Join(wf, "ci.yml"))
 
 	// New file: an iOS plist can make the iOS domain applicable.
 	testfixture.Write(t, root, "ios/App/Info.plist", "<plist><dict></dict></plist>\n")
 	markChanged(t, e, "ios/App/Info.plist")
 	cm, _ = staleView(t, e)
-	wantStatus(t, cm, map[string]model.Status{"L-001": model.StatusStale, "D-001": model.StatusFail, "J-001": model.StatusFail})
+	wantStatus(t, cm, map[string]model.Status{"L-001": model.StatusStale, "D-001": model.StatusFail, "J-001": model.StatusFail, "N-001": model.StatusFail})
+}
+
+func TestChangesOutsideClaudeAreDetected(t *testing.T) {
+	root := testfixture.VulnerableRepo(t)
+	e, _ := scan(t, root)
+	defer e.Close()
+	// No hook records: edit, delete and add files directly on disk.
+	testfixture.Write(t, root, "src/server.js", "module.exports = {};\n")
+	os.Remove(filepath.Join(root, "Dockerfile"))
+	testfixture.Write(t, root, "ios/App/Info.plist", "<plist><dict></dict></plist>\n")
+	s, err := e.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"Dockerfile (deleted)", "ios/App/Info.plist", "src/server.js"}
+	if strings.Join(s.ChangedOutside, ",") != strings.Join(want, ",") || strings.Join(s.StaleFiles, ",") != strings.Join(want, ",") {
+		t.Fatalf("outside changes: got %v / %v, want %v", s.ChangedOutside, s.StaleFiles, want)
+	}
+	cm, _ := staleView(t, e)
+	wantStatus(t, cm, map[string]model.Status{"D-001": model.StatusStale, "J-001": model.StatusStale, "L-001": model.StatusStale, "N-001": model.StatusFail, "I-001": model.StatusFail})
+
+	// A path the hook already recorded is not reported a second time.
+	markChanged(t, e, "src/server.js")
+	s, _ = e.Status()
+	if len(s.ChangedOutside) != 2 || len(s.StaleFiles) != 3 {
+		t.Fatalf("hook-recorded file must not be duplicated: %v / %v", s.ChangedOutside, s.StaleFiles)
+	}
+	// Status only reads: nothing is added to the ledger's stale list.
+	if hooked, _ := e.St.StaleFiles(e.ProjectID); len(hooked) != 1 {
+		t.Fatalf("status must not write stale files: %v", hooked)
+	}
+}
+
+func TestHashBudgetSkipsCheck(t *testing.T) {
+	root := testfixture.VulnerableRepo(t)
+	e, _ := scan(t, root)
+	defer e.Close()
+	testfixture.Write(t, root, "src/server.js", "module.exports = {};\n")
+	e.HashBudget = time.Nanosecond
+	s, err := e.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.ChangeCheck == "" || len(s.ChangedOutside) != 0 {
+		t.Fatalf("an exhausted budget must skip the check and say so: %q %v", s.ChangeCheck, s.ChangedOutside)
+	}
 }
 
 func TestRetestChangedCarriesUnaffectedAdapters(t *testing.T) {

@@ -32,8 +32,13 @@ type Status struct {
 	StaleFiles  []string          `json:"stale_files,omitempty"`
 	// StaleControls are the controls whose decision depends on a stale file.
 	StaleControls []string `json:"stale_controls,omitempty"`
-	Blockers      []string `json:"blockers,omitempty"`
-	NextAction    string   `json:"next_action"`
+	// ChangedOutside are stale files found by comparing content hashes, that
+	// is, changed without going through Claude Code's edit tools.
+	ChangedOutside []string `json:"changed_outside_claude,omitempty"`
+	// ChangeCheck is set when the hash comparison was skipped.
+	ChangeCheck string   `json:"change_check,omitempty"`
+	Blockers    []string `json:"blockers,omitempty"`
+	NextAction  string   `json:"next_action"`
 }
 
 // Status returns the current state from the ledger.
@@ -43,11 +48,10 @@ func (e *Engine) Status() (*Status, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.StaleFiles, err = e.St.StaleFiles(e.ProjectID)
-	if err != nil {
-		return nil, err
-	}
 	if a == nil {
+		if s.StaleFiles, err = e.St.StaleFiles(e.ProjectID); err != nil {
+			return nil, err
+		}
 		s.NextAction = "run `pensec scan` (/pensec:scan) for the first passive assessment"
 		return s, nil
 	}
@@ -60,10 +64,11 @@ func (e *Engine) Status() (*Status, error) {
 	if err != nil {
 		return nil, err
 	}
-	cs, es, _, err = e.StaleView(a.ID, cs, es)
+	cs, es, ch, err := e.StaleView(a.ID, cs, es)
 	if err != nil {
 		return nil, err
 	}
+	s.StaleFiles, s.ChangedOutside, s.ChangeCheck = ch.Files, ch.Outside, ch.Note
 	for _, c := range cs {
 		if c.Status == model.StatusStale {
 			s.StaleControls = append(s.StaleControls, c.ID)
@@ -285,33 +290,33 @@ func (e *Engine) ChangedSinceLast(inv *inventory.Inventory) ([]string, error) {
 	if err != nil || a == nil {
 		return nil, err
 	}
-	rows, err := e.St.DB.Query(`SELECT path, sha256 FROM file_hashes WHERE assessment_id=?`, a.ID)
+	old, err := e.St.FileHashes(a.ID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	old := map[string]string{}
-	for rows.Next() {
-		var p, h string
-		if err := rows.Scan(&p, &h); err != nil {
-			return nil, err
-		}
-		old[p] = h
-	}
-	var changed []string
-	cur := map[string]bool{}
+	cur := map[string]string{}
 	for _, f := range inv.Files {
-		cur[f.Path] = true
-		if old[f.Path] != f.SHA256 {
-			changed = append(changed, f.Path)
+		cur[f.Path] = f.SHA256
+	}
+	return diffHashes(old, cur), nil
+}
+
+// diffHashes lists paths whose hash changed or that are new, plus removed
+// paths with a " (deleted)" suffix, sorted.
+func diffHashes(old, cur map[string]string) []string {
+	var changed []string
+	for p, h := range cur {
+		if old[p] != h {
+			changed = append(changed, p)
 		}
 	}
 	for p := range old {
-		if !cur[p] {
+		if _, ok := cur[p]; !ok {
 			changed = append(changed, p+" (deleted)")
 		}
 	}
-	return changed, nil
+	sort.Strings(changed)
+	return changed
 }
 
 // EntrypointKinds are the asset kinds Entrypoints lists, in display order.

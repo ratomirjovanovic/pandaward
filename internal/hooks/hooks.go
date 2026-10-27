@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 
 	"github.com/ratomirjovanovic/pensec/internal/engine"
 	"github.com/ratomirjovanovic/pensec/internal/redact"
@@ -77,6 +78,8 @@ func sessionStart(in Input, w io.Writer) int {
 		return 0
 	}
 	defer e.Close()
+	// Leave headroom under the hook timeout on large repositories.
+	e.HashBudget = 5 * time.Second
 	s, err := e.Status()
 	if err != nil {
 		return 0
@@ -89,7 +92,10 @@ func sessionStart(in Input, w io.Writer) int {
 		fmt.Fprintf(&b, "Latest: %s (%s). Decisive coverage %d/%d controls. Open findings: %d confirmed, %d suspected.\n",
 			s.Assessment.ID, s.Assessment.Status, s.Coverage.Decisive, s.Coverage.Applicable, s.Confirmed, s.Suspected)
 		if len(s.StaleFiles) > 0 {
-			fmt.Fprintf(&b, "%d file(s) changed since then (STALE).\n", len(s.StaleFiles))
+			fmt.Fprintf(&b, "%d file(s) changed since then (%d outside Claude Code); %d control(s) STALE.\n", len(s.StaleFiles), len(s.ChangedOutside), len(s.StaleControls))
+		}
+		if s.ChangeCheck != "" {
+			b.WriteString(redact.Line(s.ChangeCheck) + "\n")
 		}
 		if len(s.Blockers) > 0 {
 			fmt.Fprintf(&b, "%d blocker(s); see /pensec:status.\n", len(s.Blockers))

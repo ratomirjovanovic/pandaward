@@ -69,7 +69,8 @@ BLOCKED/UNSUPPORTED/SUSPECTED controls are not secure; see `pensec status` and `
 
 ```text
 /plugin marketplace add ratomirjovanovic/pensec
-/plugin install pensec@pensec
+/plugin install pensec@pensec            # macOS and Linux
+/plugin install pensec-windows@pensec    # Windows
 ```
 
 Then, in your project:
@@ -82,7 +83,7 @@ Then, in your project:
 /pensec:report      # HTML, Markdown, JSON, SARIF, CSV
 ```
 
-> Prebuilt binaries for the plugin are tracked in [#4](https://github.com/ratomirjovanovic/pensec/issues/4). Until then, build the binary into the plugin's `bin/` directory as shown below.
+> The plugin installs prebuilt, checksum-verified binaries from the `plugin` and `plugin-windows` branches, which the release workflow publishes on every version tag. Until the first release is tagged those branches do not exist yet; build the binary into the plugin's `bin/` directory as shown below.
 
 ### As a CLI
 
@@ -122,7 +123,7 @@ flowchart LR
 
 1. **Inventory** walks the repository read-only and records files, routes, manifests, workflows, IaC, mobile manifests and AI/MCP usage.
 2. **Plan** maps the control catalog (domains A to R) onto what was found. Controls without matching assets become `NOT_APPLICABLE` with a reason you can review.
-3. **Adapters** run. Built-in checks are offline and always available; gitleaks, semgrep, osv-scanner and trivy are used only if you installed them.
+3. **Adapters** run. Built-in checks are offline and always available; gitleaks, semgrep, osv-scanner and trivy are used only if you installed them. When semgrep is installed it runs PenSec's bundled offline rules (see [`rules/README.md`](rules/README.md)) plus any rules you configure.
 4. **Findings** are redacted, fingerprinted and linked to evidence. Repeated runs update their lifecycle: `OPEN`, `REMEDIATED`, `REOPENED`, `FALSE_POSITIVE`, `RISK_ACCEPTED`.
 5. **Edges** between domains are created only from shared assets and get their status from the linked controls.
 6. **Reports** show confirmed findings, suspected signals, coverage by domain, every undecided control and the evidence index.
@@ -147,7 +148,9 @@ flowchart LR
 | P AI and MCP | model output reaching exec sinks, MCP server pinning and inline credentials | prompt-injection tests |
 | R Assurance | evidence integrity | |
 
-`pensec capabilities` prints the full catalog with each adapter's maturity. All adapters are currently `implemented_unvalidated`: they pass this repository's fixture suite, but no public benchmark has been published yet.
+`pensec capabilities` prints the full catalog with each adapter's maturity. All adapters are currently `implemented_unvalidated`.
+
+`pensec benchmark` runs every built-in rule against a versioned corpus of vulnerable and safe cases and prints TP, FP, FN, TN, precision and recall per rule. CI fails when a rule misses a vulnerable case or fires on a safe one, and each release attaches `benchmark.json`. A rule counts as `implemented_and_benchmarked` only with precision and recall of at least 0.95 on at least 3 vulnerable and 3 safe cases. Today every rule has one of each, so none qualifies yet. The corpus is PenSec's own, so the numbers describe these cases, not real-world accuracy.
 
 ## Commands
 

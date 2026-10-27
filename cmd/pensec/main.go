@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/ratomirjovanovic/pensec/internal/adapters"
+	"github.com/ratomirjovanovic/pensec/internal/benchmark"
 	"github.com/ratomirjovanovic/pensec/internal/catalog"
 	"github.com/ratomirjovanovic/pensec/internal/config"
 	"github.com/ratomirjovanovic/pensec/internal/engine"
@@ -62,6 +63,7 @@ Network-active (human authorization required):
 Integration and tooling:
   doctor          Environment, optional scanners and their network needs
   capabilities    Control catalog with adapter maturity
+  benchmark       TP/FP/FN/TN per built-in rule on the bundled corpus (--json, --strict)
   mcp             Serve the MCP stdio interface
   hook <name>     Claude Code lifecycle hook (session-start, post-edit, pre-tool, pre-compact)
   version         Print version
@@ -131,6 +133,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		err = cmdTest(ctx, rest, stdout, stderr)
 	case "doctor":
 		err = cmdDoctor(ctx, rest, stdout)
+	case "benchmark":
+		err = cmdBenchmark(ctx, rest, stdout)
 	case "capabilities":
 		err = cmdCapabilities(rest, stdout)
 	default:
@@ -374,45 +378,43 @@ func cmdScan(ctx context.Context, args []string, w, ew io.Writer, retest bool) e
 		return err
 	}
 	defer e.Close()
-	var changed []string
-	if retest {
-		inv, err := e.Inventory()
-		if err != nil {
-			return err
-		}
-		changed, err = e.ChangedSinceLast(inv)
-		if err != nil {
-			return err
-		}
-		if !*asJSON {
-			fmt.Fprintf(w, "Files changed since the last assessment: %d\n", len(changed))
-			for i, c := range changed {
-				if i == 30 {
-					fmt.Fprintf(w, "  ... %d more\n", len(changed)-30)
-					break
-				}
-				fmt.Fprintln(w, "  "+redact.Line(c))
-			}
-			if *onlyChanged {
-				fmt.Fprintln(w, "Re-running only the adapters for impacted controls, then recomputing edges.")
-			} else {
-				fmt.Fprintln(w, "Re-running the full passive scan so dependent controls and edges are re-evaluated.")
-			}
-		}
-	}
 	progress := func(m string) {
 		if !*quiet && !*asJSON {
 			fmt.Fprintln(ew, "·", m)
 		}
 	}
+	var changed []string
 	var res *engine.ScanResult
-	if retest && *onlyChanged {
-		res, err = e.Retest(ctx, progress, changed)
+	if retest {
+		changed, res, err = e.RetestChanged(ctx, progress, *onlyChanged)
 	} else {
 		res, err = e.Scan(ctx, progress)
 	}
 	if err != nil {
 		return err
+	}
+	if retest && !*asJSON {
+		fmt.Fprintf(w, "Files changed since the last assessment: %d\n", len(changed))
+		for i, c := range changed {
+			if i == 30 {
+				fmt.Fprintf(w, "  ... %d more\n", len(changed)-30)
+				break
+			}
+			fmt.Fprintln(w, "  "+redact.Line(c))
+		}
+		carried := 0
+		for _, r := range res.Runs {
+			if r.ExitClass == model.ExitCarried {
+				carried++
+			}
+		}
+		if carried > 0 {
+			fmt.Fprintf(w, "Only the adapters for impacted controls were re-run; %d adapter(s) CARRIED from the previous assessment. Edges were recomputed.\n", carried)
+		} else if *onlyChanged {
+			fmt.Fprintln(w, "No adapter could be carried over, so every applicable adapter was re-run.")
+		} else {
+			fmt.Fprintln(w, "The full passive scan was re-run so dependent controls and edges were re-evaluated.")
+		}
 	}
 	if *asJSON {
 		out := map[string]any{"scan": res}
@@ -476,13 +478,24 @@ func cmdStatus(args []string, w io.Writer) error {
 		fmt.Fprintf(w, "Open findings: %d confirmed, %d suspected  %v\n", s.Confirmed, s.Suspected, s.Findings)
 	}
 	if len(s.StaleFiles) > 0 {
+		outside := map[string]bool{}
+		for _, f := range s.ChangedOutside {
+			outside[f] = true
+		}
 		fmt.Fprintf(w, "Stale files (%d):\n", len(s.StaleFiles))
 		for _, f := range s.StaleFiles {
-			fmt.Fprintln(w, "  "+redact.Line(f))
+			if outside[f] {
+				fmt.Fprintln(w, "  "+redact.Line(f)+"  (changed outside Claude Code)")
+			} else {
+				fmt.Fprintln(w, "  "+redact.Line(f))
+			}
 		}
 		if len(s.StaleControls) > 0 {
 			fmt.Fprintf(w, "Stale controls (%d, not decisive until retest): %s\n", len(s.StaleControls), strings.Join(s.StaleControls, ", "))
 		}
+	}
+	if s.ChangeCheck != "" {
+		fmt.Fprintln(w, redact.Line(s.ChangeCheck))
 	}
 	if len(s.Blockers) > 0 {
 		fmt.Fprintln(w, "Blockers:")
@@ -844,7 +857,11 @@ func cmdEvidence(args []string, w io.Writer) error {
 		if err != nil || a == nil {
 			return errors.New("no assessment")
 		}
-		ok, bad, err := evidence.Verify(e.St, e.Private(), a.ID)
+		cs, err := e.St.Controls(a.ID)
+		if err != nil {
+			return err
+		}
+		ok, bad, err := evidence.Verify(e.St, e.Private(), a.ID, evidence.Referenced(cs))
 		if err != nil {
 			return err
 		}
@@ -1106,3 +1123,42 @@ func cmdCapabilities(args []string, w io.Writer) error {
 
 // MaturityObserve is the maturity of the production-observe adapter.
 const MaturityObserve = adapters.MaturityUnvalidated
+
+func cmdBenchmark(ctx context.Context, args []string, w io.Writer) error {
+	fs := flag.NewFlagSet("benchmark", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "JSON output")
+	strict := fs.Bool("strict", false, "exit 1 when any rule misses a vulnerable case or fires on a safe one")
+	if _, err := parse(fs, args); err != nil {
+		return err
+	}
+	rep, err := benchmark.Run(ctx)
+	if err != nil {
+		return err
+	}
+	failed := 0
+	for _, r := range rep.Rules {
+		if r.FP+r.FN > 0 {
+			failed++
+		}
+	}
+	if *asJSON {
+		if err := printJSON(w, rep); err != nil {
+			return err
+		}
+	} else {
+		fmt.Fprintf(w, "Corpus %s, pensec %s, catalog %s\n\n", rep.CorpusVersion, rep.PensecVersion, rep.CatalogVersion)
+		fmt.Fprintf(w, "%-36s %4s %4s %3s %3s %3s %3s %5s %6s  %s\n", "rule", "vuln", "safe", "TP", "FP", "FN", "TN", "prec", "recall", "maturity")
+		for _, r := range rep.Rules {
+			fmt.Fprintf(w, "%-36s %4d %4d %3d %3d %3d %3d %5.2f %6.2f  %s\n", r.Rule, r.Vulnerable, r.Safe, r.TP, r.FP, r.FN, r.TN, r.Precision, r.Recall, r.Maturity)
+			for _, f := range r.Failures {
+				fmt.Fprintln(w, "    "+f)
+			}
+		}
+		fmt.Fprintf(w, "\n%d of %d rules benchmarked (precision >= %.2f and recall >= %.2f on at least %d vulnerable and %d safe cases).\n%s\n",
+			rep.Benchmarked, len(rep.Rules), rep.MinPrecision, rep.MinRecall, rep.MinCases, rep.MinCases, rep.Note)
+	}
+	if *strict && failed > 0 {
+		return exitErr{1, fmt.Sprintf("%d rule(s) missed a vulnerable case or fired on a safe one", failed)}
+	}
+	return nil
+}
