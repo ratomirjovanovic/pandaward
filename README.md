@@ -100,6 +100,8 @@ pensec report --format html,sarif
 
 Requires Go 1.23 or later to build. The binary has no runtime dependencies.
 
+Release binaries are reproducible and come with checksums, a CycloneDX SBOM and signed build provenance; [docs/VERIFYING.md](docs/VERIFYING.md) shows how to check them.
+
 ## How it works
 
 ```mermaid
