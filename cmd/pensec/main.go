@@ -371,45 +371,43 @@ func cmdScan(ctx context.Context, args []string, w, ew io.Writer, retest bool) e
 		return err
 	}
 	defer e.Close()
-	var changed []string
-	if retest {
-		inv, err := e.Inventory()
-		if err != nil {
-			return err
-		}
-		changed, err = e.ChangedSinceLast(inv)
-		if err != nil {
-			return err
-		}
-		if !*asJSON {
-			fmt.Fprintf(w, "Files changed since the last assessment: %d\n", len(changed))
-			for i, c := range changed {
-				if i == 30 {
-					fmt.Fprintf(w, "  ... %d more\n", len(changed)-30)
-					break
-				}
-				fmt.Fprintln(w, "  "+redact.Line(c))
-			}
-			if *onlyChanged {
-				fmt.Fprintln(w, "Re-running only the adapters for impacted controls, then recomputing edges.")
-			} else {
-				fmt.Fprintln(w, "Re-running the full passive scan so dependent controls and edges are re-evaluated.")
-			}
-		}
-	}
 	progress := func(m string) {
 		if !*quiet && !*asJSON {
 			fmt.Fprintln(ew, "·", m)
 		}
 	}
+	var changed []string
 	var res *engine.ScanResult
-	if retest && *onlyChanged {
-		res, err = e.Retest(ctx, progress, changed)
+	if retest {
+		changed, res, err = e.RetestChanged(ctx, progress, *onlyChanged)
 	} else {
 		res, err = e.Scan(ctx, progress)
 	}
 	if err != nil {
 		return err
+	}
+	if retest && !*asJSON {
+		fmt.Fprintf(w, "Files changed since the last assessment: %d\n", len(changed))
+		for i, c := range changed {
+			if i == 30 {
+				fmt.Fprintf(w, "  ... %d more\n", len(changed)-30)
+				break
+			}
+			fmt.Fprintln(w, "  "+redact.Line(c))
+		}
+		carried := 0
+		for _, r := range res.Runs {
+			if r.ExitClass == model.ExitCarried {
+				carried++
+			}
+		}
+		if carried > 0 {
+			fmt.Fprintf(w, "Only the adapters for impacted controls were re-run; %d adapter(s) CARRIED from the previous assessment. Edges were recomputed.\n", carried)
+		} else if *onlyChanged {
+			fmt.Fprintln(w, "No adapter could be carried over, so every applicable adapter was re-run.")
+		} else {
+			fmt.Fprintln(w, "The full passive scan was re-run so dependent controls and edges were re-evaluated.")
+		}
 	}
 	if *asJSON {
 		out := map[string]any{"scan": res}

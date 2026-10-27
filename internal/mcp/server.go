@@ -20,6 +20,7 @@ import (
 	"github.com/ratomirjovanovic/pensec/internal/engine"
 	"github.com/ratomirjovanovic/pensec/internal/evidence"
 	"github.com/ratomirjovanovic/pensec/internal/model"
+	"github.com/ratomirjovanovic/pensec/internal/redact"
 	"github.com/ratomirjovanovic/pensec/internal/report"
 	"github.com/ratomirjovanovic/pensec/internal/version"
 )
@@ -85,6 +86,9 @@ func tools() []tool {
 		{"pensec_get_evidence", "One redacted evidence record after SHA-256 integrity verification.", obj(map[string]any{"evidence_id": str("ev_ followed by 16 hex characters")}, "evidence_id"), readOnly},
 		{"pensec_get_graph", "Cross-domain edges (AB1, CG1, ...) with status, provenance and linked tests; optionally one edge.", obj(map[string]any{"edge_id": str("e.g. CG1")}), readOnly},
 		{"pensec_scan_passive", "Run the local passive scan (read-only inventory and static checks; no target network traffic). Writes only to the local ledger.", obj(map[string]any{}), localWrite},
+		{"pensec_retest", "Re-assess after code changes. Lists files changed since the last assessment, then re-runs only the adapters whose inputs changed (others are CARRIED with their previous decisions) unless changed_only is false. Local only; no target network traffic.", obj(map[string]any{
+			"changed_only": map[string]any{"type": "boolean", "description": "re-run only affected adapters (default true); false runs the full passive scan"},
+		}), localWrite},
 		{"pensec_build_report", "Render reports from the ledger into .pensec/reports/.", obj(map[string]any{"formats": map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": []string{"html", "markdown", "json", "sarif", "csv"}}, "maxItems": 5}}), localWrite},
 		{"pensec_record_hypothesis", "Record a reviewer-proposed finding as HYPOTHESIS. PenSec reads and redacts the cited lines itself; it is never CONFIRMED by this call.", obj(map[string]any{
 			"control_id": str("catalog control the hypothesis belongs to"),
@@ -367,6 +371,21 @@ func (s *Server) call(ctx context.Context, name string, raw json.RawMessage) (an
 			return nil, err
 		}
 		return e.Scan(ctx, func(m string) { fmt.Fprintln(os.Stderr, "pensec:", m) })
+	case "pensec_retest":
+		var a struct {
+			ChangedOnly *bool `json:"changed_only"`
+		}
+		if err := strictArgs(raw, &a); err != nil {
+			return nil, err
+		}
+		changed, res, err := e.RetestChanged(ctx, func(m string) { fmt.Fprintln(os.Stderr, "pensec:", m) }, a.ChangedOnly == nil || *a.ChangedOnly)
+		if err != nil {
+			return nil, err
+		}
+		for i := range changed {
+			changed[i] = redact.Line(changed[i])
+		}
+		return map[string]any{"changed_files": changed, "scan": res, "note": "CARRIED adapters were not re-run; their decisions come from the previous assessment. Only REMEDIATED findings are fixed."}, nil
 	case "pensec_build_report":
 		var a struct {
 			Formats []string `json:"formats"`

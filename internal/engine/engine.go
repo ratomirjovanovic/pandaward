@@ -260,8 +260,12 @@ func (e *Engine) Retest(ctx context.Context, progress func(string), changed []st
 	if err != nil {
 		return nil, err
 	}
-	if prev == nil || prev.Profile != "local-passive" || prev.ConfigHash != e.ConfigHash || prev.CatalogVersion != catalog.Version {
-		progress("retest: no comparable previous assessment (config or catalog changed); running a full scan")
+	switch {
+	case prev == nil:
+		progress("retest: no previous assessment; running a full scan")
+		return e.scan(ctx, progress, nil)
+	case prev.Profile != "local-passive" || prev.ConfigHash != e.ConfigHash || prev.CatalogVersion != catalog.Version:
+		progress("retest: config, catalog or profile changed since " + prev.ID + "; running a full scan")
 		return e.scan(ctx, progress, nil)
 	}
 	cs, err := e.St.Controls(prev.ID)
@@ -286,6 +290,26 @@ func (e *Engine) Retest(ctx context.Context, progress func(string), changed []st
 		}
 	}
 	return e.scan(ctx, progress, cy)
+}
+
+// RetestChanged lists the files changed since the last assessment and then
+// runs a targeted retest (changedOnly) or a full scan.
+func (e *Engine) RetestChanged(ctx context.Context, progress func(string), changedOnly bool) ([]string, *ScanResult, error) {
+	inv, err := e.Inventory()
+	if err != nil {
+		return nil, nil, err
+	}
+	changed, err := e.ChangedSinceLast(inv)
+	if err != nil {
+		return nil, nil, err
+	}
+	var res *ScanResult
+	if changedOnly {
+		res, err = e.Retest(ctx, progress, changed)
+	} else {
+		res, err = e.Scan(ctx, progress)
+	}
+	return changed, res, err
 }
 
 // carry copies an adapter's previous decisions into results. It refuses when
