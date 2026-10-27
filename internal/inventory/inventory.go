@@ -8,6 +8,7 @@ package inventory
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
@@ -93,16 +94,56 @@ func Walk(root string, opt Options) (*Inventory, error) {
 	}
 	inv := &Inventory{Root: absRoot, Features: map[string][]string{}, Languages: map[string]int{}}
 	inv.Tracked, inv.GitCommit, inv.GitDirty = gitInfo(absRoot)
+	err = walkFiles(context.Background(), absRoot, opt, true, func(f *File) {
+		inv.Files = append(inv.Files, f)
+		inv.Languages[f.Lang]++
+	}, func(rel, why string) {
+		inv.Skipped = append(inv.Skipped, rel+": "+why)
+	}, func(rel string) {
+		inv.SensitiveNames = append(inv.SensitiveNames, rel)
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(inv.Files, func(i, j int) bool { return inv.Files[i].Path < inv.Files[j].Path })
+	inv.detect()
+	return inv, nil
+}
+
+// Hashes returns the SHA-256 of every file Walk would analyze, keyed by the
+// same relative path, without reading lines or running detection. It is the
+// cheap way to see which files changed since an assessment. When ctx ends
+// first it returns ctx.Err().
+func Hashes(ctx context.Context, root string, opt Options) (map[string]string, error) {
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
+	err = walkFiles(ctx, absRoot, opt, false, func(f *File) { out[f.Path] = f.SHA256 }, func(string, string) {}, func(string) {})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// walkFiles applies the inventory rules (exclusions, no symlinks, sensitive
+// names by name only, size cap, text files of known types) and reports each
+// analyzable file to add. Lines are read only when withLines is set.
+func walkFiles(ctx context.Context, absRoot string, opt Options, withLines bool, add func(*File), skip func(rel, why string), sensitive func(rel string)) error {
 	excl := map[string]bool{}
 	for _, e := range opt.Exclude {
 		excl[e] = true
 	}
 	count := 0
-	err = filepath.WalkDir(absRoot, func(p string, d fs.DirEntry, werr error) error {
+	return filepath.WalkDir(absRoot, func(p string, d fs.DirEntry, werr error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		rel, _ := filepath.Rel(absRoot, p)
 		rel = filepath.ToSlash(rel)
 		if werr != nil {
-			inv.Skipped = append(inv.Skipped, rel+": unreadable")
+			skip(rel, "unreadable")
 			if d != nil && d.IsDir() {
 				return fs.SkipDir
 			}
@@ -112,7 +153,7 @@ func Walk(root string, opt Options) (*Inventory, error) {
 			return nil
 		}
 		if d.Type()&fs.ModeSymlink != 0 {
-			inv.Skipped = append(inv.Skipped, rel+": symlink not followed")
+			skip(rel, "symlink not followed")
 			return nil
 		}
 		if d.IsDir() {
@@ -125,17 +166,17 @@ func Walk(root string, opt Options) (*Inventory, error) {
 			return nil
 		}
 		if isSensitiveName(d.Name()) {
-			inv.SensitiveNames = append(inv.SensitiveNames, rel)
+			sensitive(rel)
 			return nil
 		}
 		count++
 		if opt.MaxFiles > 0 && count > opt.MaxFiles {
-			inv.Skipped = append(inv.Skipped, rel+": max_files limit reached")
+			skip(rel, "max_files limit reached")
 			return fs.SkipAll
 		}
 		info, err := d.Info()
 		if err != nil {
-			inv.Skipped = append(inv.Skipped, rel+": stat failed")
+			skip(rel, "stat failed")
 			return nil
 		}
 		lang := langOf(d.Name())
@@ -143,12 +184,12 @@ func Walk(root string, opt Options) (*Inventory, error) {
 			return nil // not a type we analyze; not a coverage gap
 		}
 		if info.Size() > opt.MaxFileBytes {
-			inv.Skipped = append(inv.Skipped, rel+": larger than max_file_bytes")
+			skip(rel, "larger than max_file_bytes")
 			return nil
 		}
-		f, err := readText(p, opt.MaxFileBytes)
+		f, err := readText(p, opt.MaxFileBytes, withLines)
 		if err != nil {
-			inv.Skipped = append(inv.Skipped, rel+": "+err.Error())
+			skip(rel, err.Error())
 			return nil
 		}
 		if f == nil {
@@ -157,16 +198,9 @@ func Walk(root string, opt Options) (*Inventory, error) {
 		f.Path = rel
 		f.Lang = lang
 		f.Size = info.Size()
-		inv.Files = append(inv.Files, f)
-		inv.Languages[lang]++
+		add(f)
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	sort.Slice(inv.Files, func(i, j int) bool { return inv.Files[i].Path < inv.Files[j].Path })
-	inv.detect()
-	return inv, nil
 }
 
 // LangOf returns the analysis language for a file name, or "" when PenSec does
@@ -188,7 +222,7 @@ func langOf(name string) string {
 	return langByExt[strings.ToLower(path.Ext(l))]
 }
 
-func readText(p string, max int64) (*File, error) {
+func readText(p string, max int64, withLines bool) (*File, error) {
 	fh, err := os.Open(p)
 	if err != nil {
 		return nil, err
@@ -207,6 +241,9 @@ func readText(p string, max int64) (*File, error) {
 	}
 	sum := sha256.Sum256(b)
 	f := &File{SHA256: hex.EncodeToString(sum[:])}
+	if !withLines {
+		return f, nil
+	}
 	sc := bufio.NewScanner(bytes.NewReader(b))
 	sc.Buffer(make([]byte, 64*1024), 4*1024*1024)
 	for sc.Scan() {
