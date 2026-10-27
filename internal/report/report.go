@@ -14,6 +14,7 @@ import (
 	"github.com/ratomirjovanovic/pensec/internal/catalog"
 	"github.com/ratomirjovanovic/pensec/internal/config"
 	"github.com/ratomirjovanovic/pensec/internal/engine"
+	"github.com/ratomirjovanovic/pensec/internal/evidence"
 	"github.com/ratomirjovanovic/pensec/internal/model"
 	"github.com/ratomirjovanovic/pensec/internal/store"
 	"github.com/ratomirjovanovic/pensec/internal/version"
@@ -64,7 +65,9 @@ func Build(e *engine.Engine) (*Report, error) {
 	if r.Runs, err = e.St.Runs(a.ID); err != nil {
 		return nil, err
 	}
-	if r.EvidenceIndex, err = e.St.EvidenceFor(a.ID); err != nil {
+	// Include evidence carried over from earlier assessments so every
+	// evidence ID a control cites is listed.
+	if r.EvidenceIndex, _, err = evidence.Collect(e.St, a.ID, evidence.Referenced(r.Controls)); err != nil {
 		return nil, err
 	}
 	if r.Controls, r.Edges, r.StaleFiles, err = e.StaleView(a.ID, r.Controls, r.Edges); err != nil {

@@ -194,7 +194,7 @@ func TestEvidenceTamperDetected(t *testing.T) {
 	p := filepath.Join(evidence.Dir(e.Private()), rows[0].Path)
 	b, _ := os.ReadFile(p)
 	os.WriteFile(p, append(b, ' '), 0o600)
-	_, bad, err := evidence.Verify(e.St, e.Private(), res.AssessmentID)
+	_, bad, err := evidence.Verify(e.St, e.Private(), res.AssessmentID, nil)
 	if err != nil || len(bad) != 1 {
 		t.Fatalf("tamper not detected: %v %v", bad, err)
 	}
