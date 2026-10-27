@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PenSec demo</title>
+<meta name="description" content="A real PenSec scan of a synthetic vulnerable shop application: terminal replay, findings explorer and the full HTML report.">
+<link rel="icon" href="../icon.png">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a href="../"><img src="../icon.png" alt="PenSec home"></a><b>PenSec demo</b>
+  <nav>
+    <a href="#replay">Replay</a>
+    <a href="#findings">Findings</a>
+    <a href="report.html">Full report</a>
+  </nav>
+</div></header>
+
+<main class="wrap">
+  <div style="padding:40px 0 8px">
+    <h1 style="font-size:clamp(28px,4vw,40px);margin:0 0 10px;letter-spacing:-0.01em">A real scan of a deliberately vulnerable app</h1>
+    <p class="sub" style="color:var(--muted);max-width:46em;margin:0">
+      <b>acme-shop</b> is a small synthetic project bundled with PenSec: an Express API with Stripe webhooks, a Python helper that calls an LLM, a GitHub Actions workflow, a Dockerfile, Terraform and an Android manifest.
+      Everything below was produced by the CLI in CI on every change to <code>main</code>. The secret-shaped values in it are fake and masked.
+    </p>
+  </div>
+
+  <section id="replay" style="border-top:0">
+    <h2>Terminal replay</h2>
+    <p class="sub">Each step is the actual output of the command. Pick a step or let it play.</p>
+    <div class="term" role="region" aria-label="Terminal replay">
+      <div class="bar"><i></i><i></i><i></i><span>~/acme-shop</span>
+        <div class="ctl"><button id="play" type="button">Pause</button><button id="skip" type="button">Show all</button></div>
+      </div>
+      <pre id="screen" aria-live="polite"></pre>
+    </div>
+    <div class="steps" id="steps"></div>
+  </section>
+
+  <section id="findings">
+    <h2>Findings explorer</h2>
+    <p class="sub">Confirmed observations and suspected signals from the same run, read from the JSON report.</p>
+    <div class="kpis" id="kpis"></div>
+    <div class="filters" id="filters"></div>
+    <div id="list"></div>
+    <p><a class="btn primary" href="report.html">Open the full HTML report</a> <a class="btn" href="report.json">JSON</a></p>
+  </section>
+
+  <section>
+    <h2>Try it on your code</h2>
+<pre class="code">go install github.com/ratomirjovanovic/pensec/cmd/pensec@latest
+cd your-project && pensec init && pensec scan</pre>
+  </section>
+</main>
+
+<footer><div class="wrap">
+  Demo data is generated from <code>internal/testfixture</code> by <code>site/build.sh</code>. Not a real application.
+</div></footer>
+<script src="demo.js"></script>
+</body>
+</html>

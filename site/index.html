@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PenSec</title>
+<meta name="description" content="Local, evidence-based application security assessment for your own code. A Go CLI and a Claude Code plugin. Passive by default.">
+<link rel="icon" href="icon.png">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <img src="icon.png" alt=""><b>PenSec</b>
+  <nav>
+    <a href="demo/">Demo</a>
+    <a href="https://github.com/ratomirjovanovic/pensec/wiki">Docs</a>
+    <a href="https://github.com/ratomirjovanovic/pensec">GitHub</a>
+  </nav>
+</div></header>
+
+<main class="wrap">
+  <div class="hero">
+    <div>
+      <h1>Security assessment that tells you what it did not test.</h1>
+      <p class="lead">PenSec scans your own repository locally, keeps an evidence ledger across sessions, and reports undecided controls as plainly as failed ones. Use it as a CLI or as a Claude Code plugin.</p>
+      <div class="cta">
+        <a class="btn primary" href="demo/">See the demo</a>
+        <a class="btn" href="#install">Install</a>
+        <a class="btn" href="https://github.com/ratomirjovanovic/pensec">Source</a>
+      </div>
+    </div>
+    <img class="logo" src="icon.png" alt="PenSec logo: a ring with an offset disc">
+  </div>
+
+  <section>
+    <h2>Built to be safe on your machine</h2>
+    <p class="sub">The rules below are enforced by the engine, not by prompts.</p>
+    <div class="cards">
+      <div class="card"><h3>Passive by default</h3><p>Reads the repository as data. Never runs install scripts, builds or repository hooks, and sends no traffic to any target.</p></div>
+      <div class="card"><h3>Human-approved network tests</h3><p>A scope manifest you write, approved from an interactive terminal, bound to the file's hash, with a request budget and no redirects.</p></div>
+      <div class="card"><h3>Secrets stay masked</h3><p>Values are redacted before they are stored, printed, reported or returned to a model. <code>.env</code> and key files are recorded by name only.</p></div>
+      <div class="card"><h3>No AI-confirmed findings</h3><p>Agents are read-only and can only record hypotheses. PenSec reads the cited lines itself, so a model cannot supply evidence.</p></div>
+      <div class="card"><h3>State that survives</h3><p>A local SQLite ledger keeps assessments, findings and evidence across sessions, compaction and restarts.</p></div>
+      <div class="card"><h3>Private</h3><p>No account, no telemetry, no cloud backend. AGPL-3.0 open source.</p></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Honest statuses</h2>
+    <p class="sub">Only PASS and FAIL are decisive. Everything else is shown as a gap, never as "no issues".</p>
+    <div class="status-grid">
+      <div class="status"><b style="color:var(--ok)">PASS</b>decided for that control only</div>
+      <div class="status"><b style="color:var(--crit)">FAIL</b>confirmed observation</div>
+      <div class="status"><b style="color:var(--sus)">SUSPECTED</b>heuristic, not proven</div>
+      <div class="status"><b>BLOCKED</b>tool, approval or review missing</div>
+      <div class="status"><b>UNSUPPORTED</b>no adapter yet</div>
+      <div class="status"><b>INCONCLUSIVE</b>ran, could not decide</div>
+      <div class="status"><b style="color:var(--crit)">ERROR</b>adapter failed</div>
+      <div class="status"><b>STALE</b>code changed since</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Cross-domain, not just per file</h2>
+    <p class="sub">Eighteen domains, A to R. When two domains share a real asset in your code, PenSec creates an edge and tracks it on its own, so "authorization passed" never hides "identity to object access is untested".</p>
+    <div class="tablewrap"><table>
+      <tr><th>Edge</th><th>Created when</th><th>Scenario</th></tr>
+      <tr><td><code>AB1</code></td><td>login or token routes exist</td><td>new auth route missing session coverage</td></tr>
+      <tr><td><code>CG1</code></td><td>routes take object IDs</td><td>a user reads another tenant's object</td></tr>
+      <tr><td><code>DG1</code></td><td>webhook routes exist</td><td>unsigned callback drives privileged state</td></tr>
+      <tr><td><code>FG1</code></td><td>payments and webhooks</td><td>replay moves a payment into an invalid state</td></tr>
+      <tr><td><code>IN1</code></td><td>third-party CI actions</td><td>unpinned action changes code in your pipeline</td></tr>
+      <tr><td><code>DP1</code></td><td>LLM SDK usage</td><td>retrieved text triggers a tool action</td></tr>
+    </table></div>
+  </section>
+
+  <section id="install">
+    <h2>Install</h2>
+    <p class="sub">Build from source with Go 1.23 or later. Prebuilt binaries are on the way.</p>
+    <div class="two">
+      <div>
+        <h3>Claude Code plugin</h3>
+<pre class="code">/plugin marketplace add ratomirjovanovic/pensec
+/plugin install pensec@pensec
+
+/pensec:init
+/pensec:scan
+/pensec:review
+/pensec:report</pre>
+      </div>
+      <div>
+        <h3>CLI</h3>
+<pre class="code">go install github.com/ratomirjovanovic/pensec/cmd/pensec@latest
+
+cd your-project
+pensec init
+pensec scan --fail-on high
+pensec report --format html,sarif</pre>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What it is not</h2>
+    <p class="note">PenSec is alpha software and an automated technical assessment. It is not a certification, attestation, legal opinion or independently signed penetration test, and it cannot prove the absence of vulnerabilities. Runtime profiles beyond passive header review are on the roadmap.</p>
+  </section>
+</main>
+
+<footer><div class="wrap">
+  PenSec is free and open source under AGPL-3.0-only ·
+  <a href="https://github.com/ratomirjovanovic/pensec/wiki">Documentation</a> ·
+  <a href="https://github.com/ratomirjovanovic/pensec/security/advisories/new">Report a vulnerability</a>
+</div></footer>
+</body>
+</html>
