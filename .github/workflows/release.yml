@@ -1,0 +1,110 @@
+name: release
+
+# On a version tag: build binaries for all platforms, publish a GitHub
+# release with checksums and build provenance, and update the two plugin
+# branches that the marketplace installs from:
+#   plugin          macOS and Linux (launcher + binaries)
+#   plugin-windows  Windows (pensec.exe)
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - name: Check tag matches plugin version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          ver=$(python3 -c 'import json;print(json.load(open(".claude-plugin/plugin.json"))["version"])')
+          if [ "$tag" != "$ver" ]; then
+            echo "tag $GITHUB_REF_NAME does not match plugin.json version $ver" >&2
+            exit 1
+          fi
+
+      - name: Test
+        run: go test ./...
+
+      - name: Build
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p dist
+          ldflags="-s -w -buildid= -X github.com/ratomirjovanovic/pensec/internal/version.Version=${GITHUB_REF_NAME#v}"
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
+            os=${target%/*}; arch=${target#*/}
+            out="dist/pensec-$os-$arch"
+            [ "$os" = windows ] && out="$out.exe"
+            GOOS=$os GOARCH=$arch go build -trimpath -ldflags "$ldflags" -o "$out" ./cmd/pensec
+          done
+          (cd dist && sha256sum pensec-* > SHA256SUMS)
+          cat dist/SHA256SUMS
+
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: dist/pensec-*
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* --title "PenSec $GITHUB_REF_NAME" --generate-notes --verify-tag \
+            $(case "$GITHUB_REF_NAME" in *-*|v0.*) echo --prerelease ;; esac)
+
+      - name: Update plugin branches
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          plugin_files=".claude-plugin/plugin.json .claude-plugin/icon.png skills agents hooks .mcp.json LICENSE NOTICE README.md SECURITY.md"
+
+          publish() {
+            branch=$1
+            stage=$(mktemp -d)
+            for f in $plugin_files; do
+              [ -e "$f" ] && cp -R --parents "$f" "$stage/"
+            done
+            mkdir -p "$stage/bin"
+            if [ "$branch" = plugin-windows ]; then
+              cp dist/pensec-windows-amd64.exe "$stage/bin/pensec.exe"
+              (cd "$stage/bin" && sha256sum pensec.exe > SHA256SUMS)
+            else
+              cp dist/pensec-linux-amd64 dist/pensec-linux-arm64 dist/pensec-darwin-amd64 dist/pensec-darwin-arm64 "$stage/bin/"
+              cp packaging/launcher.sh "$stage/bin/pensec"
+              chmod 0755 "$stage/bin/pensec" "$stage/bin"/pensec-*
+              (cd "$stage/bin" && sha256sum pensec-* > SHA256SUMS)
+            fi
+            wt=$(mktemp -d)
+            if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
+              git fetch -q origin "$branch"
+              git worktree add -q "$wt" "origin/$branch"
+              git -C "$wt" switch -q -C "$branch"
+            else
+              git worktree add -q --detach "$wt"
+              git -C "$wt" switch -q --orphan "$branch"
+            fi
+            git -C "$wt" rm -rq --ignore-unmatch .
+            cp -R "$stage"/. "$wt"/
+            git -C "$wt" add -A
+            if [ "$branch" = plugin ]; then
+              git -C "$wt" update-index --chmod=+x bin/pensec bin/pensec-linux-amd64 bin/pensec-linux-arm64 bin/pensec-darwin-amd64 bin/pensec-darwin-arm64
+            fi
+            git -C "$wt" commit -q -m "PenSec $GITHUB_REF_NAME for $branch" -m "Built from $(git rev-parse HEAD) by the release workflow."
+            git -C "$wt" push -q origin "$branch"
+            git worktree remove --force "$wt"
+          }
+          publish plugin
+          publish plugin-windows

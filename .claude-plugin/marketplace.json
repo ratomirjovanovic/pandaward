@@ -7,8 +7,21 @@
   "plugins": [
     {
       "name": "pensec",
-      "source": "./",
-      "description": "Local, evidence-based application security assessment for your own projects."
+      "source": {
+        "source": "github",
+        "repo": "ratomirjovanovic/pensec",
+        "ref": "plugin"
+      },
+      "description": "PenSec for macOS and Linux: local, evidence-based application security assessment. Prebuilt binaries verified by checksum."
+    },
+    {
+      "name": "pensec-windows",
+      "source": {
+        "source": "github",
+        "repo": "ratomirjovanovic/pensec",
+        "ref": "plugin-windows"
+      },
+      "description": "PenSec for Windows: local, evidence-based application security assessment. Prebuilt pensec.exe."
     }
   ]
 }
