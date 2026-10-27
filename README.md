@@ -174,6 +174,7 @@ flowchart LR
 | `pensec scope init \| validate \| approve \| revoke` | Authorization for network tests |
 | `pensec test --profile production-observe` | Header and cookie review of approved origins |
 | `pensec doctor` | Optional scanners and their network needs |
+| `pensec selftest` | Runs a hostile fixture repository through scan, reports, MCP and hooks and checks PenSec was not steered by it |
 | `pensec mcp` | Local stdio MCP server used by the plugin |
 
 Human decisions are explicit and recorded:
@@ -194,7 +195,7 @@ pensec scope approve --by "Jane"        # interactive terminal only, bound to th
 pensec test --profile production-observe
 ```
 
-The engine sends at most `max_requests_total` GET requests to the listed origins at the configured rate, never follows redirects, and checks every resolved address at connection time. Loopback, private and link-local addresses are refused unless the manifest explicitly allows a local fixture, and cloud metadata addresses are always refused. Editing `scope.yaml` invalidates the approval.
+The engine sends at most `max_requests_total` GET requests to the listed origins at the configured rate, never follows redirects, and checks every resolved address at connection time. Loopback, private and link-local addresses are refused unless the manifest explicitly allows a local fixture, and cloud metadata addresses are always refused. Editing `scope.yaml` invalidates the approval. Approvals are also bound to a per-user key kept outside the project (`approval.key` in your user config directory), so a scope file or ledger that arrives with a repository never counts as approved.
 
 ## In CI
 
