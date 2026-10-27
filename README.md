@@ -225,7 +225,7 @@ A PenSec report is an automated technical assessment. It is not a certification,
 | M2 Context-safe beta | per-domain invalidation, targeted retest, evidence bundles, delta reports, hostile-repository suite | done |
 | M3 Runtime beta | staging profile with role and tenant fixtures, ZAP adapter | planned |
 | M4 Mobile and AI | MobSF and emulator adapters, prompt-injection suite | planned |
-| 1.0 | frozen schemas, benchmark corpus with at least 3 vulnerable and 3 safe cases per rule, external review | planned |
+| 1.0 | frozen schemas ([done](docs/SCHEMAS.md)), benchmark corpus with at least 3 vulnerable and 3 safe cases per rule, external review | in progress |
 
 See the [issues](https://github.com/ratomirjovanovic/pensec/issues) for details.
 

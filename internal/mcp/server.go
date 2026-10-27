@@ -452,3 +452,7 @@ func (s *Server) call(ctx context.Context, name string, raw json.RawMessage) (an
 	}
 	return nil, fmt.Errorf("unknown tool %q", name)
 }
+
+// ToolsJSON returns the MCP tool definitions as served by tools/list, for
+// schema compatibility checks.
+func ToolsJSON() ([]byte, error) { return json.Marshal(tools()) }
