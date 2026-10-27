@@ -10,5 +10,6 @@
       "source": "./",
       "description": "Local, evidence-based application security assessment for your own projects."
     }
-  ]
+  ],
+  "description": "PenSec: local, evidence-based application security assessment for Claude Code."
 }
