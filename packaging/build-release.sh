@@ -19,7 +19,10 @@ for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; d
 	arch=${target#*/}
 	bin="$out/pensec-$os-$arch"
 	[ "$os" = windows ] && bin="$bin.exe"
-	GOOS=$os GOARCH=$arch go build -trimpath -ldflags "$ldflags" -o "$bin" ./cmd/pensec
+	# -buildvcs=false: otherwise vcs.modified depends on untracked files in
+	# the working tree (including binaries this loop already wrote). The
+	# provenance attestation records the exact commit instead.
+	GOOS=$os GOARCH=$arch go build -trimpath -buildvcs=false -ldflags "$ldflags" -o "$bin" ./cmd/pensec
 done
 
 # One SBOM covers every binary: all targets link the same modules. Short
