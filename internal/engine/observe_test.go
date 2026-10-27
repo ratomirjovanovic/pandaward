@@ -37,7 +37,11 @@ func writeScope(t *testing.T, root, target string, allowPrivate bool) *scope.Man
 
 func approve(t *testing.T, e *Engine, m *scope.Manifest) {
 	t.Helper()
-	err := e.St.PutApproval(e.ProjectID, store.Approval{ID: "apr_test", Kind: ApprovalKind, SubjectHash: m.Hash(), ApprovedBy: "tester", ApprovedAt: store.Now(),
+	subject, err := e.ApprovalSubject(m, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = e.St.PutApproval(e.ProjectID, store.Approval{ID: "apr_test", Kind: ApprovalKind, SubjectHash: subject, ApprovedBy: "tester", ApprovedAt: store.Now(),
 		ExpiresAt: time.Now().Add(time.Hour).UTC().Format(time.RFC3339)})
 	if err != nil {
 		t.Fatal(err)

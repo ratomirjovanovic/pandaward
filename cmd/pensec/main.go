@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/ratomirjovanovic/pensec/internal/adapters"
+	"github.com/ratomirjovanovic/pensec/internal/adversarial"
 	"github.com/ratomirjovanovic/pensec/internal/catalog"
 	"github.com/ratomirjovanovic/pensec/internal/config"
 	"github.com/ratomirjovanovic/pensec/internal/engine"
@@ -61,6 +62,7 @@ Network-active (human authorization required):
 Integration and tooling:
   doctor          Environment, optional scanners and their network needs
   capabilities    Control catalog with adapter maturity
+  selftest        Run the hostile-repository suite: can repository text steer PenSec? (--json)
   mcp             Serve the MCP stdio interface
   hook <name>     Claude Code lifecycle hook (session-start, post-edit, pre-tool, pre-compact)
   version         Print version
@@ -128,6 +130,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		err = cmdTest(ctx, rest, stdout, stderr)
 	case "doctor":
 		err = cmdDoctor(ctx, rest, stdout)
+	case "selftest":
+		err = cmdSelftest(ctx, rest, stdout)
 	case "capabilities":
 		err = cmdCapabilities(rest, stdout)
 	default:
@@ -883,7 +887,7 @@ func cmdScope(args []string, stdin io.Reader, w io.Writer) error {
 			fmt.Fprintln(w, "  "+redact.Line(t.URL))
 		}
 		probs := m.Validate(time.Now())
-		if ap, _ := e.St.ValidApproval(e.ProjectID, engine.ApprovalKind, m.Hash(), time.Now()); ap != nil {
+		if _, ap, _ := e.CheckScope(time.Now()); ap != nil {
 			fmt.Fprintf(w, "Approval: %s by %s until %s\n", ap.ID, ap.ApprovedBy, ap.ExpiresAt)
 		} else {
 			fmt.Fprintln(w, "Approval: none valid for this exact manifest")
@@ -925,9 +929,13 @@ func cmdScope(args []string, stdin io.Reader, w io.Writer) error {
 		if strings.TrimSpace(line) != "APPROVE "+code {
 			return exitErr{3, "not approved"}
 		}
+		subject, err := e.ApprovalSubject(m, true)
+		if err != nil {
+			return err
+		}
 		idb := make([]byte, 6)
 		_, _ = rand.Read(idb)
-		ap := store.Approval{ID: "apr_" + hex.EncodeToString(idb), Kind: engine.ApprovalKind, SubjectHash: m.Hash(), ApprovedBy: redact.Line(*by),
+		ap := store.Approval{ID: "apr_" + hex.EncodeToString(idb), Kind: engine.ApprovalKind, SubjectHash: subject, ApprovedBy: redact.Line(*by),
 			ApprovedAt: store.Now(), ExpiresAt: time.Now().Add(time.Duration(*hours) * time.Hour).UTC().Format(time.RFC3339)}
 		if err := e.St.PutApproval(e.ProjectID, ap); err != nil {
 			return err
@@ -1065,3 +1073,36 @@ func cmdCapabilities(args []string, w io.Writer) error {
 
 // MaturityObserve is the maturity of the production-observe adapter.
 const MaturityObserve = adapters.MaturityUnvalidated
+
+func cmdSelftest(ctx context.Context, args []string, w io.Writer) error {
+	fs := flag.NewFlagSet("selftest", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "JSON output")
+	if _, err := parse(fs, args); err != nil {
+		return err
+	}
+	r, err := adversarial.Run(ctx)
+	if err != nil {
+		return err
+	}
+	if *asJSON {
+		if err := printJSON(w, r); err != nil {
+			return err
+		}
+	} else {
+		for _, o := range r.Observations {
+			st := "PASS"
+			if !o.Passed {
+				st = "FAIL"
+			}
+			fmt.Fprintf(w, "%s  %-28s %3d probes  %s\n", st, o.Case, o.Probes, o.Policy)
+			if o.Detail != "" {
+				fmt.Fprintln(w, "      "+o.Detail)
+			}
+		}
+		fmt.Fprintf(w, "\n%d passed, %d failed. %s\n", r.Passed, r.Failed, r.Note)
+	}
+	if r.Failed > 0 {
+		return exitErr{1, "PenSec was steered by repository content in at least one case"}
+	}
+	return nil
+}

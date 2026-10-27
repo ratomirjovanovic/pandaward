@@ -15,3 +15,5 @@ Please report privately through GitHub's private vulnerability reporting on this
 ## Not independently audited
 
 PenSec has not had an external security review yet. Its threat model is described in the product requirements and enforced by the tests in `internal/`.
+
+`pensec selftest` (and the release-blocking test in `internal/adversarial`) runs a hostile fixture repository through the full pipeline. It checks that nothing in the repository is executed, that a shipped scope manifest or forged ledger approval never authorizes traffic, that repository text cannot confirm, waive or approve anything, and that terminal escapes and HTML are neutralized in every output. Passing shows those attempts failed; it is not a proof.

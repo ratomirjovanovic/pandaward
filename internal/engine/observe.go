@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -43,9 +44,18 @@ func (e *Engine) CheckScope(now time.Time) (*scope.Manifest, *store.Approval, er
 	if probs := m.Validate(now); len(probs) > 0 {
 		return m, nil, fmt.Errorf("scope manifest is not valid for network tests:\n  - %s", strings.Join(probs, "\n  - "))
 	}
-	ap, err := e.St.ValidApproval(e.ProjectID, ApprovalKind, m.Hash(), now)
+	subject, err := e.ApprovalSubject(m, false)
+	if errors.Is(err, os.ErrNotExist) {
+		subject, err = "", nil // no key on this machine: nothing was approved here
+	}
 	if err != nil {
 		return m, nil, err
+	}
+	var ap *store.Approval
+	if subject != "" {
+		if ap, err = e.St.ValidApproval(e.ProjectID, ApprovalKind, subject, now); err != nil {
+			return m, nil, err
+		}
 	}
 	if ap == nil {
 		return m, nil, errors.New("no valid approval for this exact scope manifest; a human must run `pensec scope approve --by \"<name>\"` in an interactive terminal (editing scope.yaml invalidates earlier approvals)")
