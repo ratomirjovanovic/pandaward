@@ -1,0 +1,151 @@
+rules:
+  - id: pensec-js-eval
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Dynamic code evaluation of a non-constant value. If any part of it is attacker-controlled this is code injection.
+    metadata:
+      pensec-control: D-001
+      cwe: "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
+    patterns:
+      - pattern-either:
+          - pattern: eval($X)
+          - pattern: new Function(..., $X)
+          - pattern: setTimeout($X, ...)
+          - pattern: setInterval($X, ...)
+      - pattern-not: eval("...")
+      - pattern-not: new Function(..., "...")
+      - pattern-not: setTimeout(function (...) {...}, ...)
+      - pattern-not: setTimeout((...) => {...}, ...)
+      - pattern-not: setTimeout((...) => $E, ...)
+      - pattern-not: setTimeout($F, ...)
+      - pattern-not: setInterval(function (...) {...}, ...)
+      - pattern-not: setInterval((...) => {...}, ...)
+      - pattern-not: setInterval((...) => $E, ...)
+      - pattern-not: setInterval($F, ...)
+      - pattern-not: setTimeout("...", ...)
+
+  - id: pensec-js-shell-exec
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: A shell command is built from a non-constant string. Use execFile/spawn with an argument array and no shell.
+    metadata:
+      pensec-control: D-002
+      cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern-either:
+                  - pattern: require('child_process').exec($CMD, ...)
+                  - pattern: require('child_process').execSync($CMD, ...)
+                  - pattern-inside: |
+                      import { ..., exec, ... } from 'child_process';
+                      ...
+                  - pattern-inside: |
+                      import { ..., execSync, ... } from 'child_process';
+                      ...
+              - pattern-either:
+                  - pattern: exec($CMD, ...)
+                  - pattern: execSync($CMD, ...)
+                  - pattern: $CP.exec($CMD, ...)
+                  - pattern: $CP.execSync($CMD, ...)
+          - pattern: |
+              $CP.spawn($CMD, $ARGS, {..., shell: true, ...})
+      - pattern-not: $F("...", ...)
+      - pattern-not: $CP.$F("...", ...)
+
+  - id: pensec-js-sql-string
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: SQL text is built with string concatenation or template interpolation. Use parameterized queries.
+    metadata:
+      pensec-control: D-003
+      cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
+    patterns:
+      - pattern-either:
+          - pattern: $DB.$Q("$SQL" + $X, ...)
+          - pattern: $DB.$Q(`...${$X}...`, ...)
+          - pattern: $DB.$Q($A + $B, ...)
+      - metavariable-regex:
+          metavariable: $Q
+          regex: ^(query|execute|raw|run|all|prepare|\$queryRawUnsafe|\$executeRawUnsafe)$
+      - pattern-not: $DB.$Q("..." + "...", ...)
+
+  - id: pensec-js-html-sink
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: A non-constant value is written into raw HTML. Escape it or use textContent.
+    metadata:
+      pensec-control: H-001
+      cwe: "CWE-79: Improper Neutralization of Input During Web Page Generation"
+    patterns:
+      - pattern-either:
+          - pattern: $EL.innerHTML = $X
+          - pattern: $EL.outerHTML = $X
+          - pattern: $EL.insertAdjacentHTML($POS, $X)
+          - pattern: document.write($X)
+      - pattern-not: $EL.innerHTML = "..."
+      - pattern-not: $EL.outerHTML = "..."
+      - pattern-not: $EL.insertAdjacentHTML($POS, "...")
+      - pattern-not: document.write("...")
+
+  - id: pensec-js-jwt-none-alg
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: JWT verification accepts the 'none' algorithm, so unsigned tokens are valid.
+    metadata:
+      pensec-control: B-001
+      cwe: "CWE-347: Improper Verification of Cryptographic Signature"
+    pattern-either:
+      - pattern: |
+          $JWT.verify($T, $K, {..., algorithms: [..., 'none', ...], ...}, ...)
+      - pattern: |
+          $JWT.verify($T, $K, {..., algorithms: [..., "none", ...], ...}, ...)
+
+  - id: pensec-js-ssrf
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: An outbound request URL comes from the incoming request. Validate it against an allowlist to prevent SSRF.
+    metadata:
+      pensec-control: D-006
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.query
+          - pattern: $REQ.body
+          - pattern: $REQ.params
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: fetch($URL, ...)
+              - pattern: axios($URL, ...)
+              - pattern: axios.$M($URL, ...)
+              - pattern: got($URL, ...)
+              - pattern: http.get($URL, ...)
+              - pattern: https.get($URL, ...)
+              - pattern: http.request($URL, ...)
+              - pattern: https.request($URL, ...)
+          - focus-metavariable: $URL
+
+  - id: pensec-js-path-traversal
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: A file path comes from the incoming request. Resolve it and check it stays inside the intended directory.
+    metadata:
+      pensec-control: D-006
+      cwe: "CWE-22: Improper Limitation of a Pathname to a Restricted Directory"
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.query
+          - pattern: $REQ.body
+          - pattern: $REQ.params
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: fs.$F($P, ...)
+              - pattern: $RES.sendFile($P, ...)
+              - pattern: $RES.download($P, ...)
+          - focus-metavariable: $P
+    pattern-sanitizers:
+      - pattern: path.basename(...)

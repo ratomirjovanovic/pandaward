@@ -1,0 +1,112 @@
+rules:
+  - id: pensec-go-sql-string
+    languages: [go]
+    severity: ERROR
+    message: SQL text is built with fmt.Sprintf or concatenation. Use query placeholders.
+    metadata:
+      pensec-control: D-003
+      cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
+    patterns:
+      - pattern-either:
+          - pattern: $DB.$Q(fmt.Sprintf($FMT, ...), ...)
+          - pattern: $DB.$Q("$SQL" + $X, ...)
+          - pattern: $DB.$Q($CTX, fmt.Sprintf($FMT, ...), ...)
+          - pattern: $DB.$Q($CTX, "$SQL" + $X, ...)
+      - metavariable-regex:
+          metavariable: $Q
+          regex: ^(Query|QueryRow|Exec|QueryContext|QueryRowContext|ExecContext|Prepare|PrepareContext|Raw|Select|Get)$
+
+  - id: pensec-go-shell-exec
+    languages: [go]
+    severity: ERROR
+    message: A shell is invoked with a non-constant command string. Call the program directly with separate arguments.
+    metadata:
+      pensec-control: D-002
+      cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
+    patterns:
+      - pattern-either:
+          - pattern: exec.Command($SH, "-c", $CMD, ...)
+          - pattern: exec.CommandContext($CTX, $SH, "-c", $CMD, ...)
+          - pattern: exec.Command($SH, "/c", $CMD, ...)
+      - pattern-not: exec.Command($SH, $FLAG, "...", ...)
+      - pattern-not: exec.CommandContext($CTX, $SH, $FLAG, "...", ...)
+
+  - id: pensec-go-tls-insecure
+    languages: [go]
+    severity: ERROR
+    message: TLS certificate verification is disabled, which allows man-in-the-middle attacks.
+    metadata:
+      pensec-control: E-003
+      cwe: "CWE-295: Improper Certificate Validation"
+    pattern-either:
+      - pattern: "tls.Config{..., InsecureSkipVerify: true, ...}"
+      - pattern: $CFG.InsecureSkipVerify = true
+
+  - id: pensec-go-weak-random
+    languages: [go]
+    severity: WARNING
+    message: math/rand is not cryptographically secure. Use crypto/rand for tokens, keys and nonces.
+    metadata:
+      pensec-control: E-004
+      cwe: "CWE-338: Use of Cryptographically Weak Pseudo-Random Number Generator"
+    patterns:
+      - pattern-inside: |
+          import "math/rand"
+          ...
+      - pattern-either:
+          - pattern: rand.Read(...)
+          - pattern: rand.Int63()
+          - pattern: rand.Intn(...)
+      - pattern-inside: |
+          func $F(...) $R {
+            ...
+          }
+      - metavariable-regex:
+          metavariable: $F
+          regex: (?i).*(token|secret|key|nonce|salt|password|session|otp).*
+
+  - id: pensec-go-ssrf
+    languages: [go]
+    severity: WARNING
+    message: An outbound request URL comes from the incoming request. Validate it against an allowlist to prevent SSRF.
+    metadata:
+      pensec-control: D-006
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $R.URL.Query().Get(...)
+          - pattern: $R.FormValue(...)
+          - pattern: $R.PostFormValue(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: http.Get($URL)
+              - pattern: http.Post($URL, ...)
+              - pattern: http.NewRequest($M, $URL, ...)
+              - pattern: http.NewRequestWithContext($CTX, $M, $URL, ...)
+          - focus-metavariable: $URL
+
+  - id: pensec-go-path-traversal
+    languages: [go]
+    severity: WARNING
+    message: A file path comes from the incoming request. Resolve it and check it stays inside the intended directory.
+    metadata:
+      pensec-control: D-006
+      cwe: "CWE-22: Improper Limitation of a Pathname to a Restricted Directory"
+    mode: taint
+    pattern-sources:
+      - pattern-either:
+          - pattern: $R.URL.Query().Get(...)
+          - pattern: $R.FormValue(...)
+          - pattern: $R.PathValue(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: os.Open($P)
+              - pattern: os.ReadFile($P)
+              - pattern: os.OpenFile($P, ...)
+              - pattern: http.ServeFile($W, $REQ, $P)
+          - focus-metavariable: $P
+    pattern-sanitizers:
+      - pattern: filepath.Base(...)
