@@ -783,3 +783,7 @@ func (s *Store) Waivers(projectID, from, to string) (map[string]string, error) {
 	}
 	return out, rows.Err()
 }
+
+// Migrations returns the ledger migrations in order. Published migrations
+// are frozen; schema changes add a new one (see docs/SCHEMAS.md).
+func Migrations() []string { return append([]string{}, migrations...) }

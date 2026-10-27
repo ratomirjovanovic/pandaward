@@ -2,10 +2,12 @@
 package config
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -87,7 +89,10 @@ func Load(root string) (*Config, string, error) {
 		return nil, "", err
 	}
 	c := Default("")
-	if err := yaml.Unmarshal(b, c); err != nil {
+	// Unknown keys are errors: a misspelled setting must not be ignored.
+	dec := yaml.NewDecoder(bytes.NewReader(b))
+	dec.KnownFields(true)
+	if err := dec.Decode(c); err != nil && !errors.Is(err, io.EOF) {
 		return nil, "", fmt.Errorf("invalid %s: %w", Path(root), err)
 	}
 	if c.SchemaVersion != 1 {
