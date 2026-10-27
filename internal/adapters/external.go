@@ -60,18 +60,21 @@ func (t *externalTool) Version(ctx context.Context) string {
 	return redact.Line(v)
 }
 
-func toolEnv(c *Context) []string {
+// toolEnv builds the scrubbed tool environment. tmp is a short per-run temp
+// directory: semgrep-core on Windows fails when TEMP is a long path, so the
+// temp directory is kept apart from the (possibly deep) tool home.
+func toolEnv(c *Context, tmp string) []string {
 	env := inventory.MinimalEnv()
 	var out []string
 	for _, kv := range env {
 		k := strings.SplitN(kv, "=", 2)[0]
 		switch strings.ToUpper(k) {
-		case "HOME", "USERPROFILE", "TEMP", "TMP":
+		case "HOME", "USERPROFILE", "TEMP", "TMP", "TMPDIR":
 			continue
 		}
 		out = append(out, kv)
 	}
-	return append(out, "HOME="+c.ToolHome, "USERPROFILE="+c.ToolHome, "TEMP="+c.ToolHome, "TMP="+c.ToolHome,
+	return append(out, "HOME="+c.ToolHome, "USERPROFILE="+c.ToolHome, "TEMP="+tmp, "TMP="+tmp, "TMPDIR="+tmp,
 		"SEMGREP_SEND_METRICS=off", "SEMGREP_ENABLE_VERSION_CHECK=0", "TRIVY_NO_PROGRESS=true", "DO_NOT_TRACK=1", "NO_COLOR=1")
 }
 
@@ -94,11 +97,16 @@ func (t *externalTool) Run(ctx context.Context, c *Context) (Result, model.Run) 
 	if err := os.MkdirAll(c.ToolHome, 0o700); err != nil {
 		return res, finish(run, model.ExitError, err.Error(), 0)
 	}
+	tmp, err := os.MkdirTemp("", "pensec-")
+	if err != nil {
+		return res, finish(run, model.ExitError, err.Error(), 0)
+	}
+	defer os.RemoveAll(tmp)
 	cctx, cancel := context.WithTimeout(ctx, c.Timeout)
 	defer cancel()
 	cmd := exec.CommandContext(cctx, bin, args...)
 	cmd.Dir = c.Root
-	cmd.Env = toolEnv(c)
+	cmd.Env = toolEnv(c, tmp)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &limitedBuffer{b: &stdout, max: 64 << 20}
 	cmd.Stderr = &limitedBuffer{b: &stderr, max: 1 << 20}
@@ -117,7 +125,11 @@ func (t *externalTool) Run(ctx context.Context, c *Context) (Result, model.Run) 
 	}
 	_ = os.WriteFile(filepath.Join(c.RunDir, t.name+".stderr.txt"), []byte(redact.Text(stderr.String())), 0o600)
 	if !t.okExit[code] {
-		return res, finish(run, model.ExitError, fmt.Sprintf("%s exited %d: %s", t.name, code, firstLine(stderr.String())), 0)
+		why := firstLine(stderr.String())
+		if why == "" {
+			why = "no error output; run " + t.binary + " manually in the project to see the cause"
+		}
+		return res, finish(run, model.ExitError, fmt.Sprintf("%s exited %d: %s", t.name, code, why), 0)
 	}
 	raw, rerr := os.ReadFile(out)
 	if rerr != nil || len(bytes.TrimSpace(raw)) == 0 {
