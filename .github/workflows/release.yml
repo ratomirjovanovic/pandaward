@@ -1,7 +1,8 @@
 name: release
 
-# On a version tag: build binaries for all platforms, publish a GitHub
-# release with checksums and build provenance, and update the two plugin
+# On a version tag: build binaries for all platforms reproducibly, publish a
+# GitHub release with checksums, a CycloneDX SBOM, build provenance and SBOM
+# attestations (see docs/VERIFYING.md), and update the two plugin
 # branches that the marketplace installs from:
 #   plugin          macOS and Linux (launcher + binaries)
 #   plugin-windows  Windows (pensec.exe)
@@ -39,24 +40,32 @@ jobs:
       - name: Test
         run: go test ./...
 
+      - name: Install SBOM generator
+        run: go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.11.0
+
       - name: Build
         env:
-          CGO_ENABLED: "0"
+          GOTOOLCHAIN: local
+        run: sh packaging/build-release.sh "${GITHUB_REF_NAME#v}" dist
+
+      - name: Check the build is reproducible
+        env:
+          GOTOOLCHAIN: local
         run: |
-          mkdir -p dist
-          ldflags="-s -w -buildid= -X github.com/ratomirjovanovic/pensec/internal/version.Version=${GITHUB_REF_NAME#v}"
-          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
-            os=${target%/*}; arch=${target#*/}
-            out="dist/pensec-$os-$arch"
-            [ "$os" = windows ] && out="$out.exe"
-            GOOS=$os GOARCH=$arch go build -trimpath -ldflags "$ldflags" -o "$out" ./cmd/pensec
-          done
-          (cd dist && sha256sum pensec-* > SHA256SUMS)
-          cat dist/SHA256SUMS
+          go clean -cache
+          sh packaging/build-release.sh "${GITHUB_REF_NAME#v}" dist-check >/dev/null
+          diff dist/SHA256SUMS dist-check/SHA256SUMS
+          jq -e '[.components[] | select((.licenses // []) | length == 0)] | length == 0' dist/pensec.cdx.json
+          rm -rf dist-check
 
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: dist/pensec-*
+
+      - uses: actions/attest-sbom@c604332985a26aa8cf1bdc465b92731239ec6b9e # v4.1.0
+        with:
+          subject-path: dist/pensec-*
+          sbom-path: dist/pensec.cdx.json
 
       - name: Rule benchmark
         run: go run ./cmd/pensec benchmark --strict --json > dist/benchmark.json
