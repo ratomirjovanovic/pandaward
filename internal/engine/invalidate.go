@@ -1,6 +1,9 @@
 package engine
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"path"
 	"sort"
 	"strings"
@@ -146,18 +149,67 @@ func ApplyStale(cs []model.ControlResult, es []model.Edge, affected map[string]b
 	return outC, outE
 }
 
-// StaleView loads stale files and applies them to an assessment's results.
-func (e *Engine) StaleView(asmt string, cs []model.ControlResult, es []model.Edge) ([]model.ControlResult, []model.Edge, []string, error) {
-	files, err := e.St.StaleFiles(e.ProjectID)
-	if err != nil || len(files) == 0 {
-		return cs, es, files, err
+// Changes are the files changed since an assessment.
+type Changes struct {
+	Files   []string // all changed files, hook-recorded and hash-detected
+	Outside []string // the subset found only by hashing (edited outside Claude Code)
+	Note    string   // set when the hash comparison was skipped
+}
+
+// StaleView finds files changed since an assessment and applies them to its
+// results. It only reads; nothing is written to the ledger.
+func (e *Engine) StaleView(asmt string, cs []model.ControlResult, es []model.Edge) ([]model.ControlResult, []model.Edge, Changes, error) {
+	ch, err := e.changes(asmt)
+	if err != nil || len(ch.Files) == 0 {
+		return cs, es, ch, err
 	}
-	affected, err := e.affected(asmt, files)
+	affected, err := e.affected(asmt, ch.Files)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, Changes{}, err
 	}
-	cs2, es2 := ApplyStale(cs, es, affected, files)
-	return cs2, es2, files, nil
+	cs2, es2 := ApplyStale(cs, es, affected, ch.Files)
+	return cs2, es2, ch, nil
+}
+
+// changes merges the files recorded by the edit hook with the files whose
+// content hash differs from the assessment.
+func (e *Engine) changes(asmt string) (Changes, error) {
+	var ch Changes
+	hooked, err := e.St.StaleFiles(e.ProjectID)
+	if err != nil {
+		return ch, err
+	}
+	ch.Files = hooked
+	old, err := e.St.FileHashes(asmt)
+	if err != nil {
+		return ch, err
+	}
+	ctx := context.Background()
+	if e.HashBudget > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, e.HashBudget)
+		defer cancel()
+	}
+	cur, err := inventory.Hashes(ctx, e.Root, inventory.Options{Exclude: e.Cfg.Inventory.Exclude, MaxFileBytes: e.Cfg.Inventory.MaxFileBytes, MaxFiles: e.Cfg.Inventory.MaxFiles})
+	if errors.Is(err, context.DeadlineExceeded) {
+		ch.Note = fmt.Sprintf("hash check for changes made outside Claude Code skipped after %s; run `pensec status` for a full check", e.HashBudget)
+		return ch, nil
+	}
+	if err != nil {
+		return ch, err
+	}
+	known := map[string]bool{}
+	for _, f := range hooked {
+		known[strings.TrimSuffix(f, " (deleted)")] = true
+	}
+	for _, f := range diffHashes(old, cur) {
+		if !known[strings.TrimSuffix(f, " (deleted)")] {
+			ch.Outside = append(ch.Outside, f)
+		}
+	}
+	ch.Files = append(ch.Files, ch.Outside...)
+	sort.Strings(ch.Files)
+	return ch, nil
 }
 
 // affected resolves changed paths against the file domains recorded in an

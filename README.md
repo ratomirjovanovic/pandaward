@@ -69,7 +69,8 @@ BLOCKED/UNSUPPORTED/SUSPECTED controls are not secure; see `pensec status` and `
 
 ```text
 /plugin marketplace add ratomirjovanovic/pensec
-/plugin install pensec@pensec
+/plugin install pensec@pensec            # macOS and Linux
+/plugin install pensec-windows@pensec    # Windows
 ```
 
 Then, in your project:
@@ -82,7 +83,7 @@ Then, in your project:
 /pensec:report      # HTML, Markdown, JSON, SARIF, CSV
 ```
 
-> Prebuilt binaries for the plugin are tracked in [#4](https://github.com/ratomirjovanovic/pensec/issues/4). Until then, build the binary into the plugin's `bin/` directory as shown below.
+> The plugin installs prebuilt, checksum-verified binaries from the `plugin` and `plugin-windows` branches, which the release workflow publishes on every version tag. Until the first release is tagged those branches do not exist yet; build the binary into the plugin's `bin/` directory as shown below.
 
 ### As a CLI
 
@@ -99,6 +100,8 @@ pensec report --format html,sarif
 ```
 
 Requires Go 1.23 or later to build. The binary has no runtime dependencies.
+
+Release binaries are reproducible and come with checksums, a CycloneDX SBOM and signed build provenance; [docs/VERIFYING.md](docs/VERIFYING.md) shows how to check them.
 
 ## How it works
 
@@ -122,7 +125,7 @@ flowchart LR
 
 1. **Inventory** walks the repository read-only and records files, routes, manifests, workflows, IaC, mobile manifests and AI/MCP usage.
 2. **Plan** maps the control catalog (domains A to R) onto what was found. Controls without matching assets become `NOT_APPLICABLE` with a reason you can review.
-3. **Adapters** run. Built-in checks are offline and always available; gitleaks, semgrep, osv-scanner and trivy are used only if you installed them.
+3. **Adapters** run. Built-in checks are offline and always available; gitleaks, semgrep, osv-scanner and trivy are used only if you installed them. When semgrep is installed it runs PenSec's bundled offline rules (see [`rules/README.md`](rules/README.md)) plus any rules you configure.
 4. **Findings** are redacted, fingerprinted and linked to evidence. Repeated runs update their lifecycle: `OPEN`, `REMEDIATED`, `REOPENED`, `FALSE_POSITIVE`, `RISK_ACCEPTED`.
 5. **Edges** between domains are created only from shared assets and get their status from the linked controls.
 6. **Reports** show confirmed findings, suspected signals, coverage by domain, every undecided control and the evidence index.
@@ -131,7 +134,7 @@ flowchart LR
 
 | Domain | Automated today (offline) | Needs review or runtime |
 |---|---|---|
-| A Inventory and architecture | route extraction for Express, Next.js, Flask, FastAPI, Django, Go, Spring, Laravel, Rails, ASP.NET; OpenAPI drift | threat model |
+| A Inventory and architecture | entrypoints with file and line (`pensec routes`): HTTP routes for Express, NestJS, Next.js, Flask, FastAPI, Django, Go, Spring, Laravel, Rails, ASP.NET with router prefixes and mounts resolved; GraphQL schema operations; gRPC services; queue consumers and cron jobs; services in monorepos; OpenAPI drift | threat model |
 | B Authentication | JWT `none` or unverified decode, cookie flags | login, reset and session lifecycle |
 | C Authorization | | object and function level authorization (manual-assisted) |
 | D Injection | eval, shell, SQL concatenation, unsafe deserialization | runtime probes |
@@ -147,7 +150,9 @@ flowchart LR
 | P AI and MCP | model output reaching exec sinks, MCP server pinning and inline credentials | prompt-injection tests |
 | R Assurance | evidence integrity | |
 
-`pensec capabilities` prints the full catalog with each adapter's maturity. All adapters are currently `implemented_unvalidated`: they pass this repository's fixture suite, but no public benchmark has been published yet.
+`pensec capabilities` prints the full catalog with each adapter's maturity. All adapters are currently `implemented_unvalidated`.
+
+`pensec benchmark` runs every built-in rule against a versioned corpus of vulnerable and safe cases and prints TP, FP, FN, TN, precision and recall per rule. CI fails when a rule misses a vulnerable case or fires on a safe one, and each release attaches `benchmark.json`. A rule counts as `implemented_and_benchmarked` only with precision and recall of at least 0.95 on at least 3 vulnerable and 3 safe cases. Today every rule has one of each, so none qualifies yet. The corpus is PenSec's own, so the numbers describe these cases, not real-world accuracy.
 
 ## Commands
 
@@ -163,6 +168,9 @@ flowchart LR
 | `pensec fix-plan` | Ordered remediation steps |
 | `pensec report [--format ...]` | HTML, Markdown, JSON, SARIF 2.1.0, CSV |
 | `pensec evidence show ID \| verify` | Read or verify redacted evidence |
+| `pensec diff [FROM TO]` | New, reopened, remediated, stale and waived findings between two assessments (default: previous vs latest) |
+| `pensec export --bundle out.zip` | Report and redacted evidence with a SHA-256 manifest for a reviewer; never raw tool output |
+| `pensec verify-bundle out.zip` | Recompute every hash in a bundle; compare the printed manifest hash with the sender's |
 | `pensec scope init \| validate \| approve \| revoke` | Authorization for network tests |
 | `pensec test --profile production-observe` | Header and cookie review of approved origins |
 | `pensec doctor` | Optional scanners and their network needs |

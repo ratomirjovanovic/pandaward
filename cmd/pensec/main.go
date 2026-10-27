@@ -23,6 +23,8 @@ import (
 
 	"github.com/ratomirjovanovic/pensec/internal/adapters"
 	"github.com/ratomirjovanovic/pensec/internal/adversarial"
+	"github.com/ratomirjovanovic/pensec/internal/benchmark"
+	"github.com/ratomirjovanovic/pensec/internal/bundle"
 	"github.com/ratomirjovanovic/pensec/internal/catalog"
 	"github.com/ratomirjovanovic/pensec/internal/config"
 	"github.com/ratomirjovanovic/pensec/internal/engine"
@@ -50,9 +52,13 @@ Assessment (local, no target network traffic):
   status          Resumable state, coverage, blockers and next action
   findings        List/show findings; human triage: false-positive, accept-risk, reopen, confirm
   graph           Cross-domain edges (text or --format mermaid)
+  routes          Discovered entrypoints (HTTP, GraphQL, gRPC, workers, cron) with file:line
   fix-plan        Ordered remediation plan from open findings
   report          Render HTML, Markdown, JSON, SARIF and CSV reports
   evidence        show <id> | verify
+  diff            [FROM TO] findings new, reopened, remediated, stale, waived between assessments
+  export          --bundle out.zip [--assessment ID] redacted evidence, report and SHA-256 manifest
+  verify-bundle   <bundle.zip> recompute and check every hash in a bundle
   events          Recent audit events
 
 Network-active (human authorization required):
@@ -62,6 +68,7 @@ Network-active (human authorization required):
 Integration and tooling:
   doctor          Environment, optional scanners and their network needs
   capabilities    Control catalog with adapter maturity
+  benchmark       TP/FP/FN/TN per built-in rule on the bundled corpus (--json, --strict)
   selftest        Run the hostile-repository suite: can repository text steer PenSec? (--json)
   mcp             Serve the MCP stdio interface
   hook <name>     Claude Code lifecycle hook (session-start, post-edit, pre-tool, pre-compact)
@@ -116,12 +123,20 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		err = cmdFindings(rest, stdout)
 	case "graph":
 		err = cmdGraph(rest, stdout)
+	case "routes":
+		err = cmdRoutes(rest, stdout)
 	case "fix-plan":
 		err = cmdFixPlan(rest, stdout)
 	case "report":
 		err = cmdReport(rest, stdout)
 	case "evidence":
 		err = cmdEvidence(rest, stdout)
+	case "diff":
+		err = cmdDiff(rest, stdout)
+	case "export":
+		err = cmdExport(rest, stdout)
+	case "verify-bundle":
+		err = cmdVerifyBundle(rest, stdout)
 	case "events":
 		err = cmdEvents(rest, stdout)
 	case "scope":
@@ -130,6 +145,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		err = cmdTest(ctx, rest, stdout, stderr)
 	case "doctor":
 		err = cmdDoctor(ctx, rest, stdout)
+	case "benchmark":
+		err = cmdBenchmark(ctx, rest, stdout)
 	case "selftest":
 		err = cmdSelftest(ctx, rest, stdout)
 	case "capabilities":
@@ -375,45 +392,43 @@ func cmdScan(ctx context.Context, args []string, w, ew io.Writer, retest bool) e
 		return err
 	}
 	defer e.Close()
-	var changed []string
-	if retest {
-		inv, err := e.Inventory()
-		if err != nil {
-			return err
-		}
-		changed, err = e.ChangedSinceLast(inv)
-		if err != nil {
-			return err
-		}
-		if !*asJSON {
-			fmt.Fprintf(w, "Files changed since the last assessment: %d\n", len(changed))
-			for i, c := range changed {
-				if i == 30 {
-					fmt.Fprintf(w, "  ... %d more\n", len(changed)-30)
-					break
-				}
-				fmt.Fprintln(w, "  "+redact.Line(c))
-			}
-			if *onlyChanged {
-				fmt.Fprintln(w, "Re-running only the adapters for impacted controls, then recomputing edges.")
-			} else {
-				fmt.Fprintln(w, "Re-running the full passive scan so dependent controls and edges are re-evaluated.")
-			}
-		}
-	}
 	progress := func(m string) {
 		if !*quiet && !*asJSON {
 			fmt.Fprintln(ew, "·", m)
 		}
 	}
+	var changed []string
 	var res *engine.ScanResult
-	if retest && *onlyChanged {
-		res, err = e.Retest(ctx, progress, changed)
+	if retest {
+		changed, res, err = e.RetestChanged(ctx, progress, *onlyChanged)
 	} else {
 		res, err = e.Scan(ctx, progress)
 	}
 	if err != nil {
 		return err
+	}
+	if retest && !*asJSON {
+		fmt.Fprintf(w, "Files changed since the last assessment: %d\n", len(changed))
+		for i, c := range changed {
+			if i == 30 {
+				fmt.Fprintf(w, "  ... %d more\n", len(changed)-30)
+				break
+			}
+			fmt.Fprintln(w, "  "+redact.Line(c))
+		}
+		carried := 0
+		for _, r := range res.Runs {
+			if r.ExitClass == model.ExitCarried {
+				carried++
+			}
+		}
+		if carried > 0 {
+			fmt.Fprintf(w, "Only the adapters for impacted controls were re-run; %d adapter(s) CARRIED from the previous assessment. Edges were recomputed.\n", carried)
+		} else if *onlyChanged {
+			fmt.Fprintln(w, "No adapter could be carried over, so every applicable adapter was re-run.")
+		} else {
+			fmt.Fprintln(w, "The full passive scan was re-run so dependent controls and edges were re-evaluated.")
+		}
 	}
 	if *asJSON {
 		out := map[string]any{"scan": res}
@@ -477,13 +492,24 @@ func cmdStatus(args []string, w io.Writer) error {
 		fmt.Fprintf(w, "Open findings: %d confirmed, %d suspected  %v\n", s.Confirmed, s.Suspected, s.Findings)
 	}
 	if len(s.StaleFiles) > 0 {
+		outside := map[string]bool{}
+		for _, f := range s.ChangedOutside {
+			outside[f] = true
+		}
 		fmt.Fprintf(w, "Stale files (%d):\n", len(s.StaleFiles))
 		for _, f := range s.StaleFiles {
-			fmt.Fprintln(w, "  "+redact.Line(f))
+			if outside[f] {
+				fmt.Fprintln(w, "  "+redact.Line(f)+"  (changed outside Claude Code)")
+			} else {
+				fmt.Fprintln(w, "  "+redact.Line(f))
+			}
 		}
 		if len(s.StaleControls) > 0 {
 			fmt.Fprintf(w, "Stale controls (%d, not decisive until retest): %s\n", len(s.StaleControls), strings.Join(s.StaleControls, ", "))
 		}
+	}
+	if s.ChangeCheck != "" {
+		fmt.Fprintln(w, redact.Line(s.ChangeCheck))
 	}
 	if len(s.Blockers) > 0 {
 		fmt.Fprintln(w, "Blockers:")
@@ -599,6 +625,44 @@ func cmdFindings(args []string, w io.Writer) error {
 		return nil
 	}
 	return exitErr{2, "findings subcommands: list, show, add, false-positive, accept-risk, reopen, confirm"}
+}
+
+func cmdRoutes(args []string, w io.Writer) error {
+	fs, root := newFS("routes")
+	asJSON := fs.Bool("json", false, "JSON output")
+	service := fs.String("service", "", "only entrypoints of this service root (e.g. services/api)")
+	kind := fs.String("kind", "", "only one kind: "+strings.Join(engine.EntrypointKinds, ", "))
+	if _, err := parse(fs, args); err != nil {
+		return err
+	}
+	e, err := openProject(*root)
+	if err != nil {
+		return err
+	}
+	defer e.Close()
+	eps, a, err := e.Entrypoints(*service, *kind)
+	if err != nil {
+		return err
+	}
+	if a == nil {
+		return errors.New("no completed assessment; run `pensec scan` first")
+	}
+	if *asJSON {
+		return printJSON(w, map[string]any{"assessment_id": a.ID, "entrypoints": eps})
+	}
+	fmt.Fprintf(w, "Entrypoints found by %s (heuristic; completeness is not proven):\n", a.ID)
+	svc := "\x00"
+	for _, ep := range eps {
+		if ep.Meta["service"] != svc {
+			svc = ep.Meta["service"]
+			fmt.Fprintf(w, "\n%s\n", svc)
+		}
+		fmt.Fprintf(w, "  %-9s %-40s %s:%d  (%s, %s)\n", ep.Meta["method"], redact.Line(ep.Meta["path"]), redact.Line(ep.Locator), ep.Line, ep.Meta["framework"], ep.Kind)
+	}
+	if len(eps) == 0 {
+		fmt.Fprintln(w, "  none")
+	}
+	return nil
 }
 
 func cmdGraph(args []string, w io.Writer) error {
@@ -807,7 +871,11 @@ func cmdEvidence(args []string, w io.Writer) error {
 		if err != nil || a == nil {
 			return errors.New("no assessment")
 		}
-		ok, bad, err := evidence.Verify(e.St, e.Private(), a.ID)
+		cs, err := e.St.Controls(a.ID)
+		if err != nil {
+			return err
+		}
+		ok, bad, err := evidence.Verify(e.St, e.Private(), a.ID, evidence.Referenced(cs))
 		if err != nil {
 			return err
 		}
@@ -1103,6 +1171,154 @@ func cmdSelftest(ctx context.Context, args []string, w io.Writer) error {
 	}
 	if r.Failed > 0 {
 		return exitErr{1, "PenSec was steered by repository content in at least one case"}
+	}
+	return nil
+}
+
+func cmdDiff(args []string, w io.Writer) error {
+	fs, root := newFS("diff")
+	asJSON := fs.Bool("json", false, "JSON output")
+	pos, err := parse(fs, args)
+	if err != nil {
+		return err
+	}
+	e, err := openProject(*root)
+	if err != nil {
+		return err
+	}
+	defer e.Close()
+	var d *engine.Delta
+	switch len(pos) {
+	case 0:
+		a, err := e.St.LatestAssessment(e.ProjectID)
+		if err != nil {
+			return err
+		}
+		if a == nil {
+			return errors.New("no completed assessment; run `pensec scan` first")
+		}
+		if d, err = e.DeltaToPrevious(a.ID); err != nil {
+			return err
+		}
+		if d == nil {
+			return errors.New("no earlier assessment with observation tracking to compare with")
+		}
+	case 2:
+		if d, err = e.Diff(pos[0], pos[1]); err != nil {
+			return err
+		}
+	default:
+		return exitErr{2, "usage: pensec diff [FROM TO] [--json]"}
+	}
+	if *asJSON {
+		return printJSON(w, d)
+	}
+	fmt.Fprintf(w, "%s -> %s: new %d, reopened %d, remediated %d, stale %d, waived %d, unchanged %d\n",
+		d.From, d.To, len(d.New), len(d.Reopened), len(d.Remediated), len(d.Stale), len(d.Waived), d.Unchanged)
+	for _, sec := range []struct {
+		title string
+		items []engine.DeltaItem
+	}{{"new", d.New}, {"reopened", d.Reopened}, {"remediated", d.Remediated}, {"stale", d.Stale}, {"waived", d.Waived}} {
+		for _, it := range sec.items {
+			fmt.Fprintf(w, "  %-10s %s %-8s %s  %s:%d\n", sec.title, it.FindingID, it.Severity, redact.Line(it.Title), redact.Line(it.File), it.Line)
+		}
+	}
+	fmt.Fprintln(w, d.Note)
+	return nil
+}
+
+func cmdExport(args []string, w io.Writer) error {
+	fs, root := newFS("export")
+	out := fs.String("bundle", "", "path of the zip to create (must not exist)")
+	id := fs.String("assessment", "", "assessment to export (default: latest)")
+	if _, err := parse(fs, args); err != nil {
+		return err
+	}
+	if *out == "" {
+		return exitErr{2, "usage: pensec export --bundle out.zip [--assessment ID]"}
+	}
+	e, err := openProject(*root)
+	if err != nil {
+		return err
+	}
+	defer e.Close()
+	var a *store.Assessment
+	if *id == "" {
+		a, err = e.St.LatestAssessment(e.ProjectID)
+	} else {
+		a, err = e.St.Assessment(e.ProjectID, *id)
+	}
+	if err != nil {
+		return err
+	}
+	if a == nil {
+		return errors.New("assessment not found; run `pensec scan` first or check the ID")
+	}
+	r, err := report.BuildFor(e, a)
+	if err != nil {
+		return err
+	}
+	sum, n, err := bundle.Export(r, e.Private(), *out)
+	if err != nil {
+		return err
+	}
+	fmt.Fprintf(w, "Wrote %s: %s with %d files (report and redacted evidence; no raw tool output).\n", *out, a.ID, n)
+	fmt.Fprintf(w, "Manifest SHA-256: %s\nShare this value with the recipient through a separate channel; they run `pensec verify-bundle %s`.\n", sum, filepath.Base(*out))
+	return nil
+}
+
+func cmdVerifyBundle(args []string, w io.Writer) error {
+	fs := flag.NewFlagSet("verify-bundle", flag.ContinueOnError)
+	pos, err := parse(fs, args)
+	if err != nil {
+		return err
+	}
+	if len(pos) != 1 {
+		return exitErr{2, "usage: pensec verify-bundle <bundle.zip>"}
+	}
+	m, sum, err := bundle.Verify(pos[0])
+	if err != nil {
+		return exitErr{1, "bundle verification FAILED: " + redact.Line(err.Error())}
+	}
+	fmt.Fprintf(w, "OK: %d files match the manifest (%s, %s).\nManifest SHA-256: %s\nCompare it with the value the sender gave you.\n", len(m.Files), redact.Line(m.Project), m.Assessment.ID, sum)
+	return nil
+}
+
+func cmdBenchmark(ctx context.Context, args []string, w io.Writer) error {
+	fs := flag.NewFlagSet("benchmark", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "JSON output")
+	strict := fs.Bool("strict", false, "exit 1 when any rule misses a vulnerable case or fires on a safe one")
+	if _, err := parse(fs, args); err != nil {
+		return err
+	}
+	rep, err := benchmark.Run(ctx)
+	if err != nil {
+		return err
+	}
+	failed := 0
+	for _, r := range rep.Rules {
+		if r.FP+r.FN > 0 {
+			failed++
+		}
+	}
+	if *asJSON {
+		if err := printJSON(w, rep); err != nil {
+			return err
+		}
+	} else {
+		fmt.Fprintf(w, "Corpus %s, pensec %s, catalog %s\n\n", rep.CorpusVersion, rep.PensecVersion, rep.CatalogVersion)
+		fmt.Fprintf(w, "%-36s %4s %4s %3s %3s %3s %3s %5s %6s  %s\n", "rule", "vuln", "safe", "TP", "FP", "FN", "TN", "prec", "recall", "maturity")
+		for _, r := range rep.Rules {
+			fmt.Fprintf(w, "%-36s %4d %4d %3d %3d %3d %3d %5.2f %6.2f  %s\n", r.Rule, r.Vulnerable, r.Safe, r.TP, r.FP, r.FN, r.TN, r.Precision, r.Recall, r.Maturity)
+			for _, f := range r.Failures {
+				fmt.Fprintln(w, "    "+f)
+			}
+		}
+		fmt.Fprintf(w, "\n%d of %d rules benchmarked (precision >= %.2f and recall >= %.2f on at least %d vulnerable and %d safe cases).\n%s\n",
+			rep.Benchmarked, len(rep.Rules), rep.MinPrecision, rep.MinRecall, rep.MinCases, rep.MinCases, rep.Note)
+	}
+	if *strict && failed > 0 {
+		return exitErr{1, fmt.Sprintf("%d rule(s) missed a vulnerable case or fired on a safe one", failed)}
 	}
 	return nil
 }

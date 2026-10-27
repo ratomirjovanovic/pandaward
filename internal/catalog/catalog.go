@@ -7,7 +7,7 @@
 package catalog
 
 // Version of the built-in catalog. Bump on any semantic change.
-const Version = "2026.10-m1"
+const Version = "2026.10-m2"
 
 // Domain is one of the A-R work partitions.
 type Domain struct {
@@ -89,7 +89,7 @@ var Controls = []Control{
 	{ID: "D-003", Domain: "D", Title: "No SQL statements built by string concatenation or interpolation", Method: MethodStatic, Adapter: "builtin-code", Requires: "code", Refs: []string{"CWE-89"}},
 	{ID: "D-004", Domain: "D", Title: "No unsafe deserialization APIs on untrusted data", Method: MethodStatic, Adapter: "builtin-code", Requires: "code", Refs: []string{"CWE-502"}},
 	{ID: "D-005", Domain: "D", Title: "Injection probes executed against approved target", Method: MethodRuntime, Requires: "web", Profile: "staging-active"},
-	{ID: "D-006", Domain: "D", Title: "Semgrep rule pack reports no findings", Method: MethodExternal, Adapter: "semgrep", Requires: "code"},
+	{ID: "D-006", Domain: "D", Title: "Semgrep data-flow rules (SSRF, path traversal, template injection) and project rules report no findings", Method: MethodExternal, Adapter: "semgrep", Requires: "code"},
 
 	{ID: "E-001", Domain: "E", Title: "No high-confidence secret patterns in repository files", Method: MethodStatic, Adapter: "builtin-secrets", Requires: "any", Refs: []string{"CWE-798"}},
 	{ID: "E-002", Domain: "E", Title: "Environment and credential files are not tracked in git", Method: MethodStatic, Adapter: "builtin-secrets", Requires: "git", Refs: []string{"CWE-538"}},

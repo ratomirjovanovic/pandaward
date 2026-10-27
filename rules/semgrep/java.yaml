@@ -1,0 +1,104 @@
+rules:
+  - id: pensec-java-sql-string
+    languages: [java]
+    severity: ERROR
+    message: SQL text is built by string concatenation. Use PreparedStatement with placeholders.
+    metadata:
+      pensec-control: D-003
+      cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
+    patterns:
+      - pattern-either:
+          - pattern: (java.sql.Statement $S).$EXEC("$SQL" + $X, ...)
+          - pattern: (java.sql.Connection $C).prepareStatement("$SQL" + $X, ...)
+          - pattern: (javax.persistence.EntityManager $EM).createQuery("$SQL" + $X, ...)
+          - pattern: (javax.persistence.EntityManager $EM).createNativeQuery("$SQL" + $X, ...)
+          - pattern: $JDBC.$EXEC("$SQL" + $X, ...)
+      - metavariable-regex:
+          metavariable: $EXEC
+          regex: ^(execute|executeQuery|executeUpdate|addBatch|prepareStatement|createQuery|createNativeQuery|queryForObject|queryForList|query|update)$
+
+  - id: pensec-java-command-exec
+    languages: [java]
+    severity: ERROR
+    message: An OS command is built from a non-constant string. Pass a fixed program and separate arguments to ProcessBuilder.
+    metadata:
+      pensec-control: D-002
+      cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
+    patterns:
+      - pattern-either:
+          - pattern: Runtime.getRuntime().exec($CMD, ...)
+          - pattern: new ProcessBuilder("sh", "-c", $CMD, ...)
+          - pattern: new ProcessBuilder("bash", "-c", $CMD, ...)
+          - pattern: new ProcessBuilder("cmd", "/c", $CMD, ...)
+      - pattern-not: Runtime.getRuntime().exec("...", ...)
+      - pattern-not: new ProcessBuilder($SH, $FLAG, "...", ...)
+
+  - id: pensec-java-deserialization
+    languages: [java]
+    severity: ERROR
+    message: Java native deserialization of a stream can execute code from its input. Do not deserialize untrusted data.
+    metadata:
+      pensec-control: D-004
+      cwe: "CWE-502: Deserialization of Untrusted Data"
+    pattern-either:
+      - pattern: (java.io.ObjectInputStream $IN).readObject()
+      - pattern: new ObjectInputStream(...).readObject()
+      - pattern: new java.beans.XMLDecoder(...)
+      - pattern: new XMLDecoder(...)
+
+  - id: pensec-java-weak-cipher
+    languages: [java]
+    severity: WARNING
+    message: This cipher or mode is weak (DES, RC4, or ECB). Use AES-GCM.
+    metadata:
+      pensec-control: E-004
+      cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
+    patterns:
+      - pattern: Cipher.getInstance("$ALG", ...)
+      - metavariable-regex:
+          metavariable: $ALG
+          regex: (?i)^(DES|DESede|RC4|ARCFOUR|Blowfish|AES)(/ECB/.*)?$|.*/ECB/.*
+
+  - id: pensec-java-path-traversal
+    languages: [java]
+    severity: WARNING
+    message: A file path comes from the incoming request. Resolve it and check it stays inside the intended directory.
+    metadata:
+      pensec-control: D-006
+      cwe: "CWE-22: Improper Limitation of a Pathname to a Restricted Directory"
+    mode: taint
+    pattern-sources:
+      - pattern: (javax.servlet.http.HttpServletRequest $R).getParameter(...)
+      - pattern: (jakarta.servlet.http.HttpServletRequest $R).getParameter(...)
+      - pattern: (HttpServletRequest $R).getParameter(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: new File($P, ...)
+              - pattern: new File($D, $P)
+              - pattern: new FileInputStream($P)
+              - pattern: Paths.get($P, ...)
+              - pattern: Path.of($P, ...)
+          - focus-metavariable: $P
+    pattern-sanitizers:
+      - pattern: FilenameUtils.getName(...)
+
+  - id: pensec-java-ssrf
+    languages: [java]
+    severity: WARNING
+    message: An outbound request URL comes from the incoming request. Validate it against an allowlist to prevent SSRF.
+    metadata:
+      pensec-control: D-006
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+    mode: taint
+    pattern-sources:
+      - pattern: (javax.servlet.http.HttpServletRequest $R).getParameter(...)
+      - pattern: (jakarta.servlet.http.HttpServletRequest $R).getParameter(...)
+      - pattern: (HttpServletRequest $R).getParameter(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: new URL($U)
+              - pattern: URI.create($U)
+              - pattern: (RestTemplate $T).$M($U, ...)
+          - focus-metavariable: $U

@@ -14,6 +14,7 @@ import (
 	"github.com/ratomirjovanovic/pensec/internal/catalog"
 	"github.com/ratomirjovanovic/pensec/internal/config"
 	"github.com/ratomirjovanovic/pensec/internal/engine"
+	"github.com/ratomirjovanovic/pensec/internal/evidence"
 	"github.com/ratomirjovanovic/pensec/internal/model"
 	"github.com/ratomirjovanovic/pensec/internal/store"
 	"github.com/ratomirjovanovic/pensec/internal/version"
@@ -40,6 +41,8 @@ type Report struct {
 	Domains       []catalog.Domain          `json:"domains"`
 	DomainSummary map[string]map[string]int `json:"domain_summary"`
 	Manifest      json.RawMessage           `json:"assessment_manifest,omitempty"`
+	// Delta compares with the previous assessment that tracked observations.
+	Delta *engine.Delta `json:"delta,omitempty"`
 }
 
 // Build loads the latest assessment into a report.
@@ -51,7 +54,16 @@ func Build(e *engine.Engine) (*Report, error) {
 	if a == nil {
 		return nil, fmt.Errorf("no completed assessment: run `pensec scan` first")
 	}
-	r := &Report{SchemaVersion: model.SchemaVersion, Generator: "pensec " + version.Version, GeneratedAt: store.Now(), Project: e.Cfg.Project.Name, Assessment: *a, Attestation: Attestation, Domains: catalog.Domains}
+	return BuildFor(e, a)
+}
+
+// BuildFor loads one assessment into a report.
+func BuildFor(e *engine.Engine, a *store.Assessment) (*Report, error) {
+	delta, err := e.DeltaToPrevious(a.ID)
+	if err != nil {
+		return nil, err
+	}
+	r := &Report{Delta: delta, SchemaVersion: model.SchemaVersion, Generator: "pensec " + version.Version, GeneratedAt: store.Now(), Project: e.Cfg.Project.Name, Assessment: *a, Attestation: Attestation, Domains: catalog.Domains}
 	if a.ManifestJSON != "" {
 		r.Manifest = json.RawMessage(a.ManifestJSON)
 	}
@@ -64,12 +76,16 @@ func Build(e *engine.Engine) (*Report, error) {
 	if r.Runs, err = e.St.Runs(a.ID); err != nil {
 		return nil, err
 	}
-	if r.EvidenceIndex, err = e.St.EvidenceFor(a.ID); err != nil {
+	// Include evidence carried over from earlier assessments so every
+	// evidence ID a control cites is listed.
+	if r.EvidenceIndex, _, err = evidence.Collect(e.St, a.ID, evidence.Referenced(r.Controls)); err != nil {
 		return nil, err
 	}
-	if r.Controls, r.Edges, r.StaleFiles, err = e.StaleView(a.ID, r.Controls, r.Edges); err != nil {
+	var ch engine.Changes
+	if r.Controls, r.Edges, ch, err = e.StaleView(a.ID, r.Controls, r.Edges); err != nil {
 		return nil, err
 	}
+	r.StaleFiles = ch.Files
 	fs, err := e.St.Findings(e.ProjectID)
 	if err != nil {
 		return nil, err
@@ -240,6 +256,25 @@ func Markdown(r *Report) string {
 	w("\n**Important:** %d applicable controls were not decisively tested. They must not be read as secure.\n\n", len(r.Untested()))
 	w("%s\n\n", r.Coverage.Note)
 
+	if d := r.Delta; d != nil {
+		w("## Changes since %s\n\n", d.From)
+		w("New %d, reopened %d, remediated %d, stale %d, waived %d, unchanged %d.\n\n", len(d.New), len(d.Reopened), len(d.Remediated), len(d.Stale), len(d.Waived), d.Unchanged)
+		for _, sec := range deltaSections(d) {
+			for _, it := range sec.Items {
+				loc := it.File
+				if it.Line > 0 {
+					loc = fmt.Sprintf("%s:%d", it.File, it.Line)
+				}
+				w("- **%s** %s %s (%s) `%s`", sec.Title, it.FindingID, esc(it.Title), it.Severity, esc(loc))
+				if it.Note != "" {
+					w(": %s", esc(it.Note))
+				}
+				w("\n")
+			}
+		}
+		w("\n%s\n\n", d.Note)
+	}
+
 	writeFindings := func(title string, fs []model.Finding) {
 		w("## %s (%d)\n\n", title, len(fs))
 		if len(fs) == 0 {
@@ -329,4 +364,14 @@ func orDash(s string) string {
 		return "-"
 	}
 	return s
+}
+
+// DeltaSection is one labelled list of a delta, in display order.
+type DeltaSection struct {
+	Title string
+	Items []engine.DeltaItem
+}
+
+func deltaSections(d *engine.Delta) []DeltaSection {
+	return []DeltaSection{{"New", d.New}, {"Reopened", d.Reopened}, {"Remediated", d.Remediated}, {"Stale", d.Stale}, {"Waived", d.Waived}}
 }
