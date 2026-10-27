@@ -13,9 +13,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ratomirjovanovic/pensec/internal/catalog"
 	"github.com/ratomirjovanovic/pensec/internal/inventory"
 	"github.com/ratomirjovanovic/pensec/internal/model"
 	"github.com/ratomirjovanovic/pensec/internal/redact"
+	"github.com/ratomirjovanovic/pensec/rules"
 )
 
 // externalTool wraps a user-installed scanner binary. PenSec never installs
@@ -236,6 +238,12 @@ func semgrep() Adapter {
 		name: "semgrep", binary: "semgrep", controls: []string{"D-006"}, verArgs: []string{"--version"},
 		okExit: map[int]bool{0: true, 1: true},
 		args: func(c *Context, out string) ([]string, error) {
+			// The bundled rules always run; they are local and need no network.
+			bundled, err := rules.WriteSemgrep(filepath.Join(c.ToolHome, "pensec-semgrep-rules"))
+			if err != nil {
+				return nil, err
+			}
+			args := []string{"scan", "--config", bundled}
 			cfg := c.Cfg.Scan.SemgrepConfig
 			if cfg == "" {
 				local := filepath.Join(c.Root, ".pensec", "semgrep")
@@ -243,17 +251,17 @@ func semgrep() Adapter {
 					cfg = local
 				}
 			}
-			if cfg == "" {
-				return nil, errors.New("no semgrep rules configured: set scan.semgrep_config to a local rules path, or to a registry pack (e.g. p/default) together with scan.allow_tool_network: true")
+			if cfg != "" {
+				remote := strings.HasPrefix(cfg, "p/") || strings.HasPrefix(cfg, "r/") || cfg == "auto" || strings.HasPrefix(cfg, "http")
+				if remote && !c.Cfg.Scan.AllowToolNetwork {
+					return nil, errors.New("semgrep config " + cfg + " is downloaded from the registry; set scan.allow_tool_network: true or use local rules")
+				}
+				if cfg == "auto" {
+					return nil, errors.New("semgrep --config auto sends project metadata to the registry; choose an explicit pack")
+				}
+				args = append(args, "--config", cfg)
 			}
-			remote := strings.HasPrefix(cfg, "p/") || strings.HasPrefix(cfg, "r/") || cfg == "auto" || strings.HasPrefix(cfg, "http")
-			if remote && !c.Cfg.Scan.AllowToolNetwork {
-				return nil, errors.New("semgrep config " + cfg + " is downloaded from the registry; set scan.allow_tool_network: true or use local rules")
-			}
-			if cfg == "auto" {
-				return nil, errors.New("semgrep --config auto sends project metadata to the registry; choose an explicit pack")
-			}
-			return []string{"scan", "--config", cfg, "--json", "--output", out, "--metrics=off", "--disable-version-check", "--quiet", "--timeout", "30", c.Root}, nil
+			return append(args, "--json", "--output", out, "--metrics=off", "--disable-version-check", "--quiet", "--timeout", "30", c.Root), nil
 		},
 		normalize: func(c *Context, raw []byte) ([]model.Signal, error) {
 			var doc struct {
@@ -267,7 +275,8 @@ func semgrep() Adapter {
 						Severity string `json:"severity"`
 						Lines    string `json:"lines"`
 						Metadata struct {
-							CWE any `json:"cwe"`
+							CWE     any    `json:"cwe"`
+							Control string `json:"pensec-control"`
 						} `json:"metadata"`
 					} `json:"extra"`
 				} `json:"results"`
@@ -287,8 +296,16 @@ func semgrep() Adapter {
 						cwe = cweRe.FindString(fmt.Sprint(v[0]))
 					}
 				}
-				out = append(out, model.Signal{RuleID: "semgrep." + r.CheckID, ControlID: "D-006", Title: lastSegment(r.CheckID), Severity: sevFrom(r.Extra.Severity), Confidence: model.Hypothesis, CWE: cwe,
-					File: r.Path, StartLine: r.Start.Line, EndLine: r.End.Line, Snippet: r.Extra.Lines, Message: r.Extra.Message, Fix: "See rule " + r.CheckID + " guidance."})
+				// Bundled rules name a specific control; the engine raises that
+				// control's status, never lowers it. Other rules count for D-006.
+				cid := "D-006"
+				if ctl := catalog.ControlByID(r.Extra.Metadata.Control); ctl != nil && ctl.Domain != "R" {
+					cid = ctl.ID
+				}
+				// check_id is prefixed with the rule file's directory, which
+				// differs per machine; keep only the rule id for stable fingerprints.
+				out = append(out, model.Signal{RuleID: "semgrep." + lastSegment(r.CheckID), ControlID: cid, Title: lastSegment(r.CheckID), Severity: sevFrom(r.Extra.Severity), Confidence: model.Hypothesis, CWE: cwe,
+					File: r.Path, StartLine: r.Start.Line, EndLine: r.End.Line, Snippet: r.Extra.Lines, Message: r.Extra.Message, Fix: "See rule " + lastSegment(r.CheckID) + " guidance."})
 			}
 			return out, nil
 		},

@@ -396,6 +396,7 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 	var allSignals []model.Signal
 	ranOK := map[string]bool{}   // adapter -> completed OK
 	carried := map[string]bool{} // adapter -> decisions carried over
+	var foreign []model.Signal   // signals for controls owned by another adapter
 	ctrlEvidence := map[string][]string{}
 	for _, ad := range adapters.Registry() {
 		if !enabled[ad.Name()] {
@@ -444,6 +445,7 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 			continue
 		}
 		ranOK[ad.Name()] = true
+		foreign = append(foreign, routeForeign(ad, out.Signals, results)...)
 		allSignals = append(allSignals, out.Signals...)
 		for _, cid := range ad.Controls() {
 			r := results[cid]
@@ -462,6 +464,8 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 			}
 		}
 	}
+
+	raise(results, foreign)
 
 	// Persist findings with evidence.
 	progress("findings: normalizing, fingerprinting and writing redacted evidence")
@@ -576,6 +580,53 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 		return nil, err
 	}
 	return res, nil
+}
+
+// routeForeign returns the signals an adapter reports for controls it does
+// not own. A signal whose control is not applicable or cannot be decided is
+// moved to the adapter's first control so it still counts somewhere.
+func routeForeign(ad adapters.Adapter, sigs []model.Signal, results map[string]*model.ControlResult) []model.Signal {
+	own := map[string]bool{}
+	for _, cid := range ad.Controls() {
+		own[cid] = true
+	}
+	var out []model.Signal
+	for i := range sigs {
+		s := &sigs[i]
+		if own[s.ControlID] {
+			continue
+		}
+		r := results[s.ControlID]
+		if r == nil || r.Status == model.StatusNotApplicable || r.Status == model.StatusBlocked || r.Status == model.StatusUnsupported {
+			if len(ad.Controls()) > 0 {
+				s.ControlID = ad.Controls()[0]
+			}
+			continue
+		}
+		out = append(out, *s)
+	}
+	return out
+}
+
+// raise applies foreign signals after all adapters ran. They can move a
+// control from PASS to SUSPECTED or FAIL, or from SUSPECTED to FAIL, but never
+// lower a status, so adapter order cannot hide a FAIL.
+func raise(results map[string]*model.ControlResult, foreign []model.Signal) {
+	rank := map[model.Status]int{model.StatusPass: 1, model.StatusInconclusive: 1, model.StatusSuspected: 2, model.StatusFail: 3}
+	by := map[string][]model.Signal{}
+	for _, s := range foreign {
+		by[s.ControlID] = append(by[s.ControlID], s)
+	}
+	for cid, sigs := range by {
+		r := results[cid]
+		if r == nil || rank[r.Status] == 0 {
+			continue
+		}
+		st, why := decide(sigs, cid, "")
+		if rank[st] > rank[r.Status] {
+			r.Status, r.Reason = st, why+" from "+sigs[0].Collector+" (was "+string(r.Status)+": "+r.Reason+")"
+		}
+	}
 }
 
 // safeRun isolates adapter panics so a crashing scanner is recorded as ERROR,
