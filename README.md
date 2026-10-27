@@ -83,7 +83,7 @@ Then, in your project:
 /pensec:report      # HTML, Markdown, JSON, SARIF, CSV
 ```
 
-> The plugin installs prebuilt, checksum-verified binaries from the `plugin` and `plugin-windows` branches, which the release workflow publishes on every version tag. Until the first release is tagged those branches do not exist yet; build the binary into the plugin's `bin/` directory as shown below.
+> The plugin installs prebuilt, checksum-verified binaries from the `plugin` and `plugin-windows` branches, which the release workflow publishes on every version tag ([how to verify them](docs/VERIFYING.md)). To build from source instead, see below.
 
 ### As a CLI
 
@@ -221,11 +221,11 @@ A PenSec report is an automated technical assessment. It is not a certification,
 | Milestone | Scope | State |
 |---|---|---|
 | M0 Foundation | CLI, ledger, scope policy, inventory, static report | done |
-| M1 Public alpha | built-in adapters, optional tool adapters, edges, HTML/JSON/SARIF, plugin | in progress |
-| M2 Context-safe beta | per-domain invalidation, evidence bundles, delta reports, agent evals | planned |
+| M1 Public alpha | built-in adapters, optional tool adapters, bundled Semgrep rules, edges, HTML/JSON/SARIF, plugin, signed reproducible releases | done (v0.1.0) |
+| M2 Context-safe beta | per-domain invalidation, targeted retest, evidence bundles, delta reports, hostile-repository suite | done |
 | M3 Runtime beta | staging profile with role and tenant fixtures, ZAP adapter | planned |
 | M4 Mobile and AI | MobSF and emulator adapters, prompt-injection suite | planned |
-| 1.0 | stable schemas, benchmark corpus, signed releases, external review | planned |
+| 1.0 | frozen schemas, benchmark corpus with at least 3 vulnerable and 3 safe cases per rule, external review | planned |
 
 See the [issues](https://github.com/ratomirjovanovic/pensec/issues) for details.
 
