@@ -40,6 +40,16 @@ Findings: 31 open (31 new, 0 reopened, 0 remediated in this run)
 BLOCKED/UNSUPPORTED/SUSPECTED controls are not secure; see `pensec status` and `pensec findings`.
 ```
 
+<p align="center">
+  <a href="https://ratomirjovanovic.github.io/pensec/demo/">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="docs/media/findings-dark.png">
+      <img src="docs/media/findings-light.png" width="860" alt="PenSec findings explorer for the bundled acme-shop fixture: 20 confirmed findings, 11 suspected, 38% decisive coverage, with a critical pull_request_target finding and hardcoded secrets at the top">
+    </picture>
+  </a>
+  <br><sub>Findings from a real scan of the bundled vulnerable fixture. <a href="https://ratomirjovanovic.github.io/pensec/demo/">Open the live demo</a> for the terminal replay and the full report.</sub>
+</p>
+
 ## Why PenSec
 
 | | |
