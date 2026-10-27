@@ -1,0 +1,14 @@
+{
+  "name": "pensec",
+  "owner": {
+    "name": "Ratomir Jovanovic",
+    "url": "https://github.com/ratomirjovanovic"
+  },
+  "plugins": [
+    {
+      "name": "pensec",
+      "source": "./",
+      "description": "Local, evidence-based application security assessment for your own projects."
+    }
+  ]
+}
