@@ -17,5 +17,6 @@
   ],
   "license": "AGPL-3.0-only",
   "repository": "https://github.com/ratomirjovanovic/pensec",
-  "homepage": "https://github.com/ratomirjovanovic/pensec"
+  "homepage": "https://github.com/ratomirjovanovic/pensec",
+  "icon": "./.claude-plugin/icon.png"
 }
