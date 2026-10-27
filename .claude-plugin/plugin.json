@@ -1,0 +1,22 @@
+{
+  "name": "pensec",
+  "displayName": "PenSec",
+  "version": "0.1.1",
+  "description": "Local, evidence-based application security assessment: inventory, static checks, cross-domain graph, coverage ledger and reports. Passive by default; network tests need a human-approved scope.",
+  "author": {
+    "name": "Ratomir Jovanovic",
+    "url": "https://github.com/ratomirjovanovic"
+  },
+  "keywords": [
+    "security",
+    "appsec",
+    "sast",
+    "pentest",
+    "sarif",
+    "supply-chain"
+  ],
+  "license": "AGPL-3.0-only",
+  "repository": "https://github.com/ratomirjovanovic/pensec",
+  "homepage": "https://github.com/ratomirjovanovic/pensec",
+  "icon": "./.claude-plugin/icon.png"
+}
