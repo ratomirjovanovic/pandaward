@@ -50,6 +50,7 @@ Assessment (local, no target network traffic):
   status          Resumable state, coverage, blockers and next action
   findings        List/show findings; human triage: false-positive, accept-risk, reopen, confirm
   graph           Cross-domain edges (text or --format mermaid)
+  routes          Discovered entrypoints (HTTP, GraphQL, gRPC, workers, cron) with file:line
   fix-plan        Ordered remediation plan from open findings
   report          Render HTML, Markdown, JSON, SARIF and CSV reports
   evidence        show <id> | verify
@@ -116,6 +117,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		err = cmdFindings(rest, stdout)
 	case "graph":
 		err = cmdGraph(rest, stdout)
+	case "routes":
+		err = cmdRoutes(rest, stdout)
 	case "fix-plan":
 		err = cmdFixPlan(rest, stdout)
 	case "report":
@@ -608,6 +611,44 @@ func cmdFindings(args []string, w io.Writer) error {
 		return nil
 	}
 	return exitErr{2, "findings subcommands: list, show, add, false-positive, accept-risk, reopen, confirm"}
+}
+
+func cmdRoutes(args []string, w io.Writer) error {
+	fs, root := newFS("routes")
+	asJSON := fs.Bool("json", false, "JSON output")
+	service := fs.String("service", "", "only entrypoints of this service root (e.g. services/api)")
+	kind := fs.String("kind", "", "only one kind: "+strings.Join(engine.EntrypointKinds, ", "))
+	if _, err := parse(fs, args); err != nil {
+		return err
+	}
+	e, err := openProject(*root)
+	if err != nil {
+		return err
+	}
+	defer e.Close()
+	eps, a, err := e.Entrypoints(*service, *kind)
+	if err != nil {
+		return err
+	}
+	if a == nil {
+		return errors.New("no completed assessment; run `pensec scan` first")
+	}
+	if *asJSON {
+		return printJSON(w, map[string]any{"assessment_id": a.ID, "entrypoints": eps})
+	}
+	fmt.Fprintf(w, "Entrypoints found by %s (heuristic; completeness is not proven):\n", a.ID)
+	svc := "\x00"
+	for _, ep := range eps {
+		if ep.Meta["service"] != svc {
+			svc = ep.Meta["service"]
+			fmt.Fprintf(w, "\n%s\n", svc)
+		}
+		fmt.Fprintf(w, "  %-9s %-40s %s:%d  (%s, %s)\n", ep.Meta["method"], redact.Line(ep.Meta["path"]), redact.Line(ep.Locator), ep.Line, ep.Meta["framework"], ep.Kind)
+	}
+	if len(eps) == 0 {
+		fmt.Fprintln(w, "  none")
+	}
+	return nil
 }
 
 func cmdGraph(args []string, w io.Writer) error {

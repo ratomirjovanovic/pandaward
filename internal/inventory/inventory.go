@@ -68,6 +68,7 @@ var langByExt = map[string]string{
 	".tf": "terraform", ".hcl": "hcl", ".sql": "sql", ".sh": "shell", ".ps1": "powershell",
 	".plist": "plist", ".gradle": "gradle", ".properties": "properties", ".ini": "ini", ".cfg": "ini",
 	".jinja": "template", ".j2": "template", ".erb": "template", ".ejs": "template", ".hbs": "template",
+	".graphql": "graphql", ".gql": "graphql", ".proto": "proto",
 }
 
 // CodeLangs are languages the code heuristics apply to.
@@ -322,22 +323,6 @@ func MinimalEnv() []string { return minimalEnv() }
 // ---- detection ----
 
 var (
-	routeRes = []struct {
-		re        *regexp.Regexp
-		framework string
-		method    int
-		path      int
-	}{
-		{regexp.MustCompile(`\b(?:app|router|server|api|routes)\.(get|post|put|patch|delete|all|options)\(\s*['"\x60]([^'"\x60]+)['"\x60]`), "express", 1, 2},
-		{regexp.MustCompile(`@(?:app|router|api|bp|blueprint)\.(get|post|put|patch|delete|route)\(\s*['"]([^'"]+)['"]`), "flask/fastapi", 1, 2},
-		{regexp.MustCompile(`\b(?:http\.)?HandleFunc\(\s*"([^"]+)"`), "go-net/http", 0, 1},
-		{regexp.MustCompile(`\b\w+\.(GET|POST|PUT|PATCH|DELETE|Get|Post|Put|Patch|Delete)\(\s*"(/[^"]*)"`), "go-router", 1, 2},
-		{regexp.MustCompile(`@(Get|Post|Put|Patch|Delete|Request)Mapping\(\s*(?:value\s*=\s*|path\s*=\s*)?"([^"]*)"`), "spring", 1, 2},
-		{regexp.MustCompile(`Route::(get|post|put|patch|delete|any|match)\(\s*['"]([^'"]+)['"]`), "laravel", 1, 2},
-		{regexp.MustCompile(`\b(?:re_)?path\(\s*r?['"]([^'"]*)['"]\s*,`), "django", 0, 1},
-		{regexp.MustCompile(`^\s*(get|post|put|patch|delete)\s+['"](/[^'"]*)['"]`), "rails/sinatra", 1, 2},
-		{regexp.MustCompile(`\[(?:Http)?(Get|Post|Put|Patch|Delete)\(\s*"([^"]*)"\s*\)\]`), "aspnet", 1, 2},
-	}
 	nextRouteRe   = regexp.MustCompile(`(?:^|/)app/(.*)/route\.(?:js|ts|mjs)$`)
 	nextPagesAPI  = regexp.MustCompile(`(?:^|/)pages/api/(.*)\.(?:js|ts|jsx|tsx)$`)
 	nextMethodRe  = regexp.MustCompile(`export\s+(?:async\s+)?(?:function|const)\s+(GET|POST|PUT|PATCH|DELETE)\b`)
@@ -376,9 +361,11 @@ func (inv *Inventory) detect() {
 	if inv.Tracked != nil {
 		inv.feature("git", ".git")
 	}
-	type routeInfo struct{ method, p, file string }
-	var routes []routeInfo
-	manifests := map[string]string{} // dir -> kind
+	roots := serviceRoots(inv.Files)
+	var entries []entry
+	var mounts []mount
+	nestGlobal := map[string]string{} // service root -> NestJS global prefix
+	manifests := map[string]string{}  // dir -> kind
 	locks := map[string]bool{}
 	for _, f := range inv.Files {
 		base := path.Base(f.Path)
@@ -517,82 +504,25 @@ func (inv *Inventory) detect() {
 				inv.feature("auth", f.Path)
 				domains["B"] = true
 			}
-			// routes
-			for i, l := range f.Lines {
-				for _, rr := range routeRes {
-					m := rr.re.FindStringSubmatch(l)
-					if m == nil {
-						continue
-					}
-					method := "ANY"
-					if rr.method > 0 {
-						method = strings.ToUpper(m[rr.method])
-						if method == "ROUTE" || method == "ALL" || method == "ANY" || method == "MATCH" || method == "REQUEST" {
-							method = "ANY"
-						}
-					}
-					p := m[rr.path]
-					if rr.framework == "django" && !strings.Contains(f.Path, "urls") {
-						continue
-					}
-					if !strings.HasPrefix(p, "/") && rr.framework != "django" {
-						continue
-					}
-					routes = append(routes, routeInfo{method, p, f.Path})
-					inv.addAsset(model.Asset{ID: "route:" + method + ":" + p + "@" + f.Path, Kind: "route", Locator: f.Path, Line: i + 1, ContentHash: f.SHA256,
-						Domains: []string{"A", "B", "C", "D", "G"}, Meta: map[string]string{"method": method, "path": p, "framework": rr.framework, "confidence": "heuristic"}})
-					break
+			if jsLangs[f.Lang] {
+				if m := nestGlobalRe.FindStringSubmatch(joined); m != nil {
+					nestGlobal[serviceOf(roots, f.Path)] = m[1]
 				}
-			}
-			if m := nextRouteRe.FindStringSubmatch(f.Path); m != nil || nextPagesAPI.MatchString(f.Path) {
-				var p string
-				if m != nil {
-					p = "/" + m[1]
-				} else {
-					p = "/api/" + nextPagesAPI.FindStringSubmatch(f.Path)[1]
-				}
-				p = regexp.MustCompile(`/\([^)]*\)`).ReplaceAllString(p, "")
-				methods := []string{}
-				for _, l := range f.Lines {
-					if mm := nextMethodRe.FindStringSubmatch(l); mm != nil {
-						methods = append(methods, mm[1])
-					}
-				}
-				if len(methods) == 0 {
-					methods = []string{"ANY"}
-				}
-				for _, method := range methods {
-					routes = append(routes, routeInfo{method, p, f.Path})
-					inv.addAsset(model.Asset{ID: "route:" + method + ":" + p + "@" + f.Path, Kind: "route", Locator: f.Path, Line: 1, ContentHash: f.SHA256,
-						Domains: []string{"A", "B", "C", "D", "G"}, Meta: map[string]string{"method": method, "path": p, "framework": "nextjs", "confidence": "file-convention"}})
-				}
-				inv.feature("web", f.Path)
 			}
 		}
+		if f.Lang == "graphql" || f.Lang == "proto" {
+			domains["A"], domains["G"] = true, true
+		}
+		es, ms := extractEntries(f, inv.resolveModule)
+		entries = append(entries, es...)
+		mounts = append(mounts, ms...)
 		for d := range domains {
 			f.Domains = append(f.Domains, d)
 		}
 		sort.Strings(f.Domains)
 		inv.addAsset(model.Asset{ID: "file:" + f.Path, Kind: "file:" + f.Lang, Locator: f.Path, ContentHash: f.SHA256, Domains: f.Domains})
 	}
-	for _, r := range routes {
-		prov := "route:" + r.method + ":" + r.p + "@" + r.file
-		inv.feature("routes", prov)
-		inv.feature("web", r.file)
-		if paramRe.MatchString(r.p) {
-			inv.feature("param_routes", prov)
-		}
-		if authPathRe.MatchString(r.p) {
-			inv.feature("auth_routes", prov)
-			inv.feature("auth", prov)
-		}
-		if adminPathRe.MatchString(r.p) {
-			inv.feature("admin_routes", prov)
-		}
-		if webhookPathRe.MatchString(r.p) {
-			inv.feature("webhooks", prov)
-		}
-	}
+	inv.addEntrypoints(applyMounts(entries, mounts), roots, nestGlobal)
 	for k, p := range manifests {
 		if !locks[k] {
 			inv.feature("missing_lockfile", p)

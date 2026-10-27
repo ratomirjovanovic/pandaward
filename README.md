@@ -132,7 +132,7 @@ flowchart LR
 
 | Domain | Automated today (offline) | Needs review or runtime |
 |---|---|---|
-| A Inventory and architecture | route extraction for Express, Next.js, Flask, FastAPI, Django, Go, Spring, Laravel, Rails, ASP.NET; OpenAPI drift | threat model |
+| A Inventory and architecture | entrypoints with file and line (`pensec routes`): HTTP routes for Express, NestJS, Next.js, Flask, FastAPI, Django, Go, Spring, Laravel, Rails, ASP.NET with router prefixes and mounts resolved; GraphQL schema operations; gRPC services; queue consumers and cron jobs; services in monorepos; OpenAPI drift | threat model |
 | B Authentication | JWT `none` or unverified decode, cookie flags | login, reset and session lifecycle |
 | C Authorization | | object and function level authorization (manual-assisted) |
 | D Injection | eval, shell, SQL concatenation, unsafe deserialization | runtime probes |
