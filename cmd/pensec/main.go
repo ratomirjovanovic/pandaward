@@ -45,6 +45,7 @@ Assessment (local, no target network traffic):
   plan            Show applicable controls, gates and missing prerequisites
   scan            Run the passive local scan (inventory, static checks, adapters)
   retest          Show files changed since the last scan, re-scan, show the delta
+                  (--changed re-runs only adapters for impacted controls)
   status          Resumable state, coverage, blockers and next action
   findings        List/show findings; human triage: false-positive, accept-risk, reopen, confirm
   graph           Cross-domain edges (text or --format mermaid)
@@ -355,6 +356,10 @@ func cmdScan(ctx context.Context, args []string, w, ew io.Writer, retest bool) e
 	quiet := fs.Bool("quiet", false, "no progress output")
 	failLevel := fs.String("fail-on", "", "exit 4 if open confirmed findings at or above this severity exist (critical|high|medium|low)")
 	mode := fs.String("mode", "passive", "scan mode; only passive is supported here (use `pensec test` for runtime profiles)")
+	var onlyChanged *bool
+	if retest {
+		onlyChanged = fs.Bool("changed", false, "re-run only adapters whose inputs changed; carry over the rest")
+	}
 	if _, err := parse(fs, args); err != nil {
 		return err
 	}
@@ -385,7 +390,11 @@ func cmdScan(ctx context.Context, args []string, w, ew io.Writer, retest bool) e
 				}
 				fmt.Fprintln(w, "  "+redact.Line(c))
 			}
-			fmt.Fprintln(w, "Re-running the full passive scan so dependent controls and edges are re-evaluated.")
+			if *onlyChanged {
+				fmt.Fprintln(w, "Re-running only the adapters for impacted controls, then recomputing edges.")
+			} else {
+				fmt.Fprintln(w, "Re-running the full passive scan so dependent controls and edges are re-evaluated.")
+			}
 		}
 	}
 	progress := func(m string) {
@@ -393,7 +402,12 @@ func cmdScan(ctx context.Context, args []string, w, ew io.Writer, retest bool) e
 			fmt.Fprintln(ew, "·", m)
 		}
 	}
-	res, err := e.Scan(ctx, progress)
+	var res *engine.ScanResult
+	if retest && *onlyChanged {
+		res, err = e.Retest(ctx, progress, changed)
+	} else {
+		res, err = e.Scan(ctx, progress)
+	}
 	if err != nil {
 		return err
 	}
@@ -462,6 +476,9 @@ func cmdStatus(args []string, w io.Writer) error {
 		fmt.Fprintf(w, "Stale files (%d):\n", len(s.StaleFiles))
 		for _, f := range s.StaleFiles {
 			fmt.Fprintln(w, "  "+redact.Line(f))
+		}
+		if len(s.StaleControls) > 0 {
+			fmt.Fprintf(w, "Stale controls (%d, not decisive until retest): %s\n", len(s.StaleControls), strings.Join(s.StaleControls, ", "))
 		}
 	}
 	if len(s.Blockers) > 0 {

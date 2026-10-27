@@ -169,6 +169,10 @@ func Walk(root string, opt Options) (*Inventory, error) {
 	return inv, nil
 }
 
+// LangOf returns the analysis language for a file name, or "" when PenSec does
+// not analyze that file type.
+func LangOf(name string) string { return langOf(name) }
+
 func langOf(name string) string {
 	l := strings.ToLower(name)
 	switch {

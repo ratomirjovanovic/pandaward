@@ -182,4 +182,7 @@ const (
 	ExitBlocked     = "BLOCKED"
 	ExitTimeout     = "TIMED_OUT"
 	ExitUnsupported = "UNSUPPORTED"
+	// ExitCarried marks an adapter that was not re-run because none of its
+	// inputs changed; its previous decisions were carried over.
+	ExitCarried = "CARRIED"
 )

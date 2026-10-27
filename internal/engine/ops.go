@@ -29,8 +29,10 @@ type Status struct {
 	Suspected   int               `json:"open_hypotheses"`
 	Confirmed   int               `json:"open_confirmed"`
 	StaleFiles  []string          `json:"stale_files,omitempty"`
-	Blockers    []string          `json:"blockers,omitempty"`
-	NextAction  string            `json:"next_action"`
+	// StaleControls are the controls whose decision depends on a stale file.
+	StaleControls []string `json:"stale_controls,omitempty"`
+	Blockers      []string `json:"blockers,omitempty"`
+	NextAction    string   `json:"next_action"`
 }
 
 // Status returns the current state from the ledger.
@@ -56,6 +58,15 @@ func (e *Engine) Status() (*Status, error) {
 	es, err := e.St.Edges(a.ID)
 	if err != nil {
 		return nil, err
+	}
+	cs, es, _, err = e.StaleView(a.ID, cs, es)
+	if err != nil {
+		return nil, err
+	}
+	for _, c := range cs {
+		if c.Status == model.StatusStale {
+			s.StaleControls = append(s.StaleControls, c.ID)
+		}
 	}
 	cov := ComputeCoverage(cs, es, len(s.StaleFiles))
 	s.Coverage = &cov
@@ -87,7 +98,7 @@ func (e *Engine) Status() (*Status, error) {
 	}
 	switch {
 	case len(s.StaleFiles) > 0:
-		s.NextAction = fmt.Sprintf("%d file(s) changed since %s: run `pensec retest`", len(s.StaleFiles), a.ID)
+		s.NextAction = fmt.Sprintf("%d file(s) changed since %s, %d control(s) STALE: run `pensec retest --changed`", len(s.StaleFiles), a.ID, len(s.StaleControls))
 	case s.Confirmed > 0:
 		s.NextAction = "review findings (`pensec findings`) and build a fix plan (/pensec:fix-plan)"
 	case s.Suspected > 0:

@@ -190,7 +190,9 @@ type Coverage struct {
 	Note          string  `json:"note"`
 }
 
-// ComputeCoverage computes coverage from controls and edges.
+// ComputeCoverage computes coverage from controls and edges. Pass the stale
+// view (see StaleView) so invalidated controls count as not decisive; stale
+// is the number of changed files and only feeds the note.
 func ComputeCoverage(cs []model.ControlResult, es []model.Edge, stale int) Coverage {
 	var c Coverage
 	for _, x := range cs {
@@ -198,7 +200,7 @@ func ComputeCoverage(cs []model.ControlResult, es []model.Edge, stale int) Cover
 			continue
 		}
 		c.Applicable++
-		if x.Status.Decisive() && stale == 0 {
+		if x.Status.Decisive() {
 			c.Decisive++
 		}
 	}
@@ -219,13 +221,93 @@ func ComputeCoverage(cs []model.ControlResult, es []model.Edge, stale int) Cover
 	c.Stale = stale
 	c.Note = "Coverage counts decisively tested controls (PASS/FAIL) over applicable controls. It is not a percentage of vulnerabilities found. BLOCKED, UNSUPPORTED, SUSPECTED, INCONCLUSIVE, ERROR and STALE never count as secure."
 	if stale > 0 {
-		c.Note += fmt.Sprintf(" %d files changed since the assessment, so decisive coverage is reported as 0 until re-scan.", stale)
+		c.Note += fmt.Sprintf(" %d file(s) changed since the assessment; controls and edges that depend on them are STALE until `pensec retest`.", stale)
 	}
 	return c
 }
 
 // Scan runs the passive local assessment.
 func (e *Engine) Scan(ctx context.Context, progress func(string)) (*ScanResult, error) {
+	return e.scan(ctx, progress, nil)
+}
+
+// carryState is what a targeted retest reuses from the previous assessment.
+type carryState struct {
+	from     string
+	adapters map[string]bool // adapters whose inputs did not change
+	controls map[string]model.ControlResult
+	runs     map[string]model.Run
+}
+
+// Retest re-runs only the adapters that watch a changed path. Every other
+// adapter is recorded as CARRIED and keeps its previous decisions, evidence
+// and findings. Edges and evidence integrity are always recomputed. It falls
+// back to a full scan when there is no comparable previous assessment.
+func (e *Engine) Retest(ctx context.Context, progress func(string), changed []string) (*ScanResult, error) {
+	if progress == nil {
+		progress = func(string) {}
+	}
+	prev, err := e.St.LatestAssessment(e.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	if prev == nil || prev.Profile != "local-passive" || prev.ConfigHash != e.ConfigHash || prev.CatalogVersion != catalog.Version {
+		progress("retest: no comparable previous assessment (config or catalog changed); running a full scan")
+		return e.scan(ctx, progress, nil)
+	}
+	cs, err := e.St.Controls(prev.ID)
+	if err != nil {
+		return nil, err
+	}
+	runs, err := e.St.Runs(prev.ID)
+	if err != nil {
+		return nil, err
+	}
+	cy := &carryState{from: prev.ID, adapters: map[string]bool{}, controls: map[string]model.ControlResult{}, runs: map[string]model.Run{}}
+	for _, c := range cs {
+		cy.controls[c.ID] = c
+	}
+	for _, r := range runs {
+		cy.runs[r.Adapter] = r
+	}
+	affected := AffectedAdapters(e.Cfg.Scan.Adapters, changed)
+	for _, a := range e.Cfg.Scan.Adapters {
+		if r, ok := cy.runs[a]; ok && r.ExitClass == model.ExitOK && !affected[a] {
+			cy.adapters[a] = true
+		}
+	}
+	return e.scan(ctx, progress, cy)
+}
+
+// carry copies an adapter's previous decisions into results. It refuses when
+// a control's applicability changed, because the old run never decided it.
+func (cy *carryState) carry(ad adapters.Adapter, results map[string]*model.ControlResult, ctrlEvidence map[string][]string) (model.Run, bool) {
+	if cy == nil || !cy.adapters[ad.Name()] {
+		return model.Run{}, false
+	}
+	for _, cid := range ad.Controls() {
+		r, old := results[cid], cy.controls[cid]
+		if r == nil {
+			continue
+		}
+		if old.ID == "" || (r.Status == model.StatusNotApplicable) != (old.Status == model.StatusNotApplicable) {
+			return model.Run{}, false
+		}
+	}
+	for _, cid := range ad.Controls() {
+		if r := results[cid]; r != nil && r.Status != model.StatusNotApplicable {
+			old := cy.controls[cid]
+			r.Status, r.Reason = old.Status, old.Reason
+			ctrlEvidence[cid] = old.EvidenceIDs
+		}
+	}
+	prev := cy.runs[ad.Name()]
+	now := store.Now()
+	return model.Run{ID: ad.Name() + "-carried", Adapter: ad.Name(), ToolVersion: prev.ToolVersion, StartedAt: now, EndedAt: now, ExitClass: model.ExitCarried,
+		Detail: "inputs unchanged since " + cy.from + "; decisions carried over", SignalsCount: prev.SignalsCount}, true
+}
+
+func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState) (*ScanResult, error) {
 	if progress == nil {
 		progress = func(string) {}
 	}
@@ -275,7 +357,9 @@ func (e *Engine) Scan(ctx context.Context, progress func(string)) (*ScanResult, 
 	}
 	res := &ScanResult{AssessmentID: asmt.ID, Controls: map[string]int{}}
 	var allSignals []model.Signal
-	ranOK := map[string]bool{} // adapter -> completed OK
+	ranOK := map[string]bool{}   // adapter -> completed OK
+	carried := map[string]bool{} // adapter -> decisions carried over
+	ctrlEvidence := map[string][]string{}
 	for _, ad := range adapters.Registry() {
 		if !enabled[ad.Name()] {
 			continue
@@ -287,6 +371,15 @@ func (e *Engine) Scan(ctx context.Context, progress func(string)) (*ScanResult, 
 			}
 		}
 		if !applicable {
+			continue
+		}
+		if run, ok := cy.carry(ad, results, ctrlEvidence); ok {
+			progress("adapter: " + ad.Name() + " (inputs unchanged, carried over)")
+			if err := e.St.PutRun(asmt.ID, run); err != nil {
+				return nil, err
+			}
+			res.Runs = append(res.Runs, run)
+			carried[ad.Name()] = true
 			continue
 		}
 		progress("adapter: " + ad.Name())
@@ -336,7 +429,6 @@ func (e *Engine) Scan(ctx context.Context, progress func(string)) (*ScanResult, 
 	// Persist findings with evidence.
 	progress("findings: normalizing, fingerprinting and writing redacted evidence")
 	seen := map[string]bool{}
-	ctrlEvidence := map[string][]string{}
 	occurrence := map[string]int{}
 	for _, s := range allSignals {
 		base := s.RuleID + "|" + s.File + "|" + s.Key + "|" + normalizeSnippet(s.Snippet)
@@ -373,7 +465,7 @@ func (e *Engine) Scan(ctx context.Context, progress func(string)) (*ScanResult, 
 		return nil, err
 	}
 	for _, f := range fs {
-		if seen[f.Fingerprint] || !f.Status.Active() || f.Collector == "manual-assisted" {
+		if seen[f.Fingerprint] || !f.Status.Active() || f.Collector == "manual-assisted" || carried[f.Collector] {
 			continue
 		}
 		if !ranOK[f.Collector] {
