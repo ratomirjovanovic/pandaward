@@ -803,7 +803,11 @@ func cmdEvidence(args []string, w io.Writer) error {
 		if err != nil || a == nil {
 			return errors.New("no assessment")
 		}
-		ok, bad, err := evidence.Verify(e.St, e.Private(), a.ID)
+		cs, err := e.St.Controls(a.ID)
+		if err != nil {
+			return err
+		}
+		ok, bad, err := evidence.Verify(e.St, e.Private(), a.ID, evidence.Referenced(cs))
 		if err != nil {
 			return err
 		}

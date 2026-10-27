@@ -237,6 +237,15 @@ type carryState struct {
 	adapters map[string]bool // adapters whose inputs did not change
 	controls map[string]model.ControlResult
 	runs     map[string]model.Run
+	evidence []string // evidence IDs carried into the new assessment
+}
+
+// carried returns the evidence IDs carried over, or nil for a full scan.
+func (cy *carryState) carried() []string {
+	if cy == nil {
+		return nil
+	}
+	return cy.evidence
 }
 
 // Retest re-runs only the adapters that watch a changed path. Every other
@@ -299,6 +308,7 @@ func (cy *carryState) carry(ad adapters.Adapter, results map[string]*model.Contr
 			old := cy.controls[cid]
 			r.Status, r.Reason = old.Status, old.Reason
 			ctrlEvidence[cid] = old.EvidenceIDs
+			cy.evidence = append(cy.evidence, old.EvidenceIDs...)
 		}
 	}
 	prev := cy.runs[ad.Name()]
@@ -486,13 +496,16 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 	}
 
 	// Evidence integrity (R-001).
-	okN, bad, err := evidence.Verify(e.St, e.Private(), asmt.ID)
+	okN, bad, err := evidence.Verify(e.St, e.Private(), asmt.ID, cy.carried())
 	if err != nil {
 		return nil, err
 	}
 	if r := results["R-001"]; r != nil {
 		if len(bad) == 0 {
 			r.Status, r.Reason = model.StatusPass, fmt.Sprintf("%d evidence artifacts verified against SHA-256", okN)
+			if n := len(cy.carried()); n > 0 {
+				r.Reason += fmt.Sprintf(", including %d carried from %s", n, cy.from)
+			}
 		} else {
 			r.Status, r.Reason = model.StatusFail, "integrity failure: "+strings.Join(bad, ", ")
 		}
