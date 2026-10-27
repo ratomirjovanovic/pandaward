@@ -70,9 +70,11 @@ func Build(e *engine.Engine) (*Report, error) {
 	if r.EvidenceIndex, _, err = evidence.Collect(e.St, a.ID, evidence.Referenced(r.Controls)); err != nil {
 		return nil, err
 	}
-	if r.Controls, r.Edges, r.StaleFiles, err = e.StaleView(a.ID, r.Controls, r.Edges); err != nil {
+	var ch engine.Changes
+	if r.Controls, r.Edges, ch, err = e.StaleView(a.ID, r.Controls, r.Edges); err != nil {
 		return nil, err
 	}
+	r.StaleFiles = ch.Files
 	fs, err := e.St.Findings(e.ProjectID)
 	if err != nil {
 		return nil, err

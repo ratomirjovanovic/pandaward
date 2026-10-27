@@ -471,13 +471,24 @@ func cmdStatus(args []string, w io.Writer) error {
 		fmt.Fprintf(w, "Open findings: %d confirmed, %d suspected  %v\n", s.Confirmed, s.Suspected, s.Findings)
 	}
 	if len(s.StaleFiles) > 0 {
+		outside := map[string]bool{}
+		for _, f := range s.ChangedOutside {
+			outside[f] = true
+		}
 		fmt.Fprintf(w, "Stale files (%d):\n", len(s.StaleFiles))
 		for _, f := range s.StaleFiles {
-			fmt.Fprintln(w, "  "+redact.Line(f))
+			if outside[f] {
+				fmt.Fprintln(w, "  "+redact.Line(f)+"  (changed outside Claude Code)")
+			} else {
+				fmt.Fprintln(w, "  "+redact.Line(f))
+			}
 		}
 		if len(s.StaleControls) > 0 {
 			fmt.Fprintf(w, "Stale controls (%d, not decisive until retest): %s\n", len(s.StaleControls), strings.Join(s.StaleControls, ", "))
 		}
+	}
+	if s.ChangeCheck != "" {
+		fmt.Fprintln(w, redact.Line(s.ChangeCheck))
 	}
 	if len(s.Blockers) > 0 {
 		fmt.Fprintln(w, "Blockers:")

@@ -255,6 +255,24 @@ func (s *Store) PutFileHashes(asmt string, hashes map[string]string, domains map
 	return tx.Commit()
 }
 
+// FileHashes returns path -> SHA-256 for the files of an assessment.
+func (s *Store) FileHashes(asmt string) (map[string]string, error) {
+	rows, err := s.DB.Query(`SELECT path, sha256 FROM file_hashes WHERE assessment_id=?`, asmt)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var p, h string
+		if err := rows.Scan(&p, &h); err != nil {
+			return nil, err
+		}
+		out[p] = h
+	}
+	return out, rows.Err()
+}
+
 // FileDomains returns the domains linked to a file in an assessment.
 func (s *Store) FileDomains(asmt, path string) ([]string, bool, error) {
 	var d string

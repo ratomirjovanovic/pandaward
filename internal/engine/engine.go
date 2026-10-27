@@ -33,6 +33,9 @@ type Engine struct {
 	Cfg        *config.Config
 	ConfigHash string
 	St         *store.Store
+	// HashBudget bounds the time status-style reads spend hashing the
+	// working tree to find changes made outside Claude Code; 0 means none.
+	HashBudget time.Duration
 }
 
 // ProjectID derives a stable local project ID from the absolute root.
