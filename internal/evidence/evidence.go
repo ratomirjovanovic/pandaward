@@ -81,9 +81,48 @@ func Read(private string, e *store.EvidenceRow) ([]byte, error) {
 	return b, nil
 }
 
-// Verify checks all evidence of an assessment and returns failing IDs.
-func Verify(st *store.Store, private, asmt string) (ok int, bad []string, err error) {
-	rows, err := st.EvidenceFor(asmt)
+// Referenced returns the evidence IDs that control results point to.
+func Referenced(cs []model.ControlResult) []string {
+	var out []string
+	for _, c := range cs {
+		out = append(out, c.EvidenceIDs...)
+	}
+	return out
+}
+
+// Collect returns the evidence rows of an assessment plus the rows for extra
+// IDs written by earlier assessments, such as evidence a targeted retest
+// carried over. Extra IDs without a stored row are returned as missing.
+func Collect(st *store.Store, asmt string, extra []string) (rows []store.EvidenceRow, missing []string, err error) {
+	if rows, err = st.EvidenceFor(asmt); err != nil {
+		return nil, nil, err
+	}
+	seen := map[string]bool{}
+	for _, r := range rows {
+		seen[r.ID] = true
+	}
+	for _, id := range extra {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		row, err := st.Evidence(id)
+		if err != nil {
+			return nil, nil, err
+		}
+		if row == nil {
+			missing = append(missing, id)
+			continue
+		}
+		rows = append(rows, *row)
+	}
+	return rows, missing, nil
+}
+
+// Verify checks all evidence of an assessment, plus the extra IDs it carries
+// from earlier assessments, and returns failing or missing IDs.
+func Verify(st *store.Store, private, asmt string, extra []string) (ok int, bad []string, err error) {
+	rows, bad, err := Collect(st, asmt, extra)
 	if err != nil {
 		return 0, nil, err
 	}

@@ -8,6 +8,7 @@ package inventory
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"io"
@@ -67,6 +68,7 @@ var langByExt = map[string]string{
 	".tf": "terraform", ".hcl": "hcl", ".sql": "sql", ".sh": "shell", ".ps1": "powershell",
 	".plist": "plist", ".gradle": "gradle", ".properties": "properties", ".ini": "ini", ".cfg": "ini",
 	".jinja": "template", ".j2": "template", ".erb": "template", ".ejs": "template", ".hbs": "template",
+	".graphql": "graphql", ".gql": "graphql", ".proto": "proto",
 }
 
 // CodeLangs are languages the code heuristics apply to.
@@ -93,16 +95,56 @@ func Walk(root string, opt Options) (*Inventory, error) {
 	}
 	inv := &Inventory{Root: absRoot, Features: map[string][]string{}, Languages: map[string]int{}}
 	inv.Tracked, inv.GitCommit, inv.GitDirty = gitInfo(absRoot)
+	err = walkFiles(context.Background(), absRoot, opt, true, func(f *File) {
+		inv.Files = append(inv.Files, f)
+		inv.Languages[f.Lang]++
+	}, func(rel, why string) {
+		inv.Skipped = append(inv.Skipped, rel+": "+why)
+	}, func(rel string) {
+		inv.SensitiveNames = append(inv.SensitiveNames, rel)
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(inv.Files, func(i, j int) bool { return inv.Files[i].Path < inv.Files[j].Path })
+	inv.detect()
+	return inv, nil
+}
+
+// Hashes returns the SHA-256 of every file Walk would analyze, keyed by the
+// same relative path, without reading lines or running detection. It is the
+// cheap way to see which files changed since an assessment. When ctx ends
+// first it returns ctx.Err().
+func Hashes(ctx context.Context, root string, opt Options) (map[string]string, error) {
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]string{}
+	err = walkFiles(ctx, absRoot, opt, false, func(f *File) { out[f.Path] = f.SHA256 }, func(string, string) {}, func(string) {})
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// walkFiles applies the inventory rules (exclusions, no symlinks, sensitive
+// names by name only, size cap, text files of known types) and reports each
+// analyzable file to add. Lines are read only when withLines is set.
+func walkFiles(ctx context.Context, absRoot string, opt Options, withLines bool, add func(*File), skip func(rel, why string), sensitive func(rel string)) error {
 	excl := map[string]bool{}
 	for _, e := range opt.Exclude {
 		excl[e] = true
 	}
 	count := 0
-	err = filepath.WalkDir(absRoot, func(p string, d fs.DirEntry, werr error) error {
+	return filepath.WalkDir(absRoot, func(p string, d fs.DirEntry, werr error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		rel, _ := filepath.Rel(absRoot, p)
 		rel = filepath.ToSlash(rel)
 		if werr != nil {
-			inv.Skipped = append(inv.Skipped, rel+": unreadable")
+			skip(rel, "unreadable")
 			if d != nil && d.IsDir() {
 				return fs.SkipDir
 			}
@@ -112,7 +154,7 @@ func Walk(root string, opt Options) (*Inventory, error) {
 			return nil
 		}
 		if d.Type()&fs.ModeSymlink != 0 {
-			inv.Skipped = append(inv.Skipped, rel+": symlink not followed")
+			skip(rel, "symlink not followed")
 			return nil
 		}
 		if d.IsDir() {
@@ -125,17 +167,17 @@ func Walk(root string, opt Options) (*Inventory, error) {
 			return nil
 		}
 		if isSensitiveName(d.Name()) {
-			inv.SensitiveNames = append(inv.SensitiveNames, rel)
+			sensitive(rel)
 			return nil
 		}
 		count++
 		if opt.MaxFiles > 0 && count > opt.MaxFiles {
-			inv.Skipped = append(inv.Skipped, rel+": max_files limit reached")
+			skip(rel, "max_files limit reached")
 			return fs.SkipAll
 		}
 		info, err := d.Info()
 		if err != nil {
-			inv.Skipped = append(inv.Skipped, rel+": stat failed")
+			skip(rel, "stat failed")
 			return nil
 		}
 		lang := langOf(d.Name())
@@ -143,12 +185,12 @@ func Walk(root string, opt Options) (*Inventory, error) {
 			return nil // not a type we analyze; not a coverage gap
 		}
 		if info.Size() > opt.MaxFileBytes {
-			inv.Skipped = append(inv.Skipped, rel+": larger than max_file_bytes")
+			skip(rel, "larger than max_file_bytes")
 			return nil
 		}
-		f, err := readText(p, opt.MaxFileBytes)
+		f, err := readText(p, opt.MaxFileBytes, withLines)
 		if err != nil {
-			inv.Skipped = append(inv.Skipped, rel+": "+err.Error())
+			skip(rel, err.Error())
 			return nil
 		}
 		if f == nil {
@@ -157,16 +199,9 @@ func Walk(root string, opt Options) (*Inventory, error) {
 		f.Path = rel
 		f.Lang = lang
 		f.Size = info.Size()
-		inv.Files = append(inv.Files, f)
-		inv.Languages[lang]++
+		add(f)
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	sort.Slice(inv.Files, func(i, j int) bool { return inv.Files[i].Path < inv.Files[j].Path })
-	inv.detect()
-	return inv, nil
 }
 
 // LangOf returns the analysis language for a file name, or "" when PenSec does
@@ -188,7 +223,7 @@ func langOf(name string) string {
 	return langByExt[strings.ToLower(path.Ext(l))]
 }
 
-func readText(p string, max int64) (*File, error) {
+func readText(p string, max int64, withLines bool) (*File, error) {
 	fh, err := os.Open(p)
 	if err != nil {
 		return nil, err
@@ -207,6 +242,9 @@ func readText(p string, max int64) (*File, error) {
 	}
 	sum := sha256.Sum256(b)
 	f := &File{SHA256: hex.EncodeToString(sum[:])}
+	if !withLines {
+		return f, nil
+	}
 	sc := bufio.NewScanner(bytes.NewReader(b))
 	sc.Buffer(make([]byte, 64*1024), 4*1024*1024)
 	for sc.Scan() {
@@ -285,22 +323,6 @@ func MinimalEnv() []string { return minimalEnv() }
 // ---- detection ----
 
 var (
-	routeRes = []struct {
-		re        *regexp.Regexp
-		framework string
-		method    int
-		path      int
-	}{
-		{regexp.MustCompile(`\b(?:app|router|server|api|routes)\.(get|post|put|patch|delete|all|options)\(\s*['"\x60]([^'"\x60]+)['"\x60]`), "express", 1, 2},
-		{regexp.MustCompile(`@(?:app|router|api|bp|blueprint)\.(get|post|put|patch|delete|route)\(\s*['"]([^'"]+)['"]`), "flask/fastapi", 1, 2},
-		{regexp.MustCompile(`\b(?:http\.)?HandleFunc\(\s*"([^"]+)"`), "go-net/http", 0, 1},
-		{regexp.MustCompile(`\b\w+\.(GET|POST|PUT|PATCH|DELETE|Get|Post|Put|Patch|Delete)\(\s*"(/[^"]*)"`), "go-router", 1, 2},
-		{regexp.MustCompile(`@(Get|Post|Put|Patch|Delete|Request)Mapping\(\s*(?:value\s*=\s*|path\s*=\s*)?"([^"]*)"`), "spring", 1, 2},
-		{regexp.MustCompile(`Route::(get|post|put|patch|delete|any|match)\(\s*['"]([^'"]+)['"]`), "laravel", 1, 2},
-		{regexp.MustCompile(`\b(?:re_)?path\(\s*r?['"]([^'"]*)['"]\s*,`), "django", 0, 1},
-		{regexp.MustCompile(`^\s*(get|post|put|patch|delete)\s+['"](/[^'"]*)['"]`), "rails/sinatra", 1, 2},
-		{regexp.MustCompile(`\[(?:Http)?(Get|Post|Put|Patch|Delete)\(\s*"([^"]*)"\s*\)\]`), "aspnet", 1, 2},
-	}
 	nextRouteRe   = regexp.MustCompile(`(?:^|/)app/(.*)/route\.(?:js|ts|mjs)$`)
 	nextPagesAPI  = regexp.MustCompile(`(?:^|/)pages/api/(.*)\.(?:js|ts|jsx|tsx)$`)
 	nextMethodRe  = regexp.MustCompile(`export\s+(?:async\s+)?(?:function|const)\s+(GET|POST|PUT|PATCH|DELETE)\b`)
@@ -339,9 +361,11 @@ func (inv *Inventory) detect() {
 	if inv.Tracked != nil {
 		inv.feature("git", ".git")
 	}
-	type routeInfo struct{ method, p, file string }
-	var routes []routeInfo
-	manifests := map[string]string{} // dir -> kind
+	roots := serviceRoots(inv.Files)
+	var entries []entry
+	var mounts []mount
+	nestGlobal := map[string]string{} // service root -> NestJS global prefix
+	manifests := map[string]string{}  // dir -> kind
 	locks := map[string]bool{}
 	for _, f := range inv.Files {
 		base := path.Base(f.Path)
@@ -480,82 +504,25 @@ func (inv *Inventory) detect() {
 				inv.feature("auth", f.Path)
 				domains["B"] = true
 			}
-			// routes
-			for i, l := range f.Lines {
-				for _, rr := range routeRes {
-					m := rr.re.FindStringSubmatch(l)
-					if m == nil {
-						continue
-					}
-					method := "ANY"
-					if rr.method > 0 {
-						method = strings.ToUpper(m[rr.method])
-						if method == "ROUTE" || method == "ALL" || method == "ANY" || method == "MATCH" || method == "REQUEST" {
-							method = "ANY"
-						}
-					}
-					p := m[rr.path]
-					if rr.framework == "django" && !strings.Contains(f.Path, "urls") {
-						continue
-					}
-					if !strings.HasPrefix(p, "/") && rr.framework != "django" {
-						continue
-					}
-					routes = append(routes, routeInfo{method, p, f.Path})
-					inv.addAsset(model.Asset{ID: "route:" + method + ":" + p + "@" + f.Path, Kind: "route", Locator: f.Path, Line: i + 1, ContentHash: f.SHA256,
-						Domains: []string{"A", "B", "C", "D", "G"}, Meta: map[string]string{"method": method, "path": p, "framework": rr.framework, "confidence": "heuristic"}})
-					break
+			if jsLangs[f.Lang] {
+				if m := nestGlobalRe.FindStringSubmatch(joined); m != nil {
+					nestGlobal[serviceOf(roots, f.Path)] = m[1]
 				}
-			}
-			if m := nextRouteRe.FindStringSubmatch(f.Path); m != nil || nextPagesAPI.MatchString(f.Path) {
-				var p string
-				if m != nil {
-					p = "/" + m[1]
-				} else {
-					p = "/api/" + nextPagesAPI.FindStringSubmatch(f.Path)[1]
-				}
-				p = regexp.MustCompile(`/\([^)]*\)`).ReplaceAllString(p, "")
-				methods := []string{}
-				for _, l := range f.Lines {
-					if mm := nextMethodRe.FindStringSubmatch(l); mm != nil {
-						methods = append(methods, mm[1])
-					}
-				}
-				if len(methods) == 0 {
-					methods = []string{"ANY"}
-				}
-				for _, method := range methods {
-					routes = append(routes, routeInfo{method, p, f.Path})
-					inv.addAsset(model.Asset{ID: "route:" + method + ":" + p + "@" + f.Path, Kind: "route", Locator: f.Path, Line: 1, ContentHash: f.SHA256,
-						Domains: []string{"A", "B", "C", "D", "G"}, Meta: map[string]string{"method": method, "path": p, "framework": "nextjs", "confidence": "file-convention"}})
-				}
-				inv.feature("web", f.Path)
 			}
 		}
+		if f.Lang == "graphql" || f.Lang == "proto" {
+			domains["A"], domains["G"] = true, true
+		}
+		es, ms := extractEntries(f, inv.resolveModule)
+		entries = append(entries, es...)
+		mounts = append(mounts, ms...)
 		for d := range domains {
 			f.Domains = append(f.Domains, d)
 		}
 		sort.Strings(f.Domains)
 		inv.addAsset(model.Asset{ID: "file:" + f.Path, Kind: "file:" + f.Lang, Locator: f.Path, ContentHash: f.SHA256, Domains: f.Domains})
 	}
-	for _, r := range routes {
-		prov := "route:" + r.method + ":" + r.p + "@" + r.file
-		inv.feature("routes", prov)
-		inv.feature("web", r.file)
-		if paramRe.MatchString(r.p) {
-			inv.feature("param_routes", prov)
-		}
-		if authPathRe.MatchString(r.p) {
-			inv.feature("auth_routes", prov)
-			inv.feature("auth", prov)
-		}
-		if adminPathRe.MatchString(r.p) {
-			inv.feature("admin_routes", prov)
-		}
-		if webhookPathRe.MatchString(r.p) {
-			inv.feature("webhooks", prov)
-		}
-	}
+	inv.addEntrypoints(applyMounts(entries, mounts), roots, nestGlobal)
 	for k, p := range manifests {
 		if !locks[k] {
 			inv.feature("missing_lockfile", p)

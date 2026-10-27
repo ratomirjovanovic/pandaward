@@ -52,7 +52,8 @@ func (a inventoryAdapter) Run(_ context.Context, c *Context) (Result, model.Run)
 	if n == 0 {
 		res.Decisions["A-002"] = Decision{model.StatusInconclusive, "web stack detected but no routes recognized by the heuristic extractors; review routing manually"}
 	} else {
-		res.Decisions["A-002"] = Decision{model.StatusInconclusive, fmt.Sprintf("%d routes extracted heuristically with file references; completeness is not proven without a contract or runtime crawl", n)}
+		res.Decisions["A-002"] = Decision{model.StatusInconclusive, fmt.Sprintf("%d HTTP routes, %d GraphQL operations, %d gRPC methods, %d queue consumers and %d cron jobs extracted heuristically with file and line (`pensec routes`); completeness is not proven without a contract or runtime crawl",
+			n, len(inv.Features["graphql_operations"]), len(inv.Features["grpc_methods"]), len(inv.Features["queue_consumers"]), len(inv.Features["cron_jobs"]))}
 	}
 	// A-003: compare OpenAPI paths with discovered routes.
 	declared := map[string]bool{}
