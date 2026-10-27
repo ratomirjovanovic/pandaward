@@ -21,21 +21,40 @@ var (
 // Write creates a file under root.
 func Write(t testing.TB, root, rel, content string) {
 	t.Helper()
+	if err := write(root, rel, content); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func write(root, rel, content string) error {
 	p := filepath.Join(root, filepath.FromSlash(rel))
 	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
-		t.Fatal(err)
+		return err
 	}
-	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	return os.WriteFile(p, []byte(content), 0o644)
 }
 
 // VulnerableRepo returns a temp repository with seeded weaknesses.
 func VulnerableRepo(t testing.TB) string {
 	t.Helper()
 	root := t.TempDir()
-	Write(t, root, "package.json", `{"name":"fixture","dependencies":{"express":"^4.0.0","jsonwebtoken":"^9.0.0","stripe":"^14.0.0"}}`)
-	Write(t, root, "src/server.js", strings.Join([]string{
+	if err := Build(root, t.Logf); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+// Build writes the vulnerable fixture into root and commits it with git
+// when git is available. logf receives non-fatal git messages.
+func Build(root string, logf func(string, ...any)) error {
+	var err error
+	w := func(rel, content string) {
+		if err == nil {
+			err = write(root, rel, content)
+		}
+	}
+	w("package.json", `{"name":"fixture","dependencies":{"express":"^4.0.0","jsonwebtoken":"^9.0.0","stripe":"^14.0.0"}}`)
+	w("src/server.js", strings.Join([]string{
 		`const express = require('express'); const jwt = require('jsonwebtoken'); const { exec } = require('child_process');`,
 		`const stripe = require('stripe')('` + FakeStripe + `');`,
 		`const app = express();`,
@@ -46,7 +65,7 @@ func VulnerableRepo(t testing.TB) string {
 		`app.get('/admin/run', (req, res) => { exec(` + "`ls ${req.query.dir}`" + `); eval(req.query.code); });`,
 		`document.getElementById('x').innerHTML = req.query.msg;`,
 	}, "\n"))
-	Write(t, root, "app.py", strings.Join([]string{
+	w("app.py", strings.Join([]string{
 		`import pickle, subprocess, requests`,
 		`from openai import OpenAI`,
 		`def run(data, completion):`,
@@ -56,7 +75,7 @@ func VulnerableRepo(t testing.TB) string {
 		`    eval(completion.choices[0].message.content)`,
 		`TOKEN = "` + FakeGitHub + `"`,
 	}, "\n"))
-	Write(t, root, ".github/workflows/ci.yml", strings.Join([]string{
+	w(".github/workflows/ci.yml", strings.Join([]string{
 		`on: [pull_request_target]`,
 		`jobs:`,
 		`  build:`,
@@ -69,8 +88,8 @@ func VulnerableRepo(t testing.TB) string {
 		`      - run: |`,
 		`          echo "${{ github.event.issue.title }}"`,
 	}, "\n"))
-	Write(t, root, "Dockerfile", "FROM node:latest\nCOPY . .\nCMD [\"node\",\"src/server.js\"]\n")
-	Write(t, root, "infra/main.tf", strings.Join([]string{
+	w("Dockerfile", "FROM node:latest\nCOPY . .\nCMD [\"node\",\"src/server.js\"]\n")
+	w("infra/main.tf", strings.Join([]string{
 		`resource "aws_s3_bucket_acl" "b" { acl = "public-read" }`,
 		`resource "aws_security_group" "ssh" {`,
 		`  ingress {`,
@@ -80,21 +99,21 @@ func VulnerableRepo(t testing.TB) string {
 		`  }`,
 		`}`,
 	}, "\n"))
-	Write(t, root, "android/app/src/main/AndroidManifest.xml", `<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:debuggable="true" android:allowBackup="true">
+	w("android/app/src/main/AndroidManifest.xml", `<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:debuggable="true" android:allowBackup="true">
 <activity android:name=".Main" android:exported="true"><intent-filter><action android:name="android.intent.action.MAIN"/></intent-filter></activity>
 <receiver android:name=".Sync" android:exported="true"/></application></manifest>`)
-	Write(t, root, "openapi.yaml", "openapi: 3.0.0\npaths:\n  /api/login:\n    post: {}\n")
-	Write(t, root, ".env", "SECRET_VALUE_NOT_READ="+FakeStripe+"\n")
+	w("openapi.yaml", "openapi: 3.0.0\npaths:\n  /api/login:\n    post: {}\n")
+	w(".env", "SECRET_VALUE_NOT_READ="+FakeStripe+"\n")
 	if git, err := exec.LookPath("git"); err == nil {
 		for _, args := range [][]string{{"init", "-q"}, {"add", "-A", "-f"}, {"-c", "user.email=t@example.org", "-c", "user.name=t", "-c", "commit.gpgsign=false", "commit", "-qm", "fixture"}} {
 			cmd := exec.Command(git, args...)
 			cmd.Dir = root
-			if out, err := cmd.CombinedOutput(); err != nil {
-				t.Logf("git %v: %v %s", args, err, out)
+			if out, gerr := cmd.CombinedOutput(); gerr != nil {
+				logf("git %v: %v %s", args, gerr, out)
 			}
 		}
 	}
-	return root
+	return err
 }
 
 // HasGit reports whether git is available.
