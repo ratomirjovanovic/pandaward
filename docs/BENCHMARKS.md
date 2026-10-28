@@ -29,7 +29,7 @@ A category with no mapped rule is shown as "not covered" rather than as a score 
 | | |
 |---|---|
 | Benchmark | OWASP BenchmarkJava, commit `f40c618c5a709afce350ef06ed2899c85cf586e9`, expected results 1.2 |
-| PenSec | `0.1.0-dev` built from commit `745a096` (main), built-in rules only |
+| PenSec | source build of commit `745a096` (main after release 0.1.2, same rules), built-in rules only |
 | Date | 2026-10-28 |
 | Tool | `tools/owaspbench` |
 
