@@ -66,7 +66,18 @@ Most scanners print a list of alerts and stop. PenSec keeps a **ledger**: every 
 /plugin install pensec-windows@pensec    # Windows
 ```
 
-You can also run the same steps from a terminal with `claude plugin marketplace add ratomirjovanovic/pensec` and `claude plugin install pensec-windows@pensec` (`pensec@pensec` on macOS and Linux). Restart Claude Code afterwards; `/mcp` should list `plugin:pensec:pensec` as connected. To update later, run `/plugin marketplace update pensec`. If something goes wrong, see [Troubleshooting](https://github.com/ratomirjovanovic/pensec/wiki/Troubleshooting).
+You can also run the same steps from a terminal with `claude plugin marketplace add ratomirjovanovic/pensec` and `claude plugin install pensec-windows@pensec` (`pensec@pensec` on macOS and Linux). Restart Claude Code afterwards; `/mcp` should list `plugin:pensec:pensec` as connected. Install only one of the two plugins. If something goes wrong, see [Troubleshooting](https://github.com/ratomirjovanovic/pensec/wiki/Troubleshooting).
+
+**Updating.** Claude Code does not update third-party marketplaces on its own unless you turn it on. Either turn on auto-update once (`/plugin`, then Marketplaces, `pensec`, Enable auto-update), or update by hand:
+
+```sh
+claude plugin marketplace update pensec
+claude plugin update pensec-windows@pensec   # or pensec@pensec on macOS and Linux
+```
+
+Then restart Claude Code. `/plugin` shows the installed version.
+
+**Uninstalling.** `claude plugin uninstall pensec-windows@pensec` (or `pensec@pensec`), then `claude plugin marketplace remove pensec`. Results stay in each project's `.pensec/` directory until you delete it. The [uninstall guide](https://github.com/ratomirjovanovic/pensec/wiki/Installation#uninstalling) covers the CLI packages and every file PenSec creates.
 
 Then, in your project, ask Claude to check its security, or run:
 
@@ -105,7 +116,7 @@ scoop bucket add pensec https://github.com/ratomirjovanovic/pensec; scoop instal
 Or download a binary from the [releases page](https://github.com/ratomirjovanovic/pensec/releases) (Linux and macOS on amd64 and arm64, Windows on amd64). For example on Linux:
 
 ```sh
-v=v0.1.4
+v=v0.1.5
 curl -fLO https://github.com/ratomirjovanovic/pensec/releases/download/$v/pensec-linux-amd64
 curl -fLO https://github.com/ratomirjovanovic/pensec/releases/download/$v/SHA256SUMS
 sha256sum --ignore-missing -c SHA256SUMS
@@ -115,11 +126,13 @@ chmod +x pensec-linux-amd64 && sudo mv pensec-linux-amd64 /usr/local/bin/pensec
 On Windows (PowerShell), save `pensec-windows-amd64.exe` as `pensec.exe` in a folder on your `PATH`:
 
 ```powershell
-Invoke-WebRequest https://github.com/ratomirjovanovic/pensec/releases/download/v0.1.4/pensec-windows-amd64.exe -OutFile pensec.exe
+Invoke-WebRequest https://github.com/ratomirjovanovic/pensec/releases/download/v0.1.5/pensec-windows-amd64.exe -OutFile pensec.exe
 (Get-FileHash pensec.exe).Hash   # compare with the line in SHA256SUMS
 ```
 
 Or install with Go 1.23 or later: `go install github.com/ratomirjovanovic/pensec/cmd/pensec@latest`. The binary has no runtime dependencies.
+
+Update with `brew upgrade pensec` or `scoop update pensec`; for a downloaded binary, replace the file with the new release. Remove with `brew uninstall pensec` or `scoop uninstall pensec`, or delete the binary. `pensec version` shows what you have.
 
 Then, in your project:
 
@@ -165,9 +178,9 @@ In Claude Code, hooks keep the ledger current without any command. Edited files 
 | Domain | Automated today (offline) | Needs review or runtime |
 |---|---|---|
 | A Inventory and architecture | entrypoints with file and line (`pensec routes`): HTTP routes for Express, NestJS, Next.js, Flask, FastAPI, Django, Go, Spring, Laravel, Rails, ASP.NET with router prefixes and mounts resolved; GraphQL schema operations; gRPC services; queue consumers and cron jobs; services in monorepos; OpenAPI drift | threat model |
-| B Authentication | JWT `none` or unverified decode, cookie flags | login, reset and session lifecycle |
-| C Authorization | | object and function level authorization (manual-assisted) |
-| D Injection | eval, shell, SQL concatenation, unsafe deserialization | runtime probes |
+| B Authentication | JWT `none` or unverified decode, cookie flags | revoked credentials refused (`staging-active`); login, reset and MFA flows |
+| C Authorization | | object and function level authorization with test identities (`staging-active`), route review (manual-assisted) |
+| D Injection | eval, shell, SQL concatenation, unsafe deserialization | ZAP active scan (`staging-active`, opt-in) |
 | E Secrets and crypto | 16 high-specificity secret formats, tracked `.env` and key files, disabled TLS verification, weak hash or random | |
 | F Business logic | | invariants, idempotency, races (manual-assisted) |
 | G APIs and webhooks | webhook signature verification presence | contract vs runtime |
@@ -205,6 +218,7 @@ In Claude Code, hooks keep the ledger current without any command. Edited files 
 | `pensec verify-bundle out.zip` | Recompute every hash in a bundle; compare the printed manifest hash with the sender's |
 | `pensec scope init \| validate \| approve \| revoke` | Authorization for network tests |
 | `pensec test --profile production-observe` | Header and cookie review of approved origins |
+| `pensec test --profile staging-active` | Authorization checks with test identities, then a ZAP spider and passive scan of approved staging origins, active scan when the manifest allows it |
 | `pensec feedback false-positive ID \| false-negative \| summary` | Prepare a report about a wrong or missed finding; prints a prefilled issue link, sends nothing |
 | `pensec doctor` | Optional scanners and their network needs |
 | `pensec benchmark` | TP, FP, FN and TN per built-in rule on the bundled corpus |
@@ -230,9 +244,27 @@ pensec scope init                       # writes .pensec/scope.yaml, unusable as
 # fill in owner, written permission reference, purpose, targets, limits, acknowledged: true
 pensec scope approve --by "Jane"        # interactive terminal only, bound to the file's SHA-256
 pensec test --profile production-observe
+pensec test --profile staging-active    # staging or local targets, needs ZAP
 ```
 
 The engine sends at most `max_requests_total` GET requests to the listed origins at the configured rate, never follows redirects, and checks every resolved address at connection time. Loopback, private and link-local addresses are refused unless the manifest explicitly allows a local fixture, and cloud metadata addresses are always refused. Editing `scope.yaml` invalidates the approval. Approvals are also bound to a per-user key kept outside the project (`approval.key` in your user config directory), so a scope file or ledger that arrives with a repository never counts as approved.
+
+`staging-active` runs your installed [ZAP](https://www.zaproxy.org/) (it needs Java 17+; PenSec never installs it) through its automation framework: a spider and the passive scan decide M-001, and with `zap.active_scan: true` in the manifest the active scan also decides D-005 (injection). ZAP is chained to a PenSec proxy on loopback that terminates TLS and sends each request through the same scope guard, so origins, excluded paths, allowed methods, the request budget, the rate limit and the address checks apply to every ZAP request. The guard also stops after three consecutive 429 or 5xx answers. A ZAP run that fails is `ERROR`, a run cut short by the budget or the guard is `INCONCLUSIVE`, and targets marked `environment: production` are refused. Set `runtime.zap_path` in `.pensec/config.yaml` when ZAP is not on `PATH` or in its default install location.
+
+`staging-active` also runs the manifest's `authorization_checks` before ZAP. You list test identities (name, tenant, the header that carries the credential and the environment variable that holds it; the credential itself never goes in the file) and read-only requests to objects or functions that exist for the test, each with the identities allowed to reach it:
+
+```yaml
+identities:
+  - {name: alice, tenant: acme, header: Authorization, value_env: PENSEC_ID_ALICE}
+  - {name: bob,   tenant: beta, header: Authorization, value_env: PENSEC_ID_BOB}
+  - {name: carol, tenant: acme, header: Authorization, value_env: PENSEC_ID_CAROL}   # an admin
+  - {name: alice-logged-out, tenant: acme, header: Authorization, value_env: PENSEC_ID_OLD, revoked: true}
+authorization_checks:
+  - {name: acme invoice, kind: object,   method: GET, path: /api/invoices/inv_acme_1, allowed: [alice]}
+  - {name: user admin,   kind: function, method: GET, path: /admin/users,            allowed: [carol]}
+```
+
+Each check is sent once as every identity and once without credentials. The allowed identities must get a 2xx answer, otherwise the check cannot be judged and is `INCONCLUSIVE`. Any other identity that also gets a 2xx is a finding: `CONFIRMED` when its body matches what the allowed identities got, `STRONGLY_SUPPORTED` when it differs. Object checks decide C-001 (BOLA), function checks C-002, and identities marked `revoked` decide B-004 on every check. Only GET and HEAD are allowed, so no data changes and nothing needs cleaning up. Evidence keeps the status, size, content type and a body hash per identity, never headers, bodies or credentials. A missing credential variable stops the run before the first request.
 
 ## In CI
 
@@ -262,7 +294,7 @@ With [pre-commit](https://pre-commit.com), add this to `.pre-commit-config.yaml`
 ```yaml
 repos:
   - repo: https://github.com/ratomirjovanovic/pensec
-    rev: v0.1.4
+    rev: v0.1.5
     hooks:
       - id: pensec-system   # uses the pensec on your PATH; use id: pensec to build it with Go 1.23+
 ```
@@ -273,7 +305,7 @@ The hook runs `pensec scan --quiet --fail-on high` and blocks the commit when op
 
 - That your application is secure. No tool can prove the absence of vulnerabilities.
 - Anything about controls it reports as `BLOCKED`, `UNSUPPORTED`, `SUSPECTED`, `INCONCLUSIVE`, `ERROR` or `STALE`.
-- Results from runtime profiles other than `production-observe`. `staging-active`, ZAP and emulator tests are on the roadmap and are reported as `UNSUPPORTED` today.
+- Results from runtime tests that are not implemented yet: login, reset and MFA flows (B-003), API contract versus runtime (G-002) and emulator tests are reported as `UNSUPPORTED` today.
 
 A PenSec report is an automated technical assessment. It is not a certification, an attestation, a legal opinion or an independently signed penetration test.
 
@@ -284,7 +316,7 @@ A PenSec report is an automated technical assessment. It is not a certification,
 | M0 Foundation | CLI, ledger, scope policy, inventory, static report | done |
 | M1 Public alpha | built-in adapters, optional tool adapters, bundled Semgrep rules, edges, HTML/JSON/SARIF, plugin, signed reproducible releases | done (v0.1.1) |
 | M2 Context-safe beta | per-domain invalidation, targeted retest, evidence bundles, delta reports, hostile-repository suite | done |
-| M3 Runtime beta | staging profile with role and tenant fixtures, ZAP adapter | planned |
+| M3 Runtime beta | staging profile with role and tenant fixtures, ZAP adapter | done |
 | M4 Mobile and AI | MobSF and emulator adapters, prompt-injection suite | planned |
 | 1.0 | frozen schemas ([done](docs/SCHEMAS.md)), benchmark corpus with at least 3 vulnerable and 3 safe cases per rule, external review | in progress |
 

@@ -1,7 +1,7 @@
 {
   "name": "pensec",
   "displayName": "PenSec",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "Local, evidence-based application security assessment: inventory, static checks, cross-domain graph, coverage ledger and reports. Passive by default; network tests need a human-approved scope.",
   "author": {
     "name": "Ratomir Jovanovic",
