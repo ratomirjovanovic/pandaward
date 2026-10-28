@@ -11,6 +11,9 @@
     ],
     "PreCompact": [
       { "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/bin/pensec", "args": ["hook", "pre-compact"], "timeout": 10 } ] }
+    ],
+    "Stop": [
+      { "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/bin/pensec", "args": ["hook", "stop"], "timeout": 60 } ] }
     ]
   }
 }

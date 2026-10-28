@@ -68,22 +68,28 @@ Most scanners print a list of alerts and stop. PenSec keeps a **ledger**: every 
 
 You can also run the same steps from a terminal with `claude plugin marketplace add ratomirjovanovic/pensec` and `claude plugin install pensec-windows@pensec` (`pensec@pensec` on macOS and Linux). Restart Claude Code afterwards; `/mcp` should list `plugin:pensec:pensec` as connected. To update later, run `/plugin marketplace update pensec`. If something goes wrong, see [Troubleshooting](https://github.com/ratomirjovanovic/pensec/wiki/Troubleshooting).
 
-Then, in your project:
+Then, in your project, ask Claude to check its security, or run:
 
 ```text
-/pensec:start       # the whole assessment in one go: scan with progress, specialist
-                    # reviews, triage, fix plan and reports, with a live checklist
+/pensec:start
 ```
 
-Or step by step:
+That is the only command. Claude scans the project, has specialist reviewers look at what automation could not decide, triages the results, builds the fix plan and writes the reports, with a live checklist. At the end it asks one question - fix the plan, record the triage results, install missing scanners - and does what you choose, retesting after every fix. Later in the session it retests on its own whenever code changes. Commands that change a finding's status still show you a confirmation prompt, and network tests always need a scope you approve in your own terminal.
 
-```text
-/pensec:init        # create .pensec/ and show what was detected
-/pensec:scan        # passive scan with an honest summary
-/pensec:review      # read-only specialist agents look at what automation could not decide
-/pensec:fix-plan    # ordered fixes; nothing is changed without your approval
-/pensec:report      # HTML, Markdown, JSON, SARIF, CSV
-```
+<details>
+<summary>Individual skills</summary>
+
+| Skill | What it does |
+|---|---|
+| `/pensec:init` | Create `.pensec/` and show what was detected |
+| `/pensec:scan` | Passive scan with an honest summary |
+| `/pensec:review` | Read-only specialist agents look at what automation could not decide |
+| `/pensec:fix-plan` | Ordered fixes, applied one by one after your approval |
+| `/pensec:retest` | Re-scan after changes and show the delta |
+| `/pensec:report` | HTML, Markdown, JSON, SARIF, CSV |
+| `/pensec:status` | Where the assessment stands and what is stale |
+
+</details>
 
 > The plugin installs prebuilt, checksum-verified binaries from the `plugin` and `plugin-windows` branches, which the release workflow publishes on every version tag ([how to verify them](docs/VERIFYING.md)). To use PenSec without Claude Code, see below.
 
@@ -99,7 +105,7 @@ scoop bucket add pensec https://github.com/ratomirjovanovic/pensec; scoop instal
 Or download a binary from the [releases page](https://github.com/ratomirjovanovic/pensec/releases) (Linux and macOS on amd64 and arm64, Windows on amd64). For example on Linux:
 
 ```sh
-v=v0.1.3
+v=v0.1.4
 curl -fLO https://github.com/ratomirjovanovic/pensec/releases/download/$v/pensec-linux-amd64
 curl -fLO https://github.com/ratomirjovanovic/pensec/releases/download/$v/SHA256SUMS
 sha256sum --ignore-missing -c SHA256SUMS
@@ -109,7 +115,7 @@ chmod +x pensec-linux-amd64 && sudo mv pensec-linux-amd64 /usr/local/bin/pensec
 On Windows (PowerShell), save `pensec-windows-amd64.exe` as `pensec.exe` in a folder on your `PATH`:
 
 ```powershell
-Invoke-WebRequest https://github.com/ratomirjovanovic/pensec/releases/download/v0.1.3/pensec-windows-amd64.exe -OutFile pensec.exe
+Invoke-WebRequest https://github.com/ratomirjovanovic/pensec/releases/download/v0.1.4/pensec-windows-amd64.exe -OutFile pensec.exe
 (Get-FileHash pensec.exe).Hash   # compare with the line in SHA256SUMS
 ```
 
@@ -152,6 +158,8 @@ flowchart LR
 5. **Edges** between domains are created only from shared assets and get their status from the linked controls.
 6. **Reports** show confirmed findings, suspected signals, coverage by domain, every undecided control and the evidence index.
 
+In Claude Code, hooks keep the ledger current without any command. Edited files are marked stale as they change, and when Claude finishes a turn that edited files, PenSec runs a changed-only passive retest (bounded at 40 seconds) and hands any new or reopened findings back to Claude, which explains them and offers a fix. A clean retest stays silent; one that runs out of time or fails says so instead of claiming anything is fixed. Set `hooks.auto_retest: false` in `.pensec/config.yaml` to turn it off.
+
 ## What it checks
 
 | Domain | Automated today (offline) | Needs review or runtime |
@@ -186,7 +194,7 @@ flowchart LR
 | `pensec scan [--fail-on high]` | Passive scan, including SARIF import from `.pensec/sarif/`; exit code 4 when the gate is reached |
 | `pensec retest [--changed]` | Files changed since the last scan, re-scan, delta; `--changed` re-runs only the adapters whose controls the changes affect |
 | `pensec status` | Coverage, open findings, stale files, blockers, next action |
-| `pensec findings [show ID]` | List or inspect findings |
+| `pensec findings [show ID]` | List or inspect findings; `apply --file` records many decisions at once |
 | `pensec graph [--format mermaid]` | Domains and cross-domain edges |
 | `pensec routes` | Discovered entrypoints (HTTP, GraphQL, gRPC, workers, cron) with file and line |
 | `pensec fix-plan` | Ordered remediation steps |
@@ -208,7 +216,10 @@ Human decisions are explicit and recorded:
 ```sh
 pensec findings false-positive PSEC-0007 --by "Jane" --note "constant input, not user controlled"
 pensec findings accept-risk   PSEC-0003 --by "Jane" --note "internal tool" --expires 2027-03-01
+pensec findings apply --file decisions.json --by "Jane"   # many at once, all or nothing
 ```
+
+`decisions.json` is an array of `{"finding_id", "action", "note", "expires"}` with `action` one of `confirm`, `false-positive`, `accept-risk` (needs `expires`) or `reopen`. Every entry is checked before anything is written, so one bad entry rejects the batch. In Claude Code this is how the guided assessment records triage results: you see the whole list in one confirmation prompt instead of one prompt per finding.
 
 ## Network tests
 
@@ -243,6 +254,20 @@ steps:
 ```
 
 The action downloads a release binary, checks it against `SHA256SUMS`, scans, writes SARIF, HTML, Markdown and JSON reports to `pensec-report/`, and adds a short job summary with counts only (`summary: full` lists findings; job summaries of public repositories are public). With `new-only`, the base commit is scanned in a separate worktree and only findings whose fingerprints are new count. Inputs and outputs are documented in [`action.yml`](action.yml).
+
+## Before each commit
+
+With [pre-commit](https://pre-commit.com), add this to `.pre-commit-config.yaml` and run `pensec init` once in the project:
+
+```yaml
+repos:
+  - repo: https://github.com/ratomirjovanovic/pensec
+    rev: v0.1.4
+    hooks:
+      - id: pensec-system   # uses the pensec on your PATH; use id: pensec to build it with Go 1.23+
+```
+
+The hook runs `pensec scan --quiet --fail-on high` and blocks the commit when open high or critical findings exist. It scans the working tree, not only the staged files.
 
 ## What PenSec will not tell you
 
