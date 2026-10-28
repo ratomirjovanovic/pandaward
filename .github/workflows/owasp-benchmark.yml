@@ -1,0 +1,28 @@
+name: owasp-benchmark
+
+# Measures the built-in rules on the OWASP Benchmark for Java at the commit
+# pinned in tools/owaspbench/run.sh. Manual only; see docs/BENCHMARKS.md.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  measure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Measure
+        run: |
+          sh tools/owaspbench/run.sh --json > owasp-benchmark.json
+          jq -r '.categories[] | [.category, (if .covered then (.score | tostring) else "not covered" end)] | @tsv' owasp-benchmark.json
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: owasp-benchmark
+          path: owasp-benchmark.json

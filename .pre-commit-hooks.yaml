@@ -1,0 +1,22 @@
+# pre-commit hooks for PenSec. Run `pensec init` once in the project first.
+# The scan reads the working tree, not only the staged files.
+
+# Builds PenSec from this repository at the pinned rev (needs Go 1.23+).
+- id: pensec
+  name: PenSec passive scan
+  description: Fail the commit when open high or critical findings exist.
+  entry: pensec scan --quiet --fail-on high
+  language: golang
+  pass_filenames: false
+  always_run: true
+  require_serial: true
+
+# Uses a pensec binary already on PATH (plugin, release download, package).
+- id: pensec-system
+  name: PenSec passive scan (installed binary)
+  description: Fail the commit when open high or critical findings exist.
+  entry: pensec scan --quiet --fail-on high
+  language: system
+  pass_filenames: false
+  always_run: true
+  require_serial: true

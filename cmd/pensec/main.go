@@ -29,6 +29,7 @@ import (
 	"github.com/ratomirjovanovic/pensec/internal/config"
 	"github.com/ratomirjovanovic/pensec/internal/engine"
 	"github.com/ratomirjovanovic/pensec/internal/evidence"
+	"github.com/ratomirjovanovic/pensec/internal/feedback"
 	"github.com/ratomirjovanovic/pensec/internal/hooks"
 	"github.com/ratomirjovanovic/pensec/internal/mcp"
 	"github.com/ratomirjovanovic/pensec/internal/model"
@@ -60,6 +61,7 @@ Assessment (local, no target network traffic):
   export          --bundle out.zip [--assessment ID] redacted evidence, report and SHA-256 manifest
   verify-bundle   <bundle.zip> recompute and check every hash in a bundle
   events          Recent audit events
+  feedback        Report a false positive or a missed issue to the project (prints a prefilled issue link; sends nothing)
 
 Network-active (human authorization required):
   scope           init | show | validate | approve --by <name> | revoke
@@ -139,6 +141,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		err = cmdVerifyBundle(rest, stdout)
 	case "events":
 		err = cmdEvents(rest, stdout)
+	case "feedback":
+		err = cmdFeedback(rest, stdout)
 	case "scope":
 		err = cmdScope(rest, stdin, stdout)
 	case "test":
@@ -1319,6 +1323,92 @@ func cmdBenchmark(ctx context.Context, args []string, w io.Writer) error {
 	}
 	if *strict && failed > 0 {
 		return exitErr{1, fmt.Sprintf("%d rule(s) missed a vulnerable case or fired on a safe one", failed)}
+	}
+	return nil
+}
+
+func cmdFeedback(args []string, w io.Writer) error {
+	sub := ""
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		sub, args = args[0], args[1:]
+	}
+	fs, root := newFS("feedback")
+	asJSON := fs.Bool("json", false, "JSON output")
+	withPath := fs.Bool("include-path", false, "add the file path and line (redacted)")
+	withSnippet := fs.Bool("include-snippet", false, "add up to 12 redacted lines of code")
+	note := fs.String("note", "", "what happened, in your words (redacted)")
+	rule := fs.String("rule", "", "false-negative: rule or control that should have fired (e.g. D-003)")
+	file := fs.String("file", "", "false-negative: file with the missed issue")
+	line := fs.Int("line", 0, "false-negative: line of the missed issue")
+	pos, err := parse(fs, args)
+	if err != nil {
+		return err
+	}
+	e, err := openProject(*root)
+	if err != nil {
+		return err
+	}
+	defer e.Close()
+	opts := feedback.Options{IncludePath: *withPath, IncludeSnippet: *withSnippet, Note: *note}
+	var r feedback.Report
+	switch sub {
+	case feedback.FalsePositive:
+		if len(pos) != 1 {
+			return exitErr{2, "usage: pensec feedback false-positive <PSEC-ID> [--note text] [--include-path] [--include-snippet]"}
+		}
+		f, err := e.St.Finding(e.ProjectID, pos[0])
+		if err != nil {
+			return err
+		}
+		if f == nil {
+			return fmt.Errorf("finding %s not found", pos[0])
+		}
+		runs, err := e.St.Runs(f.AssessmentID)
+		if err != nil {
+			return err
+		}
+		r = feedback.FromFinding(e.Root, *f, runs, opts)
+	case feedback.FalseNegative:
+		if *rule == "" && *note == "" {
+			return exitErr{2, "usage: pensec feedback false-negative --rule <rule or control> [--file f --line n] --note text"}
+		}
+		r = feedback.Missed(e.Root, *rule, *file, *line, opts)
+	case "summary":
+		fsl, err := e.St.Findings(e.ProjectID)
+		if err != nil {
+			return err
+		}
+		sum := feedback.Summary(fsl)
+		if *asJSON {
+			return printJSON(w, sum)
+		}
+		if len(sum) == 0 {
+			fmt.Fprintln(w, "No findings were closed as false positives in this project.")
+			return nil
+		}
+		fmt.Fprintf(w, "%-40s %8s %6s\n", "Rule", "False+", "Open")
+		for _, c := range sum {
+			fmt.Fprintf(w, "%-40s %8d %6d\n", redact.Line(c.RuleID), c.FalsePositives, c.Open)
+		}
+		fmt.Fprintln(w, "\nReport a rule with: pensec feedback false-positive <PSEC-ID>")
+		return nil
+	default:
+		return exitErr{2, "feedback subcommands: false-positive <PSEC-ID>, false-negative --rule <id>, summary"}
+	}
+	if *asJSON {
+		return printJSON(w, map[string]any{"report": r, "issue_url": r.IssueURL()})
+	}
+	fmt.Fprintln(w, "This report will be sent only if you open the link and submit the issue yourself.")
+	if !*withPath && !*withSnippet {
+		fmt.Fprintln(w, "It contains rule metadata and the file type only; add --include-path or --include-snippet to share more (redacted).")
+	}
+	fmt.Fprintln(w)
+	fmt.Fprint(w, r.Markdown())
+	fmt.Fprintln(w, "\nReview and submit:")
+	fmt.Fprintln(w, r.IssueURL())
+	fmt.Fprintln(w, "Already reported? Upvote the existing issue instead:", r.ExistingURL())
+	if r.Kind == feedback.FalsePositive {
+		fmt.Fprintln(w, "\nTo close it in this project as well: pensec findings false-positive "+redact.Line(pos[0])+" --by <name> --note <why>")
 	}
 	return nil
 }

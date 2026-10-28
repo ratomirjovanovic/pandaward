@@ -1,0 +1,98 @@
+name: action
+
+on:
+  push:
+    branches: [main]
+    paths: [action.yml, .github/workflows/action.yml]
+  pull_request:
+    paths: [action.yml, .github/workflows/action.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  self-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+
+      - name: Create the fixture repository
+        id: fx
+        run: |
+          fx="$RUNNER_TEMP/fixture"
+          # The fixture generator creates a git repository with one commit.
+          go run ./tools/demofixture "$fx"
+          cd "$fx"
+          echo "dir=$fx" >> "$GITHUB_OUTPUT"
+          echo "base=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Scan without a gate
+        id: plain
+        uses: ./
+        with:
+          working-directory: ${{ steps.fx.outputs.dir }}
+          fail-on: ""
+          output-dir: report-plain
+          summary: full
+
+      - name: Check reports and outputs
+        env:
+          SARIF: ${{ steps.plain.outputs.sarif-file }}
+          FINDINGS: ${{ steps.plain.outputs.findings }}
+        run: |
+          test -s "$SARIF" || { echo "missing SARIF"; exit 1; }
+          ls report-plain/*.html report-plain/*.json >/dev/null
+          [ "$FINDINGS" -gt 0 ] || { echo "expected findings on the fixture, got $FINDINGS"; exit 1; }
+
+      - name: Gate on critical findings
+        id: gate
+        continue-on-error: true
+        uses: ./
+        with:
+          working-directory: ${{ steps.fx.outputs.dir }}
+          fail-on: critical
+          output-dir: report-gate
+
+      - name: The gate must fail
+        env:
+          OUTCOME: ${{ steps.gate.outcome }}
+        run: '[ "$OUTCOME" = failure ] || { echo "gate did not fail: $OUTCOME"; exit 1; }'
+
+      - name: Add a change with one new finding
+        working-directory: ${{ steps.fx.outputs.dir }}
+        run: |
+          mkdir -p .github/workflows
+          printf 'name: lint\non: push\npermissions:\n  contents: read\njobs:\n  lint:\n    runs-on: ubuntu-latest\n    steps:\n      - uses: example-org/lint-action@v1\n' > .github/workflows/lint.yml
+          git -c user.name=ci -c user.email=ci@example.invalid add -A
+          git -c user.name=ci -c user.email=ci@example.invalid commit -qm change
+
+      - name: Only new findings
+        id: new
+        uses: ./
+        with:
+          working-directory: ${{ steps.fx.outputs.dir }}
+          new-only: "true"
+          base-ref: ${{ steps.fx.outputs.base }}
+          fail-on: ""
+          output-dir: report-new
+
+      - name: The new-only count is the change, not the whole project
+        env:
+          NEW: ${{ steps.new.outputs.findings }}
+          ALL: ${{ steps.plain.outputs.findings }}
+        run: |
+          echo "new=$NEW all=$ALL"
+          [ "$NEW" -ge 1 ] && [ "$NEW" -lt "$ALL" ] || { echo "unexpected new-only count"; exit 1; }
