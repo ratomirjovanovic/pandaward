@@ -36,7 +36,7 @@ jobs:
         run: |
           # A release pull request sets the default to a version that is not
           # published yet; test the latest published release until it is.
-          v=$(sed -n '/^  version:/,/default:/s/.*default: "\(.*\)"//p' action.yml)
+          v=$(sed -n '/^  version:/,/default:/s/.*default: "\(.*\)"/\1/p' action.yml)
           if ! curl -fsIL -o /dev/null "https://github.com/$GITHUB_REPOSITORY/releases/download/v$v/SHA256SUMS"; then
             v=$(gh release list -R "$GITHUB_REPOSITORY" --limit 1 --json tagName --jq '.[0].tagName')
             v=${v#v}
