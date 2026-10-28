@@ -8,7 +8,7 @@ description: Initialize a PenSec security assessment in the current project (cre
 1. Run `pensec init` in the project root. Do not pass `--force` unless the user asks to reset the configuration.
 2. Summarize what the inventory detected: languages, frameworks, routes, CI, IaC, mobile, AI/MCP usage, and any skipped files or sensitive files recorded by name only.
 3. Explain the default: profile `local-passive` reads the repository only and sends no traffic to any target. Optional scanners (gitleaks, semgrep, osv-scanner, trivy) are used only if the user installed them; `pensec doctor` lists them.
-4. Ask the user to confirm the project is theirs or that they are authorized to assess it before continuing. Then suggest `/pensec:plan` and `/pensec:scan`.
+4. Ask the user to confirm the project is theirs or that they are authorized to assess it before continuing. Then offer to run the full guided assessment (skill `pensec:start`) and run it yourself after a yes.
 
 ## Ground rules (always)
 

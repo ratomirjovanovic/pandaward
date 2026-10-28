@@ -68,22 +68,28 @@ Most scanners print a list of alerts and stop. PenSec keeps a **ledger**: every 
 
 You can also run the same steps from a terminal with `claude plugin marketplace add ratomirjovanovic/pensec` and `claude plugin install pensec-windows@pensec` (`pensec@pensec` on macOS and Linux). Restart Claude Code afterwards; `/mcp` should list `plugin:pensec:pensec` as connected. To update later, run `/plugin marketplace update pensec`. If something goes wrong, see [Troubleshooting](https://github.com/ratomirjovanovic/pensec/wiki/Troubleshooting).
 
-Then, in your project:
+Then, in your project, ask Claude to check its security, or run:
 
 ```text
-/pensec:start       # the whole assessment in one go: scan with progress, specialist
-                    # reviews, triage, fix plan and reports, with a live checklist
+/pensec:start
 ```
 
-Or step by step:
+That is the only command. Claude scans the project, has specialist reviewers look at what automation could not decide, triages the results, builds the fix plan and writes the reports, with a live checklist. At the end it asks one question - fix the plan, record the triage results, install missing scanners - and does what you choose, retesting after every fix. Later in the session it retests on its own whenever code changes. Commands that change a finding's status still show you a confirmation prompt, and network tests always need a scope you approve in your own terminal.
 
-```text
-/pensec:init        # create .pensec/ and show what was detected
-/pensec:scan        # passive scan with an honest summary
-/pensec:review      # read-only specialist agents look at what automation could not decide
-/pensec:fix-plan    # ordered fixes; nothing is changed without your approval
-/pensec:report      # HTML, Markdown, JSON, SARIF, CSV
-```
+<details>
+<summary>Individual skills</summary>
+
+| Skill | What it does |
+|---|---|
+| `/pensec:init` | Create `.pensec/` and show what was detected |
+| `/pensec:scan` | Passive scan with an honest summary |
+| `/pensec:review` | Read-only specialist agents look at what automation could not decide |
+| `/pensec:fix-plan` | Ordered fixes, applied one by one after your approval |
+| `/pensec:retest` | Re-scan after changes and show the delta |
+| `/pensec:report` | HTML, Markdown, JSON, SARIF, CSV |
+| `/pensec:status` | Where the assessment stands and what is stale |
+
+</details>
 
 > The plugin installs prebuilt, checksum-verified binaries from the `plugin` and `plugin-windows` branches, which the release workflow publishes on every version tag ([how to verify them](docs/VERIFYING.md)). To use PenSec without Claude Code, see below.
 
