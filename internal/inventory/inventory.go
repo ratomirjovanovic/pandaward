@@ -137,9 +137,15 @@ func walkFiles(ctx context.Context, absRoot string, opt Options, withLines bool,
 		excl[e] = true
 	}
 	count := 0
+	deadline, hasDeadline := ctx.Deadline()
 	return filepath.WalkDir(absRoot, func(p string, d fs.DirEntry, werr error) error {
 		if err := ctx.Err(); err != nil {
 			return err
+		}
+		// Timers are coarse on Windows: an expired deadline must stop the
+		// walk even before the context's timer has fired.
+		if hasDeadline && !time.Now().Before(deadline) {
+			return context.DeadlineExceeded
 		}
 		rel, _ := filepath.Rel(absRoot, p)
 		rel = filepath.ToSlash(rel)
