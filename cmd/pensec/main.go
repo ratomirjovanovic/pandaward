@@ -75,7 +75,7 @@ Integration and tooling:
   benchmark       TP/FP/FN/TN per built-in rule on the bundled corpus (--json, --strict)
   selftest        Run the hostile-repository suite: can repository text steer PenSec? (--json)
   mcp             Serve the MCP stdio interface
-  hook <name>     Claude Code lifecycle hook (session-start, post-edit, pre-tool, pre-compact)
+  hook <name>     Claude Code lifecycle hook (session-start, post-edit, pre-tool, pre-compact, stop)
   version         Print version
 
 Global flag: --root <dir>  project directory (default: current directory or nearest parent with .pensec/)
