@@ -196,6 +196,16 @@ func TestMobSFAnalyzesAPKAndIPA(t *testing.T) {
 	if want := 6; len(*calls) != want {
 		t.Errorf("calls %v, want %d", *calls, want)
 	}
+	raw, err := os.ReadFile(filepath.Join(c.RunDir, "mobsf-0.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if saved, err := parseMobSFScorecard(raw); err != nil || len(saved.High) != 1 || len(saved.Warning) != 2 {
+		t.Errorf("saved scorecard is not the whole report: %v", err)
+	}
+	if strings.Contains(string(raw), "wJalr") {
+		t.Error("saved scorecard keeps the candidate secrets")
+	}
 	assertNoKey(t, c, res, run)
 }
 

@@ -100,7 +100,7 @@ func (a mobsfAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 		if err != nil {
 			return fail(model.ExitError, "MobSF could not analyze "+p.rel+": "+err.Error())
 		}
-		_ = os.WriteFile(filepath.Join(c.RunDir, fmt.Sprintf("mobsf-%d.json", i)), []byte(redact.Text(strings.ReplaceAll(string(raw), key, "[REDACTED]"))), 0o600)
+		_ = os.WriteFile(filepath.Join(c.RunDir, fmt.Sprintf("mobsf-%d.json", i)), mobsfRaw(raw, key), 0o600)
 		if run.ToolVersion == "" {
 			run.ToolVersion = card.Version
 		}
@@ -136,6 +136,30 @@ func parseMobSFScorecard(b []byte) (*mobsfScorecard, error) {
 		return nil, errors.New("unexpected scorecard: no hash")
 	}
 	return &card, nil
+}
+
+// mobsfRaw prepares a scorecard for the private run directory: whole and
+// valid JSON (line redaction would cut it at the snippet length), without
+// the API key, and without the descriptions of the secrets section, which
+// list the candidate secrets themselves.
+func mobsfRaw(raw []byte, key string) []byte {
+	var doc map[string]any
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		return []byte(redact.Text(strings.ReplaceAll(string(raw), key, "[REDACTED]")))
+	}
+	for _, v := range doc {
+		items, _ := v.([]any)
+		for _, it := range items {
+			if m, ok := it.(map[string]any); ok && m["section"] == "secrets" {
+				m["description"] = "[omitted by Pandaward: candidate secrets]"
+			}
+		}
+	}
+	b, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return nil
+	}
+	return []byte(strings.ReplaceAll(string(b), key, "[REDACTED]"))
 }
 
 var htmlTagRe = regexp.MustCompile(`<[^>]{1,40}>`)
