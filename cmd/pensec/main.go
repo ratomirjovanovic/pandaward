@@ -1100,7 +1100,7 @@ func cmdDoctor(ctx context.Context, args []string, w io.Writer) error {
 	} else {
 		fmt.Fprintln(w, "Project: not initialized here (run `pensec init`)")
 	}
-	fmt.Fprintln(w, "\nBuilt-in adapters (always available, offline): inventory, secrets, code, cicd, infra, supply, mobile")
+	fmt.Fprintln(w, "\nBuilt-in adapters (always available, offline): inventory, secrets, code, cicd, infra, supply, mobile, sarif-import (for files in .pensec/sarif or scan.sarif_files)")
 	fmt.Fprintln(w, "Optional scanners (never installed or downloaded by PenSec):")
 	for _, t := range tools {
 		state := "not installed"
