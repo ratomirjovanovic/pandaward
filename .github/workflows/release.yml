@@ -81,7 +81,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          plugin_files=".claude-plugin/plugin.json .claude-plugin/icon.png skills agents hooks .mcp.json LICENSE NOTICE README.md SECURITY.md"
+          plugin_files=".claude-plugin/plugin.json .claude-plugin/icon.png skills agents hooks LICENSE NOTICE README.md SECURITY.md"
 
           publish() {
             branch=$1
@@ -89,6 +89,9 @@ jobs:
             for f in $plugin_files; do
               [ -e "$f" ] && cp -R --parents "$f" "$stage/"
             done
+            # Marketplace clones must not rewrite line endings, or SHA256SUMS
+            # and the launcher break on checkouts with core.autocrlf.
+            printf '* -text\n' > "$stage/.gitattributes"
             mkdir -p "$stage/bin"
             if [ "$branch" = plugin-windows ]; then
               cp dist/pensec-windows-amd64.exe "$stage/bin/pensec.exe"

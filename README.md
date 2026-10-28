@@ -73,6 +73,8 @@ BLOCKED/UNSUPPORTED/SUSPECTED controls are not secure; see `pensec status` and `
 /plugin install pensec-windows@pensec    # Windows
 ```
 
+If `/plugin install` says `Marketplace "pensec" not found`, the first line was skipped: add the marketplace, then install.
+
 Then, in your project:
 
 ```text
