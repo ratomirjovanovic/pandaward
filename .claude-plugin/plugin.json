@@ -1,0 +1,33 @@
+{
+  "name": "pandaward",
+  "displayName": "Pandaward",
+  "version": "0.2.1",
+  "description": "Local, evidence-based application security assessment: inventory, static checks, cross-domain graph, coverage ledger and reports. Passive by default; network tests need a human-approved scope.",
+  "author": {
+    "name": "Ratomir Jovanovic",
+    "url": "https://github.com/ratomirjovanovic"
+  },
+  "keywords": [
+    "security",
+    "appsec",
+    "sast",
+    "pentest",
+    "sarif",
+    "supply-chain"
+  ],
+  "license": "AGPL-3.0-only",
+  "repository": "https://github.com/ratomirjovanovic/pandaward",
+  "homepage": "https://github.com/ratomirjovanovic/pandaward",
+  "icon": "./.claude-plugin/icon.png",
+  "mcpServers": {
+    "pandaward": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/pandaward",
+      "args": [
+        "mcp"
+      ],
+      "env": {
+        "PANDAWARD_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}"
+      }
+    }
+  }
+}
