@@ -48,6 +48,10 @@ type Manifest struct {
 		MaxRequestsTotal  int     `yaml:"max_requests_total"`
 		TimeoutSeconds    int     `yaml:"timeout_seconds"`
 	} `yaml:"limits"`
+	ZAP struct {
+		ActiveScan         bool `yaml:"active_scan"`
+		MaxDurationMinutes int  `yaml:"max_duration_minutes"`
+	} `yaml:"zap"`
 
 	hash string
 }
@@ -78,6 +82,9 @@ limits:
   requests_per_second: 1
   max_requests_total: 20
   timeout_seconds: 10
+zap:                 # ZAP baseline, run by: pensec test --profile staging-active
+  active_scan: false   # true sends ZAP attack payloads; never on production
+  max_duration_minutes: 10
 `
 
 // Path returns the manifest path.
@@ -150,6 +157,12 @@ func (m *Manifest) Validate(now time.Time) []string {
 	}
 	if m.Limits.TimeoutSeconds <= 0 || m.Limits.TimeoutSeconds > 60 {
 		p = append(p, "limits.timeout_seconds must be between 1 and 60")
+	}
+	if m.ZAP.MaxDurationMinutes < 0 || m.ZAP.MaxDurationMinutes > 120 {
+		p = append(p, "zap.max_duration_minutes must be between 0 and 120")
+	}
+	if m.ZAP.ActiveScan && m.Environment == "production" {
+		p = append(p, "zap.active_scan is not allowed when environment is production")
 	}
 	if m.Window.Start != "" {
 		st, err := time.Parse(time.RFC3339, m.Window.Start)

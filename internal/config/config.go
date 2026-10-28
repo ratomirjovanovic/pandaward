@@ -49,6 +49,11 @@ type Config struct {
 	Policy struct {
 		AIAnalysis string `yaml:"ai_analysis"`
 	} `yaml:"policy"`
+	Runtime struct {
+		// ZAPPath points to the ZAP launcher (zap.sh or zap.bat) when it
+		// is not on PATH or in the default install location.
+		ZAPPath string `yaml:"zap_path"`
+	} `yaml:"runtime"`
 	Hooks struct {
 		// AutoRetest lets the Claude Code Stop hook run a changed-only
 		// retest after a turn that edited files.

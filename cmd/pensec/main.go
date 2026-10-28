@@ -38,6 +38,7 @@ import (
 	"github.com/ratomirjovanovic/pensec/internal/scope"
 	"github.com/ratomirjovanovic/pensec/internal/store"
 	"github.com/ratomirjovanovic/pensec/internal/version"
+	"github.com/ratomirjovanovic/pensec/internal/zap"
 )
 
 const usage = `pensec - local, evidence-based application security assessment
@@ -68,6 +69,7 @@ Assessment (local, no target network traffic):
 Network-active (human authorization required):
   scope           init | show | validate | approve --by <name> | revoke
   test            --profile production-observe  (passive header/TLS review of approved origins)
+                  --profile staging-active      (ZAP spider and passive scan, active scan if the manifest allows)
 
 Integration and tooling:
   doctor          Environment, optional scanners and their network needs
@@ -1059,8 +1061,8 @@ func cmdTest(ctx context.Context, args []string, w, ew io.Writer) error {
 	}
 	defer e.Close()
 	switch *profile {
-	case "production-observe":
-	case "staging-active", "local-runtime", "manual-assisted":
+	case "production-observe", "staging-active":
+	case "local-runtime", "manual-assisted":
 		return exitErr{3, "profile " + *profile + " is UNSUPPORTED in this release: no runtime adapter is implemented, so related controls stay UNSUPPORTED/BLOCKED in the report. Use /pensec:review for manual-assisted analysis."}
 	case "":
 		return exitErr{2, "--profile is required"}
@@ -1070,11 +1072,42 @@ func cmdTest(ctx context.Context, args []string, w, ew io.Writer) error {
 	if _, _, err := e.CheckScope(time.Now()); err != nil {
 		return exitErr{3, err.Error()}
 	}
-	res, err := e.Observe(ctx, func(m string) {
+	progress := func(m string) {
 		if !*asJSON {
 			fmt.Fprintln(ew, "·", m)
 		}
-	})
+	}
+	if *profile == "staging-active" {
+		res, err := e.StagingActive(ctx, progress)
+		if err != nil {
+			return err
+		}
+		if *asJSON {
+			return printJSON(w, res)
+		}
+		ids := make([]string, 0, len(res.Controls))
+		for id := range res.Controls {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		var cs []string
+		for _, id := range ids {
+			cs = append(cs, id+" "+res.Controls[id])
+		}
+		fmt.Fprintf(w, "staging-active: %d/%d requests, %s, %d finding signal(s)\n", res.Requests, res.Budget, strings.Join(cs, ", "), res.Findings)
+		refused := 0
+		for _, n := range res.Refused {
+			refused += n
+		}
+		if refused > 0 {
+			fmt.Fprintf(w, "  scope guard refused %d request(s) outside the manifest\n", refused)
+		}
+		for _, n := range res.Notes {
+			fmt.Fprintln(w, "  note:", n)
+		}
+		return nil
+	}
+	res, err := e.Observe(ctx, progress)
 	if err != nil {
 		return err
 	}
@@ -1130,6 +1163,15 @@ func cmdDoctor(ctx context.Context, args []string, w io.Writer) error {
 		}
 		fmt.Fprintf(w, "  %-12s %s%s\n", t.Name, state, net)
 	}
+	zapPath := ""
+	if cfg != nil {
+		zapPath = cfg.Runtime.ZAPPath
+	}
+	if l, err := zap.Locate(zapPath); err == nil {
+		fmt.Fprintf(w, "  %-12s found %s (%s) [runtime: pensec test --profile staging-active]\n", "zap", zap.Version(l), l)
+	} else {
+		fmt.Fprintf(w, "  %-12s not installed [runtime: pensec test --profile staging-active; needs Java 17+]\n", "zap")
+	}
 	fmt.Fprintln(w, "\nMissing optional scanners make their controls BLOCKED with a reason; they never count as PASS.")
 	return nil
 }
@@ -1152,7 +1194,7 @@ func cmdCapabilities(args []string, w io.Writer) error {
 		switch {
 		case c.Method == catalog.MethodManual:
 			m = "manual-assisted"
-		case c.Adapter == "observe-headers":
+		case c.Adapter == "observe-headers" || c.Adapter == "zap":
 			m = MaturityObserve
 		case m == "" && c.Method == catalog.MethodRuntime:
 			m = "planned (not implemented)"
@@ -1164,7 +1206,8 @@ func cmdCapabilities(args []string, w io.Writer) error {
 	return nil
 }
 
-// MaturityObserve is the maturity of the production-observe adapter.
+// MaturityObserve is the maturity of the runtime adapters (production-observe
+// headers and ZAP).
 const MaturityObserve = adapters.MaturityUnvalidated
 
 func cmdSelftest(ctx context.Context, args []string, w io.Writer) error {
