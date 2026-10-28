@@ -13,12 +13,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ratomirjovanovic/pensec/internal/engine"
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/report"
-	"github.com/ratomirjovanovic/pensec/internal/scope"
-	"github.com/ratomirjovanovic/pensec/internal/store"
-	"github.com/ratomirjovanovic/pensec/internal/testfixture"
+	"github.com/ratomirjovanovic/pandaward/internal/engine"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/report"
+	"github.com/ratomirjovanovic/pandaward/internal/scope"
+	"github.com/ratomirjovanovic/pandaward/internal/store"
+	"github.com/ratomirjovanovic/pandaward/internal/testfixture"
 )
 
 // Credentials of the fixture app. They must never appear in the ledger,
@@ -81,19 +81,19 @@ const authzYAML = `identities:
   - name: alice
     tenant: acme
     header: Authorization
-    value_env: PENSEC_T_ALICE
+    value_env: PANDAWARD_T_ALICE
   - name: bob
     tenant: beta
     header: Authorization
-    value_env: PENSEC_T_BOB
+    value_env: PANDAWARD_T_BOB
   - name: carol
     tenant: acme
     header: Authorization
-    value_env: PENSEC_T_CAROL
+    value_env: PANDAWARD_T_CAROL
   - name: old-alice
     tenant: acme
     header: Authorization
-    value_env: PENSEC_T_OLD
+    value_env: PANDAWARD_T_OLD
     revoked: true
 authorization_checks:
   - name: acme invoice
@@ -163,14 +163,14 @@ func noZAP(t *testing.T) {
 }
 
 func setCreds(t *testing.T) {
-	t.Setenv("PENSEC_T_ALICE", tokAlice)
-	t.Setenv("PENSEC_T_BOB", tokBob)
-	t.Setenv("PENSEC_T_CAROL", tokCarol)
-	t.Setenv("PENSEC_T_OLD", tokOld)
+	t.Setenv("PANDAWARD_T_ALICE", tokAlice)
+	t.Setenv("PANDAWARD_T_BOB", tokBob)
+	t.Setenv("PANDAWARD_T_CAROL", tokCarol)
+	t.Setenv("PANDAWARD_T_OLD", tokOld)
 }
 
 func TestAuthzDetectsSeededBOLAAndPassesWhenFixed(t *testing.T) {
-	t.Setenv("PENSEC_CONFIG_DIR", t.TempDir())
+	t.Setenv("PANDAWARD_CONFIG_DIR", t.TempDir())
 	var fixed atomic.Bool
 	var hits atomic.Int64
 	app := invoiceApp(&fixed, &hits)
@@ -237,7 +237,7 @@ func assertNoTokens(t *testing.T, e *engine.Engine) {
 	if _, err := report.Write(r, report.DefaultDir(e.Root), []string{"html", "markdown", "json", "sarif", "csv"}); err != nil {
 		t.Fatal(err)
 	}
-	err = filepath.Walk(filepath.Join(e.Root, ".pensec"), func(p string, info os.FileInfo, err error) error {
+	err = filepath.Walk(filepath.Join(e.Root, ".pandaward"), func(p string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() || strings.HasSuffix(p, "scope.yaml") {
 			return err
 		}
@@ -258,7 +258,7 @@ func assertNoTokens(t *testing.T, e *engine.Engine) {
 }
 
 func TestAuthzNeedsApprovalAndCredentialsBeforeAnyRequest(t *testing.T) {
-	t.Setenv("PENSEC_CONFIG_DIR", t.TempDir())
+	t.Setenv("PANDAWARD_CONFIG_DIR", t.TempDir())
 	var fixed atomic.Bool
 	var hits atomic.Int64
 	app := invoiceApp(&fixed, &hits)
@@ -270,8 +270,8 @@ func TestAuthzNeedsApprovalAndCredentialsBeforeAnyRequest(t *testing.T) {
 		t.Fatalf("missing approval must stop the run, got %v", err)
 	}
 	approveScope(t, e)
-	t.Setenv("PENSEC_T_BOB", "")
-	if _, err := e.StagingActive(context.Background(), func(string) {}); err == nil || !strings.Contains(err.Error(), "PENSEC_T_BOB") {
+	t.Setenv("PANDAWARD_T_BOB", "")
+	if _, err := e.StagingActive(context.Background(), func(string) {}); err == nil || !strings.Contains(err.Error(), "PANDAWARD_T_BOB") {
 		t.Fatalf("a missing credential must stop the run, got %v", err)
 	}
 	if hits.Load() != 0 {
@@ -280,7 +280,7 @@ func TestAuthzNeedsApprovalAndCredentialsBeforeAnyRequest(t *testing.T) {
 }
 
 func TestAuthzRedirectNotFollowedAndOutOfScopeRejected(t *testing.T) {
-	t.Setenv("PENSEC_CONFIG_DIR", t.TempDir())
+	t.Setenv("PANDAWARD_CONFIG_DIR", t.TempDir())
 	var fixed atomic.Bool
 	fixed.Store(true)
 	var hits atomic.Int64

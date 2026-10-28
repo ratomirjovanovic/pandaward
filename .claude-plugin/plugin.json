@@ -1,6 +1,6 @@
 {
-  "name": "pensec",
-  "displayName": "PenSec",
+  "name": "pandaward",
+  "displayName": "Pandaward",
   "version": "0.1.6",
   "description": "Local, evidence-based application security assessment: inventory, static checks, cross-domain graph, coverage ledger and reports. Passive by default; network tests need a human-approved scope.",
   "author": {
@@ -16,17 +16,17 @@
     "supply-chain"
   ],
   "license": "AGPL-3.0-only",
-  "repository": "https://github.com/ratomirjovanovic/pensec",
-  "homepage": "https://github.com/ratomirjovanovic/pensec",
+  "repository": "https://github.com/ratomirjovanovic/pandaward",
+  "homepage": "https://github.com/ratomirjovanovic/pandaward",
   "icon": "./.claude-plugin/icon.png",
   "mcpServers": {
-    "pensec": {
-      "command": "${CLAUDE_PLUGIN_ROOT}/bin/pensec",
+    "pandaward": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/pandaward",
       "args": [
         "mcp"
       ],
       "env": {
-        "PENSEC_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}"
+        "PANDAWARD_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}"
       }
     }
   }

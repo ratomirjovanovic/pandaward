@@ -239,7 +239,7 @@ func RuleFromBody(body string) string {
 	return unknown
 }
 
-// FileTypeFromBody reads the file type row that pensec feedback writes.
+// FileTypeFromBody reads the file type row that pandaward feedback writes.
 func FileTypeFromBody(body string) string {
 	m := fileType.FindStringSubmatch(body)
 	if m == nil {

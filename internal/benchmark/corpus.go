@@ -1,7 +1,7 @@
 // Package benchmark measures the built-in rules against a versioned corpus
 // of vulnerable and safe cases and reports TP, FP, FN and TN per rule.
 //
-// The corpus is small and written by the PenSec authors, so the numbers say
+// The corpus is small and written by the Pandaward authors, so the numbers say
 // how the rules behave on these cases, not how they generalize. Each case is
 // a tiny repository; it is written to a temporary directory and scanned with
 // the same inventory and adapter code a real scan uses.
@@ -10,7 +10,7 @@ package benchmark
 import (
 	"strings"
 
-	"github.com/ratomirjovanovic/pensec/internal/redact"
+	"github.com/ratomirjovanovic/pandaward/internal/redact"
 )
 
 // CorpusVersion changes whenever cases are added, removed or edited.

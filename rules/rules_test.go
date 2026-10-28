@@ -9,7 +9,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/ratomirjovanovic/pensec/internal/catalog"
+	"github.com/ratomirjovanovic/pandaward/internal/catalog"
 )
 
 type rule struct {
@@ -51,16 +51,16 @@ func TestSemgrepRulesAreMappedAndHaveFixtures(t *testing.T) {
 			t.Fatalf("%s has no fixture file", f)
 		}
 		for _, r := range doc.Rules {
-			if !strings.HasPrefix(r.ID, "pensec-") || seen[r.ID] {
-				t.Errorf("%s: rule id %q must be unique and start with pensec-", f, r.ID)
+			if !strings.HasPrefix(r.ID, "pandaward-") || seen[r.ID] {
+				t.Errorf("%s: rule id %q must be unique and start with pandaward-", f, r.ID)
 			}
 			seen[r.ID] = true
 			if len(r.Languages) == 0 || r.Message == "" || (r.Severity != "ERROR" && r.Severity != "WARNING" && r.Severity != "INFO") {
 				t.Errorf("%s: incomplete rule definition", r.ID)
 			}
-			ctl, _ := r.Metadata["pensec-control"].(string)
+			ctl, _ := r.Metadata["pandaward-control"].(string)
 			if c := catalog.ControlByID(ctl); c == nil || c.Domain == "R" {
-				t.Errorf("%s: pensec-control %q is not a catalog control", r.ID, ctl)
+				t.Errorf("%s: pandaward-control %q is not a catalog control", r.ID, ctl)
 			}
 			if cwe, _ := r.Metadata["cwe"].(string); !strings.HasPrefix(cwe, "CWE-") {
 				t.Errorf("%s: missing CWE", r.ID)

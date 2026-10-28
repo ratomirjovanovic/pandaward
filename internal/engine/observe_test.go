@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/scope"
-	"github.com/ratomirjovanovic/pensec/internal/store"
-	"github.com/ratomirjovanovic/pensec/internal/testfixture"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/scope"
+	"github.com/ratomirjovanovic/pandaward/internal/store"
+	"github.com/ratomirjovanovic/pandaward/internal/testfixture"
 )
 
 func writeScope(t *testing.T, root, target string, allowPrivate bool) *scope.Manifest {

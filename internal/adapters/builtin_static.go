@@ -10,10 +10,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ratomirjovanovic/pensec/internal/inventory"
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/redact"
-	"github.com/ratomirjovanovic/pensec/internal/version"
+	"github.com/ratomirjovanovic/pandaward/internal/inventory"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/redact"
+	"github.com/ratomirjovanovic/pandaward/internal/version"
 )
 
 // ---- secrets: E-001, E-002 ----
@@ -67,9 +67,9 @@ func (a secretsAdapter) Run(ctx context.Context, c *Context) (Result, model.Run)
 				res.Signals = append(res.Signals, model.Signal{
 					RuleID: "secret." + r.ID, ControlID: "E-001", Title: "Hardcoded " + r.Title, Severity: sev, Confidence: conf, CWE: "CWE-798",
 					File: f.Path, StartLine: i + 1, EndLine: i + 1, Snippet: redact.Line(strings.TrimSpace(l)),
-					Message:   "A value matching the " + r.Title + " format is stored in the repository. The value is masked in all PenSec output.",
+					Message:   "A value matching the " + r.Title + " format is stored in the repository. The value is masked in all Pandaward output.",
 					Fix:       "Revoke and rotate the credential at the provider first, then remove it from the code and git history; load it from a secret manager or environment at runtime.",
-					Retest:    "Re-run `pensec scan`; also verify with the provider that the old credential is revoked.",
+					Retest:    "Re-run `pandaward scan`; also verify with the provider that the old credential is revoked.",
 					Collector: a.Name(), Key: redact.Mask(val),
 				})
 			}
@@ -83,9 +83,9 @@ func (a secretsAdapter) Run(ctx context.Context, c *Context) (Result, model.Run)
 			}
 			res.Signals = append(res.Signals, model.Signal{
 				RuleID: "secret.tracked-sensitive-file", ControlID: "E-002", Title: "Credential or environment file tracked in git", Severity: model.SevHigh, Confidence: model.Confirmed, CWE: "CWE-538",
-				File: s, Message: "This file type usually holds credentials and is committed to git. PenSec did not read its content.",
+				File: s, Message: "This file type usually holds credentials and is committed to git. Pandaward did not read its content.",
 				Fix:       "Rotate any credentials it contains, `git rm --cached` it, add it to .gitignore, and purge it from history if the repository is shared.",
-				Retest:    "Re-run `pensec scan`; the file must no longer be tracked.",
+				Retest:    "Re-run `pandaward scan`; the file must no longer be tracked.",
 				Collector: a.Name(),
 			})
 		}

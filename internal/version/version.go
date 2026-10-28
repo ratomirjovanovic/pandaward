@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// Version is overridden at build time with -ldflags "-X github.com/ratomirjovanovic/pensec/internal/version.Version=...".
+// Version is overridden at build time with -ldflags "-X github.com/ratomirjovanovic/pandaward/internal/version.Version=...".
 // Without it, a binary built by `go install ...@vX.Y.Z` reports the module
 // version Go recorded, and a plain source build reports "dev".
 var Version = "dev"

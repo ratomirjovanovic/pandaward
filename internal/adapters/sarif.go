@@ -16,17 +16,17 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/ratomirjovanovic/pensec/internal/config"
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/redact"
+	"github.com/ratomirjovanovic/pandaward/internal/config"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/redact"
 )
 
 // SARIFImport is the adapter that imports results of analyzers the user ran
-// themselves. PenSec never runs those tools; it only reads their SARIF files.
+// themselves. Pandaward never runs those tools; it only reads their SARIF files.
 const SARIFImport = "sarif-import"
 
 // SARIFDir holds SARIF files that are imported without configuration.
-const SARIFDir = ".pensec/sarif"
+const SARIFDir = ".pandaward/sarif"
 
 const sarifControl = "R-002"
 
@@ -39,7 +39,7 @@ var (
 )
 
 // SARIFInputs lists the SARIF files to import as slash-separated paths:
-// every *.sarif and *.sarif.json in .pensec/sarif, then scan.sarif_files.
+// every *.sarif and *.sarif.json in .pandaward/sarif, then scan.sarif_files.
 // Configured paths are listed even when they are missing or unsafe, so the
 // adapter reports them as an error instead of skipping them silently.
 func SARIFInputs(root string, cfg *config.Config) []string {
@@ -259,7 +259,7 @@ type sarifImportResult struct {
 
 // parseSARIF turns one SARIF log into signals. Everything in it is
 // untrusted: text is redacted, locations must resolve inside the root, and
-// snippets come from PenSec's own read of the file, never from the log.
+// snippets come from Pandaward's own read of the file, never from the log.
 func parseSARIF(c *Context, file string, raw []byte) (sarifImportResult, error) {
 	var out sarifImportResult
 	var doc struct {
@@ -284,8 +284,8 @@ func parseSARIF(c *Context, file string, raw []byte) (sarifImportResult, error) 
 			return out, fmt.Errorf("run %d has no tool.driver.name", i)
 		}
 		d := r.Tool.Driver
-		// PenSec's own SARIF report must not be imported back as new findings.
-		if strings.EqualFold(d.Name, "PenSec") {
+		// Pandaward's own SARIF report must not be imported back as new findings.
+		if strings.EqualFold(d.Name, "Pandaward") {
 			out.skipped += len(r.Results)
 			continue
 		}
@@ -328,7 +328,7 @@ func parseSARIF(c *Context, file string, raw []byte) (sarifImportResult, error) 
 			}
 			s := model.Signal{RuleID: "sarif." + toolID + "." + sarifID(ruleID, true), ControlID: sarifControl, Title: redact.Line(d.Name + ": " + title),
 				Severity: sarifSeverity(res, rule), Confidence: model.Hypothesis, CWE: sarifCWE(res, rule), Message: redact.Line(msg),
-				Fix:       redact.Line("Review this " + d.Name + " result and fix it in the code, or record a false positive. Imported from " + file + "; PenSec did not verify it."),
+				Fix:       redact.Line("Review this " + d.Name + " result and fix it in the code, or record a false positive. Imported from " + file + "; Pandaward did not verify it."),
 				Collector: SARIFImport}
 			if len(res.Locations) > 0 && res.Locations[0].PhysicalLocation != nil {
 				pl := res.Locations[0].PhysicalLocation

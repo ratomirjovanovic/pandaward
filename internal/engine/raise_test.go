@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ratomirjovanovic/pensec/internal/adapters"
-	"github.com/ratomirjovanovic/pensec/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/adapters"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
 )
 
 type ownsD006 struct{}

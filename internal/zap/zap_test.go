@@ -17,13 +17,13 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/ratomirjovanovic/pensec/internal/scope"
+	"github.com/ratomirjovanovic/pandaward/internal/scope"
 )
 
 func manifest(t *testing.T, extra string, targets ...string) *scope.Manifest {
 	t.Helper()
 	root := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(root, ".pensec"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, ".pandaward"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	var ts []string
@@ -232,13 +232,13 @@ func TestParseReport(t *testing.T) {
 }
 
 // TestRealZAP runs the installed ZAP against the fixture site. It needs ZAP
-// and Java 17+, so it runs only with PENSEC_REAL_ZAP=1 (PENSEC_ZAP_PATH may
+// and Java 17+, so it runs only with PANDAWARD_REAL_ZAP=1 (PANDAWARD_ZAP_PATH may
 // point to the launcher).
 func TestRealZAP(t *testing.T) {
-	if os.Getenv("PENSEC_REAL_ZAP") != "1" {
-		t.Skip("set PENSEC_REAL_ZAP=1 to run against an installed ZAP")
+	if os.Getenv("PANDAWARD_REAL_ZAP") != "1" {
+		t.Skip("set PANDAWARD_REAL_ZAP=1 to run against an installed ZAP")
 	}
-	launcher, err := Locate(os.Getenv("PENSEC_ZAP_PATH"))
+	launcher, err := Locate(os.Getenv("PANDAWARD_ZAP_PATH"))
 	if err != nil {
 		t.Fatal(err)
 	}

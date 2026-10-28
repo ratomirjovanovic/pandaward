@@ -1,5 +1,5 @@
 blank_issues_enabled: true
 contact_links:
-  - name: Report a vulnerability in PenSec itself
-    url: https://github.com/ratomirjovanovic/pensec/security/advisories/new
-    about: Please report security problems in PenSec privately.
+  - name: Report a vulnerability in Pandaward itself
+    url: https://github.com/ratomirjovanovic/pandaward/security/advisories/new
+    about: Please report security problems in Pandaward privately.

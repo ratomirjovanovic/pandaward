@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PenSec demo</title>
-<meta name="description" content="PenSec in Claude Code on a synthetic vulnerable shop application: one request, the assessment, one question, a fix with a retest, and an automatic retest after a later edit. Real output, findings explorer and the full HTML report.">
+<title>Pandaward demo</title>
+<meta name="description" content="Pandaward in Claude Code on a synthetic vulnerable shop application: one request, the assessment, one question, a fix with a retest, and an automatic retest after a later edit. Real output, findings explorer and the full HTML report.">
 <link rel="icon" href="../icon.png">
 <link rel="stylesheet" href="../style.css">
 </head>
 <body>
 <header class="top"><div class="wrap">
-  <a href="../"><img src="../icon.png" alt="PenSec home"></a><b>PenSec demo</b>
+  <a href="../"><img src="../icon.png" alt="Pandaward home"></a><b>Pandaward demo</b>
   <nav>
     <a href="#replay">Replay</a>
     <a href="#findings">Findings</a>
@@ -22,14 +22,14 @@
   <div style="padding:40px 0 8px">
     <h1 style="font-size:clamp(28px,4vw,40px);margin:0 0 10px;letter-spacing:-0.01em">One request, the whole assessment</h1>
     <p class="sub" style="color:var(--muted);max-width:46em;margin:0">
-      <b>acme-shop</b> is a small synthetic project bundled with PenSec: an Express API with Stripe webhooks, a Python helper that calls an LLM, a GitHub Actions workflow, a Dockerfile, Terraform and an Android manifest.
+      <b>acme-shop</b> is a small synthetic project bundled with Pandaward: an Express API with Stripe webhooks, a Python helper that calls an LLM, a GitHub Actions workflow, a Dockerfile, Terraform and an Android manifest.
       In Claude Code you ask once. Claude runs the assessment, asks one question, applies the fix you choose with a retest, and later retests its own edits without being asked.
     </p>
   </div>
 
   <section id="replay" style="border-top:0">
     <h2>Replay in Claude Code</h2>
-    <p class="sub">Every command output and the hook message are produced by the real PenSec build on this fixture in CI. The short user and Claude messages are written for the demo. Pick a step or let it play.</p>
+    <p class="sub">Every command output and the hook message are produced by the real Pandaward build on this fixture in CI. The short user and Claude messages are written for the demo. Pick a step or let it play.</p>
     <div class="term" role="region" aria-label="Claude Code session replay">
       <div class="bar"><i></i><i></i><i></i><span>claude · ~/acme-shop</span>
         <div class="ctl"><button id="play" type="button">Pause</button><button id="skip" type="button">Show all</button></div>
@@ -53,9 +53,9 @@
     <div class="two">
       <div>
         <h3>In Claude Code</h3>
-<pre class="code">/plugin marketplace add ratomirjovanovic/pensec
-/plugin install pensec@pensec          # macOS, Linux
-/plugin install pensec-windows@pensec  # Windows
+<pre class="code">/plugin marketplace add ratomirjovanovic/pandaward
+/plugin install pandaward@pandaward          # macOS, Linux
+/plugin install pandaward-windows@pandaward  # Windows
 
 # restart Claude Code, then in your project:
 Check the security of this project.</pre>
@@ -63,8 +63,8 @@ Check the security of this project.</pre>
       <div>
         <h3>CLI</h3>
 <pre class="code">cd your-project
-pensec assess</pre>
-        <p>Install with Homebrew, Scoop, a release binary or <code>go install</code>; see the <a href="https://github.com/ratomirjovanovic/pensec/wiki/Installation">installation guide</a>.</p>
+pandaward assess</pre>
+        <p>Install with Homebrew, Scoop, a release binary or <code>go install</code>; see the <a href="https://github.com/ratomirjovanovic/pandaward/wiki/Installation">installation guide</a>.</p>
       </div>
     </div>
   </section>

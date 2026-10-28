@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ratomirjovanovic/pensec/internal/adapters"
-	"github.com/ratomirjovanovic/pensec/internal/catalog"
+	"github.com/ratomirjovanovic/pandaward/internal/adapters"
+	"github.com/ratomirjovanovic/pandaward/internal/catalog"
 )
 
 // Adapters decided outside the adapter registry: evidence integrity runs in

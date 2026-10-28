@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ratomirjovanovic/pensec/internal/inventory"
+	"github.com/ratomirjovanovic/pandaward/internal/inventory"
 )
 
 func walk(t *testing.T, files map[string]string, opt inventory.Options) *inventory.Inventory {

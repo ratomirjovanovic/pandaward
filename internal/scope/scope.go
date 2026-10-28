@@ -20,7 +20,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// FileName is the scope manifest name inside .pensec/.
+// FileName is the scope manifest name inside .pandaward/.
 const FileName = "scope.yaml"
 
 // Manifest is the authorization record for network-active tests.
@@ -86,11 +86,11 @@ type AuthCheck struct {
 // Anonymous is the implicit identity without credentials.
 const Anonymous = "anonymous"
 
-// Template is written by `pensec scope init`. All targets are empty and
+// Template is written by `pandaward scope init`. All targets are empty and
 // acknowledged is false, so nothing can run until a human fills it in.
-const Template = `# PenSec scope manifest (schema v1)
+const Template = `# Pandaward scope manifest (schema v1)
 # Required before ANY network-active test. Fill in, then approve it yourself
-# from an interactive terminal:  pensec scope approve --by "<your name>"
+# from an interactive terminal:  pandaward scope approve --by "<your name>"
 # Editing this file invalidates any previous approval.
 schema_version: 1
 authorization:
@@ -112,7 +112,7 @@ limits:
   requests_per_second: 1
   max_requests_total: 20
   timeout_seconds: 10
-zap:                 # ZAP baseline, run by: pensec test --profile staging-active
+zap:                 # ZAP baseline, run by: pandaward test --profile staging-active
   active_scan: false   # true sends ZAP attack payloads; never on production
   max_duration_minutes: 10
 # Authorization checks (staging-active). Each check is one read-only request
@@ -122,7 +122,7 @@ identities: []
 #  - name: alice
 #    tenant: acme
 #    header: Authorization           # header that carries the credential
-#    value_env: PENSEC_ID_ALICE      # environment variable with the full header value
+#    value_env: PANDAWARD_ID_ALICE      # environment variable with the full header value
 #    revoked: false                  # true for a logged-out token that must be refused
 authorization_checks: []
 #  - name: acme invoice
@@ -133,13 +133,13 @@ authorization_checks: []
 `
 
 // Path returns the manifest path.
-func Path(root string) string { return filepath.Join(root, ".pensec", FileName) }
+func Path(root string) string { return filepath.Join(root, ".pandaward", FileName) }
 
 // Load reads and validates the manifest.
 func Load(root string) (*Manifest, error) {
 	b, err := os.ReadFile(Path(root))
 	if errors.Is(err, os.ErrNotExist) {
-		return nil, fmt.Errorf("no scope manifest at %s: run `pensec scope init` and fill it in", Path(root))
+		return nil, fmt.Errorf("no scope manifest at %s: run `pandaward scope init` and fill it in", Path(root))
 	}
 	if err != nil {
 		return nil, err

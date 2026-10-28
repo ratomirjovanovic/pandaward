@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ratomirjovanovic/pensec/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
 )
 
 // File is a scanned text file.
@@ -215,7 +215,7 @@ func walkFiles(ctx context.Context, absRoot string, opt Options, withLines bool,
 	})
 }
 
-// LangOf returns the analysis language for a file name, or "" when PenSec does
+// LangOf returns the analysis language for a file name, or "" when Pandaward does
 // not analyze that file type.
 func LangOf(name string) string { return langOf(name) }
 

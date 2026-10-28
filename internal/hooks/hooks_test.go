@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ratomirjovanovic/pensec/internal/engine"
+	"github.com/ratomirjovanovic/pandaward/internal/engine"
 )
 
 func TestSessionStartIsHandsFree(t *testing.T) {
@@ -22,10 +22,10 @@ func TestSessionStartIsHandsFree(t *testing.T) {
 	var out bytes.Buffer
 	Run("session-start", strings.NewReader(`{}`), &out)
 	got := out.String()
-	if !strings.Contains(got, "pensec:start") {
+	if !strings.Contains(got, "pandaward:start") {
 		t.Errorf("expected the guided assessment to be offered, got %q", got)
 	}
-	if strings.Contains(got, "Next: /pensec") {
+	if strings.Contains(got, "Next: /pandaward") {
 		t.Errorf("hook must not ask the user to type a command, got %q", got)
 	}
 }
@@ -38,19 +38,24 @@ func TestGuardDecision(t *testing.T) {
 		input json.RawMessage
 		want  string
 	}{
-		{"Bash", cmd(`pensec scope approve --by me`), "ask"},
-		{"Bash", cmd(`./bin/pensec.exe test --profile production-observe`), "ask"},
-		{"Bash", cmd(`pensec findings false-positive PSEC-0001 --by x --note y`), "ask"},
-		{"Bash", cmd(`sqlite3 .pensec/private/state.db "update findings set status='REMEDIATED'"`), "ask"},
-		{"Bash", cmd(`echo "acknowledged: true" >> .pensec/scope.yaml`), "ask"},
-		{"Bash", cmd(`cat .pensec/scope.yaml`), ""},
-		{"Bash", cmd(`pensec scan --json`), ""},
-		{"Bash", cmd(`pensec findings list`), ""},
-		{"Bash", cmd(`pensec findings apply --file /tmp/d.json --by me`), "ask"},
-		{"PowerShell", cmd(`& "C:\pensec\bin\pensec.exe" findings apply --file d.json --by me`), "ask"},
-		{"Write", file(`D:\proj\.pensec\private\state.db`), "deny"},
-		{"Edit", file(`/proj/.pensec/scope.yaml`), "ask"},
+		{"Bash", cmd(`pandaward scope approve --by me`), "ask"},
+		{"Bash", cmd(`./bin/pandaward.exe test --profile production-observe`), "ask"},
+		{"Bash", cmd(`pandaward findings false-positive PW-0001 --by x --note y`), "ask"},
+		{"Bash", cmd(`sqlite3 .pandaward/private/state.db "update findings set status='REMEDIATED'"`), "ask"},
+		{"Bash", cmd(`echo "acknowledged: true" >> .pandaward/scope.yaml`), "ask"},
+		{"Bash", cmd(`cat .pandaward/scope.yaml`), ""},
+		{"Bash", cmd(`pandaward scan --json`), ""},
+		{"Bash", cmd(`pandaward findings list`), ""},
+		{"Bash", cmd(`pandaward findings apply --file /tmp/d.json --by me`), "ask"},
+		{"PowerShell", cmd(`& "C:\pandaward\bin\pandaward.exe" findings apply --file d.json --by me`), "ask"},
+		{"Write", file(`D:\proj\.pandaward\private\state.db`), "deny"},
+		{"Edit", file(`/proj/.pandaward/scope.yaml`), "ask"},
 		{"Edit", file(`/proj/src/app.ts`), ""},
+		// A pensec CLI from before the rename may still be on PATH.
+		{"Bash", cmd(`pensec scope approve --by me`), "ask"},
+		{"Bash", cmd(`pensec.exe findings apply --file d.json --by me`), "ask"},
+		{"Write", file(`/proj/.pensec/private/state.db`), "deny"},
+		{"Edit", file(`/proj/.pensec/scope.yaml`), "ask"},
 	}
 	for _, c := range cases {
 		got, _ := GuardDecision(c.tool, c.input)
@@ -63,9 +68,9 @@ func TestGuardDecision(t *testing.T) {
 func TestApplyPromptListsDecisions(t *testing.T) {
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "d.json"), []byte(`[
-		{"finding_id":"PSEC-0003","action":"confirm","note":"reachable"},
-		{"finding_id":"PSEC-0007","action":"accept-risk","note":"internal only","expires":"2027-01-31"}]`), 0o644)
-	b, _ := json.Marshal(map[string]any{"cwd": dir, "tool_name": "Bash", "tool_input": map[string]string{"command": `pensec findings apply --file "d.json" --by me`}})
+		{"finding_id":"PW-0003","action":"confirm","note":"reachable"},
+		{"finding_id":"PW-0007","action":"accept-risk","note":"internal only","expires":"2027-01-31"}]`), 0o644)
+	b, _ := json.Marshal(map[string]any{"cwd": dir, "tool_name": "Bash", "tool_input": map[string]string{"command": `pandaward findings apply --file "d.json" --by me`}})
 	t.Setenv("CLAUDE_PROJECT_DIR", dir)
 	var out bytes.Buffer
 	Run("pre-tool", bytes.NewReader(b), &out)
@@ -74,7 +79,7 @@ func TestApplyPromptListsDecisions(t *testing.T) {
 		t.Fatal(err)
 	}
 	r := d.HookSpecificOutput.PermissionDecisionReason
-	if d.HookSpecificOutput.PermissionDecision != "ask" || !strings.Contains(r, "PSEC-0003 confirm: reachable") || !strings.Contains(r, "PSEC-0007 accept-risk: internal only (until 2027-01-31)") {
+	if d.HookSpecificOutput.PermissionDecision != "ask" || !strings.Contains(r, "PW-0003 confirm: reachable") || !strings.Contains(r, "PW-0007 accept-risk: internal only (until 2027-01-31)") {
 		t.Fatalf("the prompt must list every decision, got %+v", d)
 	}
 }

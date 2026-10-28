@@ -1,5 +1,5 @@
 // Package hooks implements the Claude Code lifecycle hooks. Every hook is
-// silent and exits 0 when PenSec is not initialized, and none of them sends
+// silent and exits 0 when Pandaward is not initialized, and none of them sends
 // network traffic. Only the Stop hook scans: a changed-only passive retest
 // after a turn that edited files, bounded by RetestBudget and turned off with
 // hooks.auto_retest: false.
@@ -15,11 +15,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ratomirjovanovic/pensec/internal/engine"
-	"github.com/ratomirjovanovic/pensec/internal/redact"
+	"github.com/ratomirjovanovic/pandaward/internal/engine"
+	"github.com/ratomirjovanovic/pandaward/internal/redact"
 )
 
-// Input is the subset of the hook payload PenSec reads.
+// Input is the subset of the hook payload Pandaward reads.
 type Input struct {
 	SessionID string          `json:"session_id"`
 	Cwd       string          `json:"cwd"`
@@ -91,9 +91,9 @@ func sessionStart(in Input, w io.Writer) int {
 		return 0
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "PenSec ledger for %q (source of truth is .pensec/private/state.db, not this summary).\n", redact.Line(s.Project))
+	fmt.Fprintf(&b, "Pandaward ledger for %q (source of truth is .pandaward/private/state.db, not this summary).\n", redact.Line(s.Project))
 	if s.Assessment == nil {
-		b.WriteString("No assessment yet. When the user asks about security, run the guided assessment yourself (skill pensec:start).\n")
+		b.WriteString("No assessment yet. When the user asks about security, run the guided assessment yourself (skill pandaward:start).\n")
 	} else {
 		fmt.Fprintf(&b, "Latest: %s (%s). Decisive coverage %d/%d controls. Open findings: %d confirmed, %d suspected.\n",
 			s.Assessment.ID, s.Assessment.Status, s.Coverage.Decisive, s.Coverage.Applicable, s.Confirmed, s.Suspected)
@@ -104,10 +104,10 @@ func sessionStart(in Input, w io.Writer) int {
 			b.WriteString(redact.Line(s.ChangeCheck) + "\n")
 		}
 		if len(s.Blockers) > 0 {
-			fmt.Fprintf(&b, "%d blocker(s); details in pensec_get_status.\n", len(s.Blockers))
+			fmt.Fprintf(&b, "%d blocker(s); details in pandaward_get_status.\n", len(s.Blockers))
 		}
 		fmt.Fprintf(&b, "Suggested next step: %s.\n", s.NextAction)
-		b.WriteString("Do not ask the user to type PenSec commands: offer the next step in one sentence and run it yourself after a yes. After you edit code in this project, run pensec_retest yourself and report the delta.\n")
+		b.WriteString("Do not ask the user to type Pandaward commands: offer the next step in one sentence and run it yourself after a yes. After you edit code in this project, run pandaward_retest yourself and report the delta.\n")
 	}
 	fmt.Fprint(w, b.String())
 	return 0
@@ -146,10 +146,10 @@ func preCompact(in Input) int {
 }
 
 var (
-	humanOnlyCmd = regexp.MustCompile(`(?i)\bpensec(\.exe)?["']?\s+(scope\s+(approve|revoke)|test\b|findings\s+(false-positive|accept-risk|reopen|confirm|apply)\b|purge\b|init\s+--force)`)
+	humanOnlyCmd = regexp.MustCompile(`(?i)\b(pandaward|pensec)(\.exe)?["']?\s+(scope\s+(approve|revoke)|test\b|findings\s+(false-positive|accept-risk|reopen|confirm|apply)\b|purge\b|init\s+--force)`)
 	applyFile    = regexp.MustCompile(`(?i)\bfindings\s+apply\b.*?--file[=\s]+(?:"([^"]+)"|'([^']+)'|(\S+))`)
-	privateRef   = regexp.MustCompile(`(?i)\.pensec[\\/]+(private|reports)\b|state\.db`)
-	scopeRef     = regexp.MustCompile(`(?i)\.pensec[\\/]+(scope|config)\.ya?ml`)
+	privateRef   = regexp.MustCompile(`(?i)\.(pandaward|pensec)[\\/]+(private|reports)\b|state\.db`)
+	scopeRef     = regexp.MustCompile(`(?i)\.(pandaward|pensec)[\\/]+(scope|config)\.ya?ml`)
 	readOnlyCmd  = regexp.MustCompile(`(?i)^\s*(cat|type|less|more|head|tail|Get-Content|gc|bat)\s`)
 )
 
@@ -181,13 +181,13 @@ func GuardDecision(toolName string, toolInput json.RawMessage) (string, string) 
 		_ = json.Unmarshal(toolInput, &ti)
 		c := ti.Command
 		if humanOnlyCmd.MatchString(c) {
-			return "ask", "PenSec: this command approves scope, sends network traffic, or changes a finding disposition. It must be confirmed by the human operator."
+			return "ask", "Pandaward: this command approves scope, sends network traffic, or changes a finding disposition. It must be confirmed by the human operator."
 		}
-		if privateRef.MatchString(c) && !strings.HasPrefix(strings.TrimSpace(c), "pensec") {
-			return "ask", "PenSec: direct access to the private ledger or evidence store bypasses the engine. Confirm only if you intend it."
+		if privateRef.MatchString(c) && !strings.HasPrefix(strings.TrimSpace(c), "pandaward") {
+			return "ask", "Pandaward: direct access to the private ledger or evidence store bypasses the engine. Confirm only if you intend it."
 		}
 		if scopeRef.MatchString(c) && !readOnlyCmd.MatchString(c) {
-			return "ask", "PenSec: the scope/config manifest defines what may be tested. Changes must come from the human operator."
+			return "ask", "Pandaward: the scope/config manifest defines what may be tested. Changes must come from the human operator."
 		}
 	case "Edit", "Write", "MultiEdit", "NotebookEdit":
 		var ti struct {
@@ -197,10 +197,10 @@ func GuardDecision(toolName string, toolInput json.RawMessage) (string, string) 
 		_ = json.Unmarshal(toolInput, &ti)
 		p := filepath.ToSlash(ti.FilePath + ti.NotebookPath)
 		if privateRef.MatchString(p) {
-			return "deny", "PenSec: the private ledger, evidence and reports are written only by the PenSec engine."
+			return "deny", "Pandaward: the private ledger, evidence and reports are written only by the Pandaward engine."
 		}
 		if scopeRef.MatchString(p) {
-			return "ask", "PenSec: the scope/config manifest defines what may be tested. Changes must be confirmed by the human operator."
+			return "ask", "Pandaward: the scope/config manifest defines what may be tested. Changes must be confirmed by the human operator."
 		}
 	}
 	return "", ""
@@ -224,7 +224,7 @@ func preTool(in Input, w io.Writer) int {
 // maxSummaryLines caps the decisions listed in a confirmation prompt.
 const maxSummaryLines = 30
 
-// applySummary lists the decisions a `pensec findings apply` command would
+// applySummary lists the decisions a `pandaward findings apply` command would
 // record, so the human confirms the batch knowing what is in it.
 func applySummary(cmd, dir string) string {
 	m := applyFile.FindStringSubmatch(cmd)

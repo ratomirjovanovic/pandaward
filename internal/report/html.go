@@ -5,7 +5,7 @@ import (
 	"html/template"
 	"strings"
 
-	"github.com/ratomirjovanovic/pensec/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
 )
 
 var funcs = template.FuncMap{
@@ -61,7 +61,7 @@ func HTML(r *Report) ([]byte, error) {
 const htmlTpl = `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'">
-<title>PenSec report {{.R.Project}}</title>
+<title>Pandaward report {{.R.Project}}</title>
 <style>
 :root{--bg:#fbfbfa;--fg:#1d1d1b;--mut:#6b6b66;--line:#e3e2de;--card:#fff;--crit:#9b1c1c;--high:#c2410c;--med:#a16207;--low:#2f6f8f;--ok:#2f7a4b;--sus:#7c4dbb;--blk:#6b6b66}
 @media (prefers-color-scheme:dark){:root{--bg:#161615;--fg:#ecebe7;--mut:#a3a29c;--line:#2e2d2a;--card:#1e1e1c;--crit:#f87171;--high:#fb923c;--med:#facc15;--low:#7dd3fc;--ok:#6ee7a0;--sus:#c4a1ff;--blk:#a3a29c}}
@@ -80,7 +80,7 @@ th{font-weight:600;color:var(--mut)}.wrap{overflow-x:auto}
 code{font:12.5px ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:anywhere}
 .warn{color:var(--crit);font-weight:600}
 </style></head><body><main>
-<p class="mut">PenSec assessment report</p>
+<p class="mut">Pandaward assessment report</p>
 <h1>{{.R.Project}}</h1>
 <p class="mut">{{.R.Assessment.ID}} · {{.R.Assessment.Status}} · profile {{.R.Assessment.Profile}} · revision {{if .R.Assessment.GitCommit}}<code>{{.R.Assessment.GitCommit}}</code>{{if .R.Assessment.GitDirty}} (uncommitted changes){{end}}{{else}}not a git repository{{end}} · {{.R.Assessment.StartedAt}} to {{.R.Assessment.EndedAt}}</p>
 <div class="att">{{.R.Attestation}}</div>
@@ -93,7 +93,7 @@ code{font:12.5px ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:an
 <div class="tile"><span class="mut">Not decided</span><b>{{len .Untested}}</b><span class="mut">controls, never read as secure</span></div>
 <div class="tile"><span class="mut">Cross-domain edges</span><b>{{.R.Coverage.EdgesTotal}}</b><span class="mut">{{.R.Coverage.EdgesVerified}} verified · {{.R.Coverage.EdgesFailed}} failed · {{.R.Coverage.EdgesOpen}} open</span></div>
 </div>
-{{if .R.StaleFiles}}<p class="warn">{{len .R.StaleFiles}} file(s) changed after this assessment. Controls and edges that depend on them are shown as STALE until <code>pensec retest</code>.</p>{{end}}
+{{if .R.StaleFiles}}<p class="warn">{{len .R.StaleFiles}} file(s) changed after this assessment. Controls and edges that depend on them are shown as STALE until <code>pandaward retest</code>.</p>{{end}}
 <p class="mut">{{.R.Coverage.Note}}</p>
 {{with .R.Delta}}
 <h2>Changes since {{.From}}</h2>
@@ -135,7 +135,7 @@ code{font:12.5px ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:an
 </table></div>{{end}}
 
 <h2>Evidence index</h2>
-<p class="mut">{{len .R.EvidenceIndex}} redacted artifacts under <code>.pensec/private/evidence/</code>, named by SHA-256.</p>
+<p class="mut">{{len .R.EvidenceIndex}} redacted artifacts under <code>.pandaward/private/evidence/</code>, named by SHA-256.</p>
 <div class="wrap"><table><tr><th>Evidence</th><th>SHA-256</th><th>Collector</th><th>Source</th></tr>
 {{range .R.EvidenceIndex}}<tr><td>{{.ID}}</td><td><code>{{.SHA256}}</code></td><td>{{.Collector}}</td><td><code>{{.SourceRef}}</code></td></tr>{{end}}
 </table></div>

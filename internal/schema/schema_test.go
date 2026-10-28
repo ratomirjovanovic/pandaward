@@ -14,14 +14,14 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/ratomirjovanovic/pensec/internal/bundle"
-	"github.com/ratomirjovanovic/pensec/internal/config"
-	"github.com/ratomirjovanovic/pensec/internal/evidence"
-	"github.com/ratomirjovanovic/pensec/internal/mcp"
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/report"
-	"github.com/ratomirjovanovic/pensec/internal/scope"
-	"github.com/ratomirjovanovic/pensec/internal/store"
+	"github.com/ratomirjovanovic/pandaward/internal/bundle"
+	"github.com/ratomirjovanovic/pandaward/internal/config"
+	"github.com/ratomirjovanovic/pandaward/internal/evidence"
+	"github.com/ratomirjovanovic/pandaward/internal/mcp"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/report"
+	"github.com/ratomirjovanovic/pandaward/internal/scope"
+	"github.com/ratomirjovanovic/pandaward/internal/store"
 )
 
 var update = flag.Bool("update", false, "rewrite testdata/schemas.golden after a reviewed schema change")

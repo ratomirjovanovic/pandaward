@@ -9,9 +9,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/redact"
-	"github.com/ratomirjovanovic/pensec/internal/store"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/redact"
+	"github.com/ratomirjovanovic/pandaward/internal/store"
 )
 
 // Record is the on-disk evidence document.
@@ -43,7 +43,7 @@ func Write(st *store.Store, private string, r Record) (string, error) {
 	r.Snippet = redact.Line(r.Snippet)
 	r.Observation = redact.Line(r.Observation)
 	r.File = redact.Sanitize(r.File)
-	r.Redaction = "pensec-redact-v1"
+	r.Redaction = "pandaward-redact-v1"
 	if r.CapturedAt == "" {
 		r.CapturedAt = store.Now()
 	}

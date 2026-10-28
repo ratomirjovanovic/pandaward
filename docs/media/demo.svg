@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="838" height="459" viewBox="0 0 838 459" role="img" aria-label="PenSec terminal session: init, scan, findings, graph and fix-plan on a demo project">
+<svg xmlns="http://www.w3.org/2000/svg" width="838" height="459" viewBox="0 0 838 459" role="img" aria-label="Pandaward terminal session: init, scan, findings, graph and fix-plan on a demo project">
 <style>
 text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:14px;white-space:pre;fill:#d4d4d8}
 .p{fill:#4ade80}.c{fill:#fafafa;font-weight:600}.f{opacity:0}
@@ -19,10 +19,10 @@ text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",mo
 <circle cx="40" cy="18" r="6" fill="#eab308"/>
 <circle cx="60" cy="18" r="6" fill="#22c55e"/>
 <g class="f s0">
-<text x="16" y="44"><tspan class="p">$ </tspan><tspan class="c">pensec init</tspan></text>
-<text x="16" y="63">Initialized PenSec in ~/acme-shop/.pensec</text>
-<text x="16" y="82">  config:   ~/acme-shop/.pensec/config.yaml (safe to commit)</text>
-<text x="16" y="101">  private:  ~/acme-shop/.pensec/private (gitignored ledger and evidence)</text>
+<text x="16" y="44"><tspan class="p">$ </tspan><tspan class="c">pandaward init</tspan></text>
+<text x="16" y="63">Initialized Pandaward in ~/acme-shop/.pandaward</text>
+<text x="16" y="82">  config:   ~/acme-shop/.pandaward/config.yaml (safe to commit)</text>
+<text x="16" y="101">  private:  ~/acme-shop/.pandaward/private (gitignored ledger and evidence)</text>
 <text x="16" y="120">  profile:  local-passive (no network traffic to any target)</text>
 <text x="16" y="139"></text>
 <text x="16" y="158">Inventory: 8 text files, 14 assets, git 66cc34fb6db4</text>
@@ -30,10 +30,10 @@ text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",mo
 <text x="16" y="196">Detected: admin_routes(1) android(1) auth(2) auth_routes(1) deploy_config(2) dockerfile(1) gi...</text>
 <text x="16" y="215">Sensitive files recorded by name only (content not read): 1</text>
 <text x="16" y="234"></text>
-<text x="16" y="253">Next: pensec plan, then pensec scan</text>
+<text x="16" y="253">Next: pandaward plan, then pandaward scan</text>
 </g>
 <g class="f s1">
-<text x="16" y="44"><tspan class="p">$ </tspan><tspan class="c">pensec scan</tspan></text>
+<text x="16" y="44"><tspan class="p">$ </tspan><tspan class="c">pandaward scan</tspan></text>
 <text x="16" y="63"></text>
 <text x="16" y="82">Assessment asmt_0001_20261028T074237Z: COMPLETE</text>
 <text x="16" y="101">Adapters:</text>
@@ -45,40 +45,40 @@ text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",mo
 <text x="16" y="215">  builtin-supply     OK           1 signals  lockfiles, install scripts, requirement pins, MC...</text>
 <text x="16" y="234">  builtin-mobile     OK           3 signals  android manifest and iOS plist checks</text>
 <text x="16" y="253">  gitleaks           OK           2 signals  exit 0</text>
-<text x="16" y="272">  semgrep            BLOCKED      0 signals  semgrep is not installed (optional; run `pensec ...</text>
+<text x="16" y="272">  semgrep            BLOCKED      0 signals  semgrep is not installed (optional; run `pandaward ...</text>
 <text x="16" y="291">  osv-scanner        BLOCKED      0 signals  osv-scanner needs network access for its advisor...</text>
-<text x="16" y="310">  trivy              BLOCKED      0 signals  trivy is not installed (optional; run `pensec do...</text>
+<text x="16" y="310">  trivy              BLOCKED      0 signals  trivy is not installed (optional; run `pandaward do...</text>
 <text x="16" y="329">Controls: BLOCKED 9, FAIL 14, INCONCLUSIVE 1, NOT_APPLICABLE 6, PASS 5, SUSPECTED 10, UNSUPPO...</text>
 <text x="16" y="348">Decisive coverage: 19/50 applicable controls (38%). Edges: 15 (0 verified, 5 failed, 10 open)</text>
 <text x="16" y="367">Findings: 33 open (33 new, 0 reopened, 0 remediated in this run)</text>
 <text x="16" y="386"></text>
-<text x="16" y="405">BLOCKED/UNSUPPORTED/SUSPECTED controls are not secure; see `pensec status` and `pensec findin...</text>
+<text x="16" y="405">BLOCKED/UNSUPPORTED/SUSPECTED controls are not secure; see `pandaward status` and `pandaward findin...</text>
 </g>
 <g class="f s2">
-<text x="16" y="44"><tspan class="p">$ </tspan><tspan class="c">pensec findings</tspan></text>
-<text x="16" y="63">PSEC-0022  critical CONFIRMED          OPEN           pull_request_target checks out untruste...</text>
+<text x="16" y="44"><tspan class="p">$ </tspan><tspan class="c">pandaward findings</tspan></text>
+<text x="16" y="63">PW-0022  critical CONFIRMED          OPEN           pull_request_target checks out untruste...</text>
 <text x="16" y="82">           .github/workflows/ci.yml:8  [N-003]</text>
-<text x="16" y="101">PSEC-0004  high     CONFIRMED          OPEN           Hardcoded GitHub token</text>
+<text x="16" y="101">PW-0004  high     CONFIRMED          OPEN           Hardcoded GitHub token</text>
 <text x="16" y="120">           app.py:8  [E-001]</text>
-<text x="16" y="139">PSEC-0005  high     CONFIRMED          OPEN           Hardcoded Stripe live secret key</text>
+<text x="16" y="139">PW-0005  high     CONFIRMED          OPEN           Hardcoded Stripe live secret key</text>
 <text x="16" y="158">           src/server.js:2  [E-001]</text>
-<text x="16" y="177">PSEC-0006  high     CONFIRMED          OPEN           Credential or environment file tracked ...</text>
+<text x="16" y="177">PW-0006  high     CONFIRMED          OPEN           Credential or environment file tracked ...</text>
 <text x="16" y="196">           .env  [E-002]</text>
-<text x="16" y="215">PSEC-0007  high     HYPOTHESIS         OPEN           Unsafe deserialization API</text>
+<text x="16" y="215">PW-0007  high     HYPOTHESIS         OPEN           Unsafe deserialization API</text>
 <text x="16" y="234">           app.py:4  [D-004]</text>
-<text x="16" y="253">PSEC-0008  high     CONFIRMED          OPEN           TLS certificate verification disabled</text>
+<text x="16" y="253">PW-0008  high     CONFIRMED          OPEN           TLS certificate verification disabled</text>
 <text x="16" y="272">           app.py:5  [E-003]</text>
-<text x="16" y="291">PSEC-0009  high     CONFIRMED          OPEN           Shell command execution</text>
+<text x="16" y="291">PW-0009  high     CONFIRMED          OPEN           Shell command execution</text>
 <text x="16" y="310">           app.py:6  [D-002]</text>
-<text x="16" y="329">PSEC-0010  high     CONFIRMED          OPEN           Dynamic code evaluation</text>
+<text x="16" y="329">PW-0010  high     CONFIRMED          OPEN           Dynamic code evaluation</text>
 <text x="16" y="348">           app.py:7  [D-001]</text>
-<text x="16" y="367">PSEC-0011  high     HYPOTHESIS         OPEN           Model output may reach code or shell ex...</text>
+<text x="16" y="367">PW-0011  high     HYPOTHESIS         OPEN           Model output may reach code or shell ex...</text>
 <text x="16" y="386">           app.py:7  [P-001]</text>
-<text x="16" y="405">PSEC-0013  high     HYPOTHESIS         OPEN           SQL built with string concatenation</text>
+<text x="16" y="405">PW-0013  high     HYPOTHESIS         OPEN           SQL built with string concatenation</text>
 <text x="16" y="424">... 47 more lines</text>
 </g>
 <g class="f s3">
-<text x="16" y="44"><tspan class="p">$ </tspan><tspan class="c">pensec graph</tspan></text>
+<text x="16" y="44"><tspan class="p">$ </tspan><tspan class="c">pandaward graph</tspan></text>
 <text x="16" y="63">Domains (asmt_0001_20261028T074237Z)</text>
 <text x="16" y="82">  A Asset inventory, architecture and threat model     SUSPECTED 1, PASS 1, BLOCKED 1, INCONC...</text>
 <text x="16" y="101">  B Authentication, sessions and identity              SUSPECTED 1, PASS 1, UNSUPPORTED 2</text>
@@ -101,24 +101,24 @@ text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",mo
 <text x="16" y="424">... 47 more lines</text>
 </g>
 <g class="f s4">
-<text x="16" y="44"><tspan class="p">$ </tspan><tspan class="c">pensec fix-plan</tspan></text>
+<text x="16" y="44"><tspan class="p">$ </tspan><tspan class="c">pandaward fix-plan</tspan></text>
 <text x="16" y="63">Fix plan for acme-shop (asmt_0001_20261028T074237Z). Nothing is changed automatically.</text>
 <text x="16" y="82"></text>
 <text x="16" y="101">1. [critical] pull_request_target checks out untrusted PR code  (N-003, 1 location(s))</text>
 <text x="16" y="120">   Fix: Use pull_request for building untrusted code, or split into an unprivileged build and...</text>
-<text x="16" y="139">   - PSEC-0022 .github/workflows/ci.yml:8</text>
-<text x="16" y="158">   Retest: Apply the fix, then run `pensec retest`; the finding becomes REMEDIATED only when ...</text>
+<text x="16" y="139">   - PW-0022 .github/workflows/ci.yml:8</text>
+<text x="16" y="158">   Retest: Apply the fix, then run `pandaward retest`; the finding becomes REMEDIATED only when ...</text>
 <text x="16" y="177"></text>
 <text x="16" y="196">2. [high] Secret detected: Found a Stripe Access Token, posing a risk to payment processing s...</text>
 <text x="16" y="215">   Fix: Rotate the credential, remove it from code and history, load it at runtime from a sec...</text>
-<text x="16" y="234">   - PSEC-0032 .env:1</text>
-<text x="16" y="253">   - PSEC-0033 src/server.js:2</text>
-<text x="16" y="272">   Retest: Apply the fix, then run `pensec retest`; the finding becomes REMEDIATED only when ...</text>
+<text x="16" y="234">   - PW-0032 .env:1</text>
+<text x="16" y="253">   - PW-0033 src/server.js:2</text>
+<text x="16" y="272">   Retest: Apply the fix, then run `pandaward retest`; the finding becomes REMEDIATED only when ...</text>
 <text x="16" y="291"></text>
 <text x="16" y="310">3. [high] CORS allows any origin with credentials  (H-002, 1 location(s))</text>
 <text x="16" y="329">   Fix: Use an explicit allowlist of trusted origins when credentials are enabled.</text>
-<text x="16" y="348">   - PSEC-0017 src/server.js:4</text>
-<text x="16" y="367">   Retest: Apply the fix, then run `pensec retest`; the finding becomes REMEDIATED only when ...</text>
+<text x="16" y="348">   - PW-0017 src/server.js:4</text>
+<text x="16" y="367">   Retest: Apply the fix, then run `pandaward retest`; the finding becomes REMEDIATED only when ...</text>
 <text x="16" y="386"></text>
 <text x="16" y="405">4. [high] Dynamic code evaluation  (D-001, 1 location(s))</text>
 <text x="16" y="424">... 87 more lines</text>

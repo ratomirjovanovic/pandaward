@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ratomirjovanovic/pensec/internal/adapters"
+	"github.com/ratomirjovanovic/pandaward/internal/adapters"
 )
 
 const sampleCSV = `# test name, category, real vulnerability, cwe, Benchmark version: 1.2, 2016-06-1

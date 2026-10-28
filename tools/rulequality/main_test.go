@@ -8,20 +8,20 @@ import (
 )
 
 func form(heading, value string) string {
-	return "### " + heading + "\n\n" + value + "\n\n### PenSec version\n\n0.1.3\n"
+	return "### " + heading + "\n\n" + value + "\n\n### Pandaward version\n\n0.1.3\n"
 }
 
 func TestRuleFromBody(t *testing.T) {
 	for body, want := range map[string]string{
-		form("Rule ID", "code.sql-concat"):            "code.sql-concat",
-		form("Rule ID", "`Code.SQL-Concat`"):          "code.sql-concat",
-		form("Rule or control", "D-003"):              "d-003",
-		form("Rule or control", "_No response_"):      "unknown",
-		form("Rule ID", "x; rm -rf / $(id) <script>"): "x-rm-rf-id-script",
-		form("Rule ID", strings.Repeat("a", 80)):      strings.Repeat("a", 40),
-		"no form at all":                              "unknown",
-		"### Rule ID\n\n### PenSec version\n\n0.1.3":  "unknown",
-		form("Rule ID", "../../etc/passwd"):           "etc-passwd",
+		form("Rule ID", "code.sql-concat"):              "code.sql-concat",
+		form("Rule ID", "`Code.SQL-Concat`"):            "code.sql-concat",
+		form("Rule or control", "D-003"):                "d-003",
+		form("Rule or control", "_No response_"):        "unknown",
+		form("Rule ID", "x; rm -rf / $(id) <script>"):   "x-rm-rf-id-script",
+		form("Rule ID", strings.Repeat("a", 80)):        strings.Repeat("a", 40),
+		"no form at all":                                "unknown",
+		"### Rule ID\n\n### Pandaward version\n\n0.1.3": "unknown",
+		form("Rule ID", "../../etc/passwd"):             "etc-passwd",
 	} {
 		if got := RuleFromBody(body); got != want {
 			t.Errorf("RuleFromBody(%q) = %q, want %q", body, got, want)

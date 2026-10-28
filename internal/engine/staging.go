@@ -11,12 +11,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ratomirjovanovic/pensec/internal/evidence"
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/redact"
-	"github.com/ratomirjovanovic/pensec/internal/scope"
-	"github.com/ratomirjovanovic/pensec/internal/store"
-	"github.com/ratomirjovanovic/pensec/internal/zap"
+	"github.com/ratomirjovanovic/pandaward/internal/evidence"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/redact"
+	"github.com/ratomirjovanovic/pandaward/internal/scope"
+	"github.com/ratomirjovanovic/pandaward/internal/store"
+	"github.com/ratomirjovanovic/pandaward/internal/zap"
 )
 
 // StagingResult summarizes a staging-active run.
@@ -59,7 +59,7 @@ func (e *Engine) StagingActive(ctx context.Context, progress func(string)) (*Sta
 		return nil, err
 	}
 	if a == nil {
-		return nil, errors.New("run `pensec scan` first; runtime results attach to the latest assessment")
+		return nil, errors.New("run `pandaward scan` first; runtime results attach to the latest assessment")
 	}
 	var creds map[string]authzCred
 	if len(m.AuthorizationChecks) > 0 {
@@ -230,7 +230,7 @@ func zapSignal(al zap.Alert, active bool) (model.Signal, bool) {
 	return model.Signal{RuleID: "zap." + al.PluginID, ControlID: cid, Title: redact.Line(al.Name), Severity: sev, Confidence: conf, CWE: cwe, File: redact.Line(zap.Origin(al.Site)),
 		Message: redact.Line(fmt.Sprintf("ZAP raised this on %d URL(s).%s %s", len(al.Instances), where, clip(al.Desc, 400))),
 		Fix:     redact.Line(clip(al.Solution, 500)), Collector: "zap", Key: al.PluginID,
-		Retest: "Deploy the fix to the approved target, then run `pensec test --profile staging-active` again (needs a valid approval)."}, true
+		Retest: "Deploy the fix to the approved target, then run `pandaward test --profile staging-active` again (needs a valid approval)."}, true
 }
 
 func zapInstances(in []zap.Instance) []zap.Instance {

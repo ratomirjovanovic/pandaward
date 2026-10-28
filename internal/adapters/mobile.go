@@ -13,9 +13,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/ratomirjovanovic/pensec/internal/inventory"
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/redact"
+	"github.com/ratomirjovanovic/pandaward/internal/inventory"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/redact"
 )
 
 // manifestControls names the controls an AndroidManifest.xml check reports
@@ -195,7 +195,7 @@ func (a apktoolAdapter) Run(ctx context.Context, c *Context) (Result, model.Run)
 	apks := c.Inv.Features["apk"]
 	bin, err := a.lookup()
 	if err != nil {
-		return res, finish(newRun(a.Name(), ""), model.ExitBlocked, err.Error()+"; run `pensec doctor`", 0)
+		return res, finish(newRun(a.Name(), ""), model.ExitBlocked, err.Error()+"; run `pandaward doctor`", 0)
 	}
 	run := newRun(a.Name(), a.version(ctx, bin))
 	if len(apks) == 0 {
@@ -204,7 +204,7 @@ func (a apktoolAdapter) Run(ctx context.Context, c *Context) (Result, model.Run)
 	if err := os.MkdirAll(c.ToolHome, 0o700); err != nil {
 		return res, finish(run, model.ExitError, err.Error(), 0)
 	}
-	tmp, err := os.MkdirTemp("", "pensec-")
+	tmp, err := os.MkdirTemp("", "pandaward-")
 	if err != nil {
 		return res, finish(run, model.ExitError, err.Error(), 0)
 	}

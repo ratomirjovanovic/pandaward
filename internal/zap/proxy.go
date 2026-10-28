@@ -18,7 +18,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ratomirjovanovic/pensec/internal/scope"
+	"github.com/ratomirjovanovic/pandaward/internal/scope"
 )
 
 // Proxy is the local forward proxy ZAP is chained to. It is the only way
@@ -66,7 +66,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !r.URL.IsAbs() {
-		http.Error(w, "PenSec scope guard: proxy requests only", http.StatusBadRequest)
+		http.Error(w, "Pandaward scope guard: proxy requests only", http.StatusBadRequest)
 		return
 	}
 	p.forward(w, r, r.URL)
@@ -79,7 +79,7 @@ func (p *Proxy) tunnel(w http.ResponseWriter, r *http.Request) {
 	if !p.originInScope(host) {
 		why := "https://" + host + " is not in scope"
 		p.g.Refuse(why)
-		http.Error(w, "PenSec scope guard: "+why, http.StatusForbidden)
+		http.Error(w, "Pandaward scope guard: "+why, http.StatusForbidden)
 		return
 	}
 	hj, ok := w.(http.Hijacker)
@@ -156,7 +156,7 @@ var hopHeaders = []string{"Connection", "Proxy-Connection", "Keep-Alive", "Proxy
 func (p *Proxy) forward(w http.ResponseWriter, r *http.Request, u *url.URL) {
 	out, err := http.NewRequestWithContext(r.Context(), r.Method, u.String(), r.Body)
 	if err != nil {
-		http.Error(w, "PenSec scope guard: bad request", http.StatusBadRequest)
+		http.Error(w, "Pandaward scope guard: bad request", http.StatusBadRequest)
 		return
 	}
 	out.Header = r.Header.Clone()
@@ -170,7 +170,7 @@ func (p *Proxy) forward(w http.ResponseWriter, r *http.Request, u *url.URL) {
 		if errors.Is(err, scope.ErrRefused) {
 			code = http.StatusForbidden
 		}
-		http.Error(w, "PenSec scope guard: "+err.Error(), code)
+		http.Error(w, "Pandaward scope guard: "+err.Error(), code)
 		return
 	}
 	defer resp.Body.Close()
@@ -226,7 +226,7 @@ func newCA() (*tls.Certificate, error) {
 		return nil, err
 	}
 	serial, _ := rand.Int(rand.Reader, big.NewInt(1<<62))
-	tpl := &x509.Certificate{SerialNumber: serial, Subject: pkix.Name{CommonName: "PenSec scope guard (one run)"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(24 * time.Hour),
+	tpl := &x509.Certificate{SerialNumber: serial, Subject: pkix.Name{CommonName: "Pandaward scope guard (one run)"}, NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(24 * time.Hour),
 		IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
 	der, err := x509.CreateCertificate(rand.Reader, tpl, tpl, &key.PublicKey, key)
 	if err != nil {

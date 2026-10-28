@@ -9,19 +9,20 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ratomirjovanovic/pensec/internal/catalog"
-	"github.com/ratomirjovanovic/pensec/internal/engine"
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/redact"
-	"github.com/ratomirjovanovic/pensec/internal/report"
-	"github.com/ratomirjovanovic/pensec/internal/version"
+	"github.com/ratomirjovanovic/pandaward/internal/catalog"
+	"github.com/ratomirjovanovic/pandaward/internal/config"
+	"github.com/ratomirjovanovic/pandaward/internal/engine"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/redact"
+	"github.com/ratomirjovanovic/pandaward/internal/report"
+	"github.com/ratomirjovanovic/pandaward/internal/version"
 )
 
-const banner = `  ____            ____
- |  _ \ ___ _ __ / ___|  ___  ___
- | |_) / _ \ '_ \\___ \ / _ \/ __|
- |  __/  __/ | | |___) |  __/ (__
- |_|   \___|_| |_|____/ \___|\___|
+const banner = `  ____                     _                                      _
+ |  _ \   __ _  _ __    __| |  __ _ __      __   __ _  _ __    __| |
+ | |_) | / _' || '_ \  / _' | / _' |\ \ /\ / /  / _' || '__|  / _' |
+ |  __/ | (_| || | | || (_| || (_| | \ V  V /  | (_| || |    | (_| |
+ |_|     \__,_||_| |_| \__,_| \__,_|  \_/\_/    \__,_||_|     \__,_|
 `
 
 // bar draws a fixed-width progress bar. ASCII mode avoids block characters
@@ -90,7 +91,7 @@ func isTerminal(w io.Writer) bool {
 func cmdAssess(ctx context.Context, args []string, w io.Writer) error {
 	fs, root := newFS("assess")
 	asJSON := fs.Bool("json", false, "JSON summary instead of the progress view")
-	ascii := fs.Bool("ascii", os.Getenv("PENSEC_ASCII") != "", "ASCII progress bars (also PENSEC_ASCII=1)")
+	ascii := fs.Bool("ascii", config.Env("ASCII") != "", "ASCII progress bars (also PANDAWARD_ASCII=1)")
 	noBanner := fs.Bool("no-banner", false, "skip the banner")
 	formats := fs.String("format", "html,markdown,json,sarif", "report formats")
 	failLevel := fs.String("fail-on", "", "exit 4 if open confirmed findings at or above this severity exist")
@@ -108,8 +109,8 @@ func cmdAssess(ctx context.Context, args []string, w io.Writer) error {
 	}
 	if !*asJSON && !*noBanner {
 		fmt.Fprint(w, banner)
-		fmt.Fprintf(w, "\n  PenSec %s - local, evidence-based security assessment\n", version.Version)
-		fmt.Fprintln(w, "  by Ratomir Jovanovic - https://github.com/ratomirjovanovic/pensec")
+		fmt.Fprintf(w, "\n  Pandaward %s - local, evidence-based security assessment\n", version.Version)
+		fmt.Fprintln(w, "  by Ratomir Jovanovic - https://github.com/ratomirjovanovic/pandaward")
 		fmt.Fprintln(w, "  Passive: reads the repository, runs no project code, sends nothing to any target.")
 		fmt.Fprintln(w)
 	}
@@ -124,9 +125,9 @@ func cmdAssess(ctx context.Context, args []string, w io.Writer) error {
 		view.w = io.Discard
 	}
 	if created {
-		view.step("initialized .pensec/ (config, private ledger)")
+		view.step("initialized .pandaward/ (config, private ledger)")
 	} else {
-		view.step("using existing .pensec/")
+		view.step("using existing .pandaward/")
 	}
 	progress := func(m string) {
 		switch {
@@ -197,7 +198,7 @@ func printSummary(w io.Writer, res *engine.ScanResult, rep *report.Report, paths
 		fmt.Fprintln(w, "\n  Fix first")
 		for i, f := range conf {
 			if i == 5 {
-				fmt.Fprintf(w, "    ... %d more (pensec findings)\n", len(conf)-5)
+				fmt.Fprintf(w, "    ... %d more (pandaward findings)\n", len(conf)-5)
 				break
 			}
 			loc := f.File
@@ -232,8 +233,8 @@ func printSummary(w io.Writer, res *engine.ScanResult, rep *report.Report, paths
 		fmt.Fprintln(w, "    "+redact.Line(p))
 	}
 	fmt.Fprintln(w, "\n  Next")
-	fmt.Fprintln(w, "    /pensec:review     specialist review of what automation could not decide")
-	fmt.Fprintln(w, "    pensec fix-plan    ordered fixes, then pensec retest --changed")
-	fmt.Fprintln(w, "    pensec feedback    tell us about a wrong or missed finding")
+	fmt.Fprintln(w, "    /pandaward:review     specialist review of what automation could not decide")
+	fmt.Fprintln(w, "    pandaward fix-plan    ordered fixes, then pandaward retest --changed")
+	fmt.Fprintln(w, "    pandaward feedback    tell us about a wrong or missed finding")
 	fmt.Fprintf(w, "\n  Catalog %s. An automated technical assessment, not a certification or a penetration test.\n", catalog.Version)
 }

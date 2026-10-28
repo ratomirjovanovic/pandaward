@@ -4,8 +4,8 @@ import (
 	"context"
 	"testing"
 
-	"github.com/ratomirjovanovic/pensec/internal/inventory"
-	"github.com/ratomirjovanovic/pensec/internal/testfixture"
+	"github.com/ratomirjovanovic/pandaward/internal/inventory"
+	"github.com/ratomirjovanovic/pandaward/internal/testfixture"
 )
 
 // Hashes must see exactly the files Walk analyzes, with the same hashes, or

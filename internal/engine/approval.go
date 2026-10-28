@@ -10,23 +10,47 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/ratomirjovanovic/pensec/internal/scope"
+	"github.com/ratomirjovanovic/pandaward/internal/config"
+	"github.com/ratomirjovanovic/pandaward/internal/scope"
 )
 
 // approvalKeyPath is a per-user secret outside every repository. Approvals
 // are bound to it, so a ledger copied from elsewhere (for example a
-// .pensec/private/state.db committed to a malicious repository) can never
+// .pandaward/private/state.db committed to a malicious repository) can never
 // carry a valid approval.
-// PENSEC_CONFIG_DIR overrides the user config directory (used by tests).
+// PANDAWARD_CONFIG_DIR overrides the user config directory (used by tests).
 func approvalKeyPath() (string, error) {
-	if d := os.Getenv("PENSEC_CONFIG_DIR"); d != "" {
+	if d := config.Env("CONFIG_DIR"); d != "" {
 		return filepath.Join(d, "approval.key"), nil
 	}
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("no user config directory for the approval key: %w", err)
 	}
-	return filepath.Join(dir, "pensec", "approval.key"), nil
+	return filepath.Join(dir, "pandaward", "approval.key"), nil
+}
+
+// adoptLegacyKey copies the key from the pre-rename location (pensec/ in
+// the user config directory) to p, so approvals made with 0.1.x stay valid.
+func adoptLegacyKey(p string) ([]byte, error) {
+	if config.Env("CONFIG_DIR") != "" {
+		return nil, os.ErrNotExist
+	}
+	dir, err := os.UserConfigDir()
+	if err != nil {
+		return nil, os.ErrNotExist
+	}
+	b, err := os.ReadFile(filepath.Join(dir, config.LegacyUserDir, "approval.key"))
+	if err != nil || len(b) != 32 {
+		return nil, os.ErrNotExist
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+		return nil, err
+	}
+	if err := os.WriteFile(p, b, 0o600); err != nil {
+		return nil, err
+	}
+	return b, nil
 }
 
 func approvalKey(create bool) ([]byte, error) {
@@ -35,6 +59,9 @@ func approvalKey(create bool) ([]byte, error) {
 		return nil, err
 	}
 	b, err := os.ReadFile(p)
+	if errors.Is(err, os.ErrNotExist) {
+		b, err = adoptLegacyKey(p)
+	}
 	if err == nil {
 		if len(b) != 32 {
 			return nil, fmt.Errorf("approval key %s is damaged; delete it and approve the scope again", p)

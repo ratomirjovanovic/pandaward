@@ -1,10 +1,10 @@
 rules:
-  - id: pensec-py-eval
+  - id: pandaward-py-eval
     languages: [python]
     severity: ERROR
     message: Dynamic code evaluation of a non-constant value. If any part of it is attacker-controlled this is code injection.
     metadata:
-      pensec-control: D-001
+      pandaward-control: D-001
       cwe: "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
     patterns:
       - pattern-either:
@@ -13,12 +13,12 @@ rules:
       - pattern-not: eval("...", ...)
       - pattern-not: exec("...", ...)
 
-  - id: pensec-py-shell
+  - id: pandaward-py-shell
     languages: [python]
     severity: ERROR
     message: A shell command is built from a non-constant string. Pass an argument list without shell=True.
     metadata:
-      pensec-control: D-002
+      pandaward-control: D-002
       cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
     patterns:
       - pattern-either:
@@ -29,12 +29,12 @@ rules:
       - pattern-not: os.system("...")
       - pattern-not: os.popen("...", ...)
 
-  - id: pensec-py-sql-string
+  - id: pandaward-py-sql-string
     languages: [python]
     severity: ERROR
     message: SQL text is built with string formatting. Use query parameters.
     metadata:
-      pensec-control: D-003
+      pandaward-control: D-003
       cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
     patterns:
       - pattern-either:
@@ -47,12 +47,12 @@ rules:
           regex: ^(execute|executemany|executescript|raw|text)$
       - pattern-not: $CUR.$EXEC("..." + "...", ...)
 
-  - id: pensec-py-unsafe-deserialization
+  - id: pandaward-py-unsafe-deserialization
     languages: [python]
     severity: ERROR
     message: This deserializer can execute code from its input. Never use it on untrusted data; prefer JSON or yaml.safe_load.
     metadata:
-      pensec-control: D-004
+      pandaward-control: D-004
       cwe: "CWE-502: Deserialization of Untrusted Data"
     pattern-either:
       - pattern: pickle.loads(...)
@@ -66,24 +66,24 @@ rules:
           - pattern-not: yaml.load(..., Loader=yaml.CSafeLoader, ...)
           - pattern-not: yaml.load(..., Loader=SafeLoader, ...)
 
-  - id: pensec-py-tls-verify-off
+  - id: pandaward-py-tls-verify-off
     languages: [python]
     severity: ERROR
     message: TLS certificate verification is disabled, which allows man-in-the-middle attacks.
     metadata:
-      pensec-control: E-003
+      pandaward-control: E-003
       cwe: "CWE-295: Improper Certificate Validation"
     pattern-either:
       - pattern: requests.$M(..., verify=False, ...)
       - pattern: httpx.$M(..., verify=False, ...)
       - pattern: ssl._create_unverified_context(...)
 
-  - id: pensec-py-ssrf
+  - id: pandaward-py-ssrf
     languages: [python]
     severity: WARNING
     message: An outbound request URL comes from the incoming request. Validate it against an allowlist to prevent SSRF.
     metadata:
-      pensec-control: D-006
+      pandaward-control: D-006
       cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
     mode: taint
     pattern-sources:
@@ -102,12 +102,12 @@ rules:
               - pattern: urllib.request.urlopen($URL, ...)
           - focus-metavariable: $URL
 
-  - id: pensec-py-path-traversal
+  - id: pandaward-py-path-traversal
     languages: [python]
     severity: WARNING
     message: A file path comes from the incoming request. Resolve it and check it stays inside the intended directory.
     metadata:
-      pensec-control: D-006
+      pandaward-control: D-006
       cwe: "CWE-22: Improper Limitation of a Pathname to a Restricted Directory"
     mode: taint
     pattern-sources:
@@ -128,12 +128,12 @@ rules:
       - pattern: werkzeug.utils.secure_filename(...)
       - pattern: secure_filename(...)
 
-  - id: pensec-py-template-injection
+  - id: pandaward-py-template-injection
     languages: [python]
     severity: ERROR
     message: A template is rendered from a non-constant string. Attacker-controlled template source leads to server-side template injection.
     metadata:
-      pensec-control: D-006
+      pandaward-control: D-006
       cwe: "CWE-1336: Improper Neutralization of Special Elements Used in a Template Engine"
     patterns:
       - pattern-either:

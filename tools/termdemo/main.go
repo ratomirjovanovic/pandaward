@@ -1,8 +1,8 @@
-// Command termdemo records a real PenSec session on the demo fixture and
+// Command termdemo records a real Pandaward session on the demo fixture and
 // writes it as an animated SVG terminal for the README:
 //
-//	go build -o /tmp/pensec ./cmd/pensec
-//	go run ./tools/termdemo --pensec /tmp/pensec --out docs/media/demo.svg
+//	go build -o /tmp/pandaward ./cmd/pandaward
+//	go run ./tools/termdemo --pandaward /tmp/pandaward --out docs/media/demo.svg
 //
 // Every screen is the actual output of the command shown, shortened to fit.
 package main
@@ -35,11 +35,11 @@ const (
 )
 
 func main() {
-	bin := flag.String("pensec", "", "path to a pensec binary")
+	bin := flag.String("pandaward", "", "path to a pandaward binary")
 	out := flag.String("out", "docs/media/demo.svg", "SVG file to write")
 	flag.Parse()
 	if *bin == "" {
-		fmt.Fprintln(os.Stderr, "usage: termdemo --pensec <binary> [--out file.svg]")
+		fmt.Fprintln(os.Stderr, "usage: termdemo --pandaward <binary> [--out file.svg]")
 		os.Exit(2)
 	}
 	abs, err := filepath.Abs(*bin)
@@ -53,11 +53,11 @@ func main() {
 	check(gen.Run())
 
 	steps := []struct{ args, show string }{
-		{"init", "pensec init"},
-		{"scan --quiet", "pensec scan"},
-		{"findings", "pensec findings"},
-		{"graph", "pensec graph"},
-		{"fix-plan", "pensec fix-plan"},
+		{"init", "pandaward init"},
+		{"scan --quiet", "pandaward scan"},
+		{"findings", "pandaward findings"},
+		{"graph", "pandaward graph"},
+		{"fix-plan", "pandaward fix-plan"},
 	}
 	var screens []screen
 	for _, s := range steps {
@@ -102,7 +102,7 @@ func render(screens []screen) string {
 	h := padTop + lineH*(maxLines+1) + 16
 	total := seconds * len(screens)
 	var b strings.Builder
-	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d" role="img" aria-label="PenSec terminal session: init, scan, findings, graph and fix-plan on a demo project">`+"\n", w, h, w, h)
+	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d" role="img" aria-label="Pandaward terminal session: init, scan, findings, graph and fix-plan on a demo project">`+"\n", w, h, w, h)
 	b.WriteString("<style>\n")
 	b.WriteString(`text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:14px;white-space:pre;fill:#d4d4d8}` + "\n")
 	b.WriteString(".p{fill:#4ade80}.c{fill:#fafafa;font-weight:600}.f{opacity:0}\n")

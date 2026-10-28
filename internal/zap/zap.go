@@ -1,6 +1,6 @@
 // Package zap runs a user-installed OWASP ZAP through its automation
-// framework, chained to the PenSec scope guard, and reads its JSON report.
-// PenSec never installs or downloads ZAP.
+// framework, chained to the Pandaward scope guard, and reads its JSON report.
+// Pandaward never installs or downloads ZAP.
 package zap
 
 import (
@@ -23,9 +23,9 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/ratomirjovanovic/pensec/internal/inventory"
-	"github.com/ratomirjovanovic/pensec/internal/redact"
-	"github.com/ratomirjovanovic/pensec/internal/scope"
+	"github.com/ratomirjovanovic/pandaward/internal/inventory"
+	"github.com/ratomirjovanovic/pandaward/internal/redact"
+	"github.com/ratomirjovanovic/pandaward/internal/scope"
 )
 
 // DefaultMinutes bounds each ZAP job when the manifest does not.
@@ -70,7 +70,7 @@ func Locate(configured string) (string, error) {
 			return p, nil
 		}
 	}
-	return "", errors.New("ZAP is not installed (optional; install it from zaproxy.org and make sure Java 17+ is available, or set runtime.zap_path in .pensec/config.yaml)")
+	return "", errors.New("ZAP is not installed (optional; install it from zaproxy.org and make sure Java 17+ is available, or set runtime.zap_path in .pandaward/config.yaml)")
 }
 
 var jarRe = regexp.MustCompile(`^zap-(\d+\.\d+\.\d+)\.jar$`)
@@ -273,7 +273,7 @@ type planJob struct {
 // manifest targets minus excluded paths, the traditional spider, a wait for
 // the passive scanner, the active scan only when asked, and a JSON report.
 func Plan(m *scope.Manifest, reportDir string, active bool, minutes int) ([]byte, error) {
-	c := planContext{Name: "pensec"}
+	c := planContext{Name: "pandaward"}
 	for _, t := range m.Targets {
 		u, err := scope.ParseTarget(t.URL)
 		if err != nil {
@@ -291,13 +291,13 @@ func Plan(m *scope.Manifest, reportDir string, active bool, minutes int) ([]byte
 	}
 	jobs := []planJob{
 		{Type: "passiveScan-config", Parameters: map[string]any{"scanOnlyInScope": true, "maxAlertsPerRule": 10, "enableTags": false}},
-		{Type: "spider", Parameters: map[string]any{"context": "pensec", "maxDuration": minutes, "maxDepth": 5, "maxChildren": 50, "acceptCookies": false, "handleODataParametersVisited": false}},
+		{Type: "spider", Parameters: map[string]any{"context": "pandaward", "maxDuration": minutes, "maxDepth": 5, "maxChildren": 50, "acceptCookies": false, "handleODataParametersVisited": false}},
 		{Type: "passiveScan-wait", Parameters: map[string]any{"maxDuration": minutes}},
 	}
 	if active {
-		jobs = append(jobs, planJob{Type: "activeScan", Parameters: map[string]any{"context": "pensec", "maxScanDurationInMins": minutes, "maxRuleDurationInMins": 2, "threadPerHost": 1}})
+		jobs = append(jobs, planJob{Type: "activeScan", Parameters: map[string]any{"context": "pandaward", "maxScanDurationInMins": minutes, "maxRuleDurationInMins": 2, "threadPerHost": 1}})
 	}
-	jobs = append(jobs, planJob{Type: "report", Parameters: map[string]any{"template": "traditional-json", "reportDir": reportDir, "reportFile": "zap", "reportTitle": "PenSec ZAP run"}})
+	jobs = append(jobs, planJob{Type: "report", Parameters: map[string]any{"template": "traditional-json", "reportDir": reportDir, "reportFile": "zap", "reportTitle": "Pandaward ZAP run"}})
 	doc := planDoc{Env: planEnv{Contexts: []planContext{c}, Parameters: map[string]any{"failOnError": true, "failOnWarning": false, "progressToStdout": true}}, Jobs: jobs}
 	return yaml.Marshal(doc)
 }

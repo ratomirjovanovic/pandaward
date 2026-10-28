@@ -1,6 +1,6 @@
-// Command owaspbench measures PenSec's built-in rules on the OWASP Benchmark
+// Command owaspbench measures Pandaward's built-in rules on the OWASP Benchmark
 // for Java (https://github.com/OWASP-Benchmark/BenchmarkJava). It walks a
-// local checkout with the same inventory settings as `pensec scan`, runs the
+// local checkout with the same inventory settings as `pandaward scan`, runs the
 // built-in adapters in process, maps each finding to a test case by file name
 // and to a Benchmark category by rule or CWE, and prints TP, FP, FN, TN, TPR,
 // FPR and the Benchmark score (TPR - FPR) per category.
@@ -20,11 +20,11 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/ratomirjovanovic/pensec/internal/adapters"
-	"github.com/ratomirjovanovic/pensec/internal/config"
-	"github.com/ratomirjovanovic/pensec/internal/inventory"
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/version"
+	"github.com/ratomirjovanovic/pandaward/internal/adapters"
+	"github.com/ratomirjovanovic/pandaward/internal/config"
+	"github.com/ratomirjovanovic/pandaward/internal/inventory"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/version"
 )
 
 // PinnedCommit is the BenchmarkJava commit the published numbers refer to.
@@ -38,7 +38,7 @@ type Output struct {
 	Benchmark        string `json:"benchmark"`
 	BenchmarkCommit  string `json:"benchmark_commit"`
 	PinnedCommit     string `json:"pinned_commit"`
-	PensecVersion    string `json:"pensec_version"`
+	PandawardVersion string `json:"pandaward_version"`
 	ExpectedResults  string `json:"expected_results"`
 	TestCaseFiles    int    `json:"test_case_files"`
 	TestPathExcluded int    `json:"test_case_files_excluded_as_test_paths"`
@@ -94,7 +94,7 @@ func measure(ctx context.Context, repo, expectedPath string) (*Output, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := &Output{Benchmark: "OWASP Benchmark for Java", BenchmarkCommit: inv.GitCommit, PinnedCommit: PinnedCommit, PensecVersion: version.Version, ExpectedResults: expectedPath}
+	out := &Output{Benchmark: "OWASP Benchmark for Java", BenchmarkCommit: inv.GitCommit, PinnedCommit: PinnedCommit, PandawardVersion: version.Version, ExpectedResults: expectedPath}
 	for _, file := range inv.Files {
 		if strings.HasPrefix(file.Path, testCodeDir+"/") && TestCaseOf(file.Path) != "" {
 			out.TestCaseFiles++
@@ -134,7 +134,7 @@ func printTable(o *Output) {
 		commit = "unknown (not a git checkout)"
 	}
 	fmt.Printf("%s at %s\n", o.Benchmark, commit)
-	fmt.Printf("PenSec %s, built-in rules only\n", o.PensecVersion)
+	fmt.Printf("Pandaward %s, built-in rules only\n", o.PandawardVersion)
 	fmt.Printf("%d labelled test cases, %d test case files, %d of them excluded as test paths\n", o.TestCases, o.TestCaseFiles, o.TestPathExcluded)
 	fmt.Printf("%d findings: %d in test cases (%d of another category), %d elsewhere\n\n", o.Findings, o.FindingsInTests, o.OffCategory, o.FindingsElsewhere+o.UnknownTestCases)
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)

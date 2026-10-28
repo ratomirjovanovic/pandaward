@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/testfixture"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/testfixture"
 )
 
 // staleView returns the stale view of the latest assessment by ID.

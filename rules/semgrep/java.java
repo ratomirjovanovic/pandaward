@@ -13,56 +13,56 @@ import org.apache.commons.io.FilenameUtils;
 public class Fixture {
     void lookup(Connection conn, String id) throws Exception {
         Statement st = conn.createStatement();
-        // ruleid: pensec-java-sql-string
+        // ruleid: pandaward-java-sql-string
         st.executeQuery("SELECT * FROM invoices WHERE id = " + id);
-        // ok: pensec-java-sql-string
+        // ok: pandaward-java-sql-string
         PreparedStatement ps = conn.prepareStatement("SELECT * FROM invoices WHERE id = ?");
         ps.setString(1, id);
     }
 
     void run(String dir) throws Exception {
-        // ruleid: pensec-java-command-exec
+        // ruleid: pandaward-java-command-exec
         Runtime.getRuntime().exec("ls " + dir);
-        // ok: pensec-java-command-exec
+        // ok: pandaward-java-command-exec
         Runtime.getRuntime().exec("ls -la");
-        // ruleid: pensec-java-command-exec
+        // ruleid: pandaward-java-command-exec
         new ProcessBuilder("sh", "-c", "ls " + dir).start();
-        // ok: pensec-java-command-exec
+        // ok: pandaward-java-command-exec
         new ProcessBuilder("ls", dir).start();
     }
 
     Object load(InputStream in) throws Exception {
-        // ruleid: pensec-java-deserialization
+        // ruleid: pandaward-java-deserialization
         return new ObjectInputStream(in).readObject();
     }
 
     Object loadJson(InputStream in) throws Exception {
-        // ok: pensec-java-deserialization
+        // ok: pandaward-java-deserialization
         return new com.fasterxml.jackson.databind.ObjectMapper().readValue(in, Object.class);
     }
 
     void crypto() throws Exception {
-        // ruleid: pensec-java-weak-cipher
+        // ruleid: pandaward-java-weak-cipher
         Cipher a = Cipher.getInstance("DES");
-        // ruleid: pensec-java-weak-cipher
+        // ruleid: pandaward-java-weak-cipher
         Cipher b = Cipher.getInstance("AES/ECB/PKCS5Padding");
-        // ok: pensec-java-weak-cipher
+        // ok: pandaward-java-weak-cipher
         Cipher c = Cipher.getInstance("AES/GCM/NoPadding");
     }
 
     void files(HttpServletRequest request) throws Exception {
         String name = request.getParameter("name");
-        // ruleid: pensec-java-path-traversal
+        // ruleid: pandaward-java-path-traversal
         FileInputStream in = new FileInputStream(name);
-        // ok: pensec-java-path-traversal
+        // ok: pandaward-java-path-traversal
         File safe = new File("/srv/files", FilenameUtils.getName(name));
     }
 
     void proxy(HttpServletRequest request) throws Exception {
         String target = request.getParameter("url");
-        // ruleid: pensec-java-ssrf
+        // ruleid: pandaward-java-ssrf
         URL u = new URL(target);
-        // ok: pensec-java-ssrf
+        // ok: pandaward-java-ssrf
         URL s = new URL("https://api.example.org/status");
     }
 }

@@ -8,9 +8,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ratomirjovanovic/pensec/internal/catalog"
-	"github.com/ratomirjovanovic/pensec/internal/inventory"
-	"github.com/ratomirjovanovic/pensec/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/catalog"
+	"github.com/ratomirjovanovic/pandaward/internal/inventory"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
 )
 
 // adapterWatches reports whether an adapter's result can depend on the
@@ -114,7 +114,7 @@ func ApplyStale(cs []model.ControlResult, es []model.Edge, affected map[string]b
 	if len(sample) > 3 {
 		sample = append(append([]string{}, sample[:3]...), "...")
 	}
-	why := "inputs changed since this assessment (" + strings.Join(sample, ", ") + "); re-run `pensec retest`"
+	why := "inputs changed since this assessment (" + strings.Join(sample, ", ") + "); re-run `pandaward retest`"
 	stale := map[string]bool{}
 	outC := make([]model.ControlResult, len(cs))
 	for i, c := range cs {
@@ -192,7 +192,7 @@ func (e *Engine) changes(asmt string) (Changes, error) {
 	}
 	cur, err := inventory.Hashes(ctx, e.Root, inventory.Options{Exclude: e.Cfg.Inventory.Exclude, MaxFileBytes: e.Cfg.Inventory.MaxFileBytes, MaxFiles: e.Cfg.Inventory.MaxFiles})
 	if errors.Is(err, context.DeadlineExceeded) {
-		ch.Note = fmt.Sprintf("hash check for changes made outside Claude Code skipped after %s; run `pensec status` for a full check", e.HashBudget)
+		ch.Note = fmt.Sprintf("hash check for changes made outside Claude Code skipped after %s; run `pandaward status` for a full check", e.HashBudget)
 		return ch, nil
 	}
 	if err != nil {

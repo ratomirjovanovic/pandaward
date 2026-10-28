@@ -1,4 +1,4 @@
-// Package config loads and writes .pensec/config.yaml.
+// Package config loads and writes .pandaward/config.yaml.
 package config
 
 import (
@@ -14,8 +14,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Dir is the per-project PenSec directory.
-const Dir = ".pensec"
+// Dir is the per-project Pandaward directory.
+const Dir = ".pandaward"
 
 // Config is the project configuration (schema v1).
 type Config struct {
@@ -39,7 +39,7 @@ type Config struct {
 		SemgrepConfig    string   `yaml:"semgrep_config"`
 		Adapters         []string `yaml:"adapters"`
 		// SARIFFiles lists SARIF results to import, relative to the project
-		// root, in addition to .pensec/sarif/*.sarif.
+		// root, in addition to .pandaward/sarif/*.sarif.
 		SARIFFiles []string `yaml:"sarif_files"`
 	} `yaml:"scan"`
 	Report struct {
@@ -54,7 +54,7 @@ type Config struct {
 		// is not on PATH or in the default install location.
 		ZAPPath string `yaml:"zap_path"`
 		// AndroidPackage and IOSBundleID name the test build that
-		// `pensec test --profile local-runtime` inspects on an emulator or
+		// `pandaward test --profile local-runtime` inspects on an emulator or
 		// simulator. Real devices are never used.
 		AndroidPackage string `yaml:"android_package"`
 		IOSBundleID    string `yaml:"ios_bundle_id"`
@@ -70,7 +70,7 @@ type Config struct {
 func Default(name string) *Config {
 	c := &Config{SchemaVersion: 1, Profile: "local-passive"}
 	c.Project.Name = name
-	c.Inventory.Exclude = []string{"node_modules", "vendor", "dist", "build", ".git", ".next", ".nuxt", "target", "bin", "obj", ".venv", "venv", "__pycache__", ".pensec", "coverage", ".terraform", "Pods", ".gradle"}
+	c.Inventory.Exclude = []string{"node_modules", "vendor", "dist", "build", ".git", ".next", ".nuxt", "target", "bin", "obj", ".venv", "venv", "__pycache__", ".pandaward", "coverage", ".terraform", "Pods", ".gradle"}
 	c.Inventory.MaxFileBytes = 2 << 20
 	c.Inventory.MaxFiles = 200000
 	c.Scan.MaxDurationMinutes = 45
@@ -95,8 +95,8 @@ func PrivateDir(root string) string { return filepath.Join(root, Dir, "private")
 // ReportsDir returns the gitignored report directory.
 func ReportsDir(root string) string { return filepath.Join(root, Dir, "reports") }
 
-// ErrNotInitialized is returned when .pensec/config.yaml is missing.
-var ErrNotInitialized = errors.New("project not initialized: run `pensec init` first")
+// ErrNotInitialized is returned when .pandaward/config.yaml is missing.
+var ErrNotInitialized = errors.New("project not initialized: run `pandaward init` first")
 
 // Load reads the config of a project.
 func Load(root string) (*Config, string, error) {
@@ -156,11 +156,11 @@ func Write(root string, c *Config, force bool) error {
 	if err != nil {
 		return err
 	}
-	header := "# PenSec project configuration (schema v1). Safe to commit.\n# Private state lives in .pensec/private/ and is gitignored.\n"
+	header := "# Pandaward project configuration (schema v1). Safe to commit.\n# Private state lives in .pandaward/private/ and is gitignored.\n"
 	return os.WriteFile(p, append([]byte(header), b...), 0o644)
 }
 
-// EnsureLayout creates private directories and the .pensec/.gitignore.
+// EnsureLayout creates private directories and the .pandaward/.gitignore.
 func EnsureLayout(root string) error {
 	for _, d := range []string{PrivateDir(root), filepath.Join(PrivateDir(root), "evidence"), filepath.Join(PrivateDir(root), "runs"), ReportsDir(root)} {
 		if err := os.MkdirAll(d, 0o700); err != nil {
@@ -169,7 +169,7 @@ func EnsureLayout(root string) error {
 	}
 	gi := filepath.Join(root, Dir, ".gitignore")
 	if _, err := os.Stat(gi); errors.Is(err, os.ErrNotExist) {
-		return os.WriteFile(gi, []byte("# PenSec private state, evidence and reports never go to git\nprivate/\nreports/\n"), 0o644)
+		return os.WriteFile(gi, []byte("# Pandaward private state, evidence and reports never go to git\nprivate/\nreports/\n"), 0o644)
 	}
 	return nil
 }

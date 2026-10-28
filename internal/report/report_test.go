@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ratomirjovanovic/pensec/internal/engine"
-	"github.com/ratomirjovanovic/pensec/internal/testfixture"
+	"github.com/ratomirjovanovic/pandaward/internal/engine"
+	"github.com/ratomirjovanovic/pandaward/internal/testfixture"
 )
 
 func TestReportsAreRedactedAndValid(t *testing.T) {
@@ -57,7 +57,7 @@ func TestReportsAreRedactedAndValid(t *testing.T) {
 		t.Errorf("unexpected SARIF: %+v", sarif)
 	}
 	e.St.DB.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
-	filepath.Walk(filepath.Join(root, ".pensec"), func(p string, info os.FileInfo, err error) error {
+	filepath.Walk(filepath.Join(root, ".pandaward"), func(p string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() {
 			return nil
 		}
@@ -72,11 +72,11 @@ func TestReportsAreRedactedAndValid(t *testing.T) {
 }
 
 // Imported SARIF results reach every report format as unconfirmed findings,
-// and PenSec's own SARIF report is never imported back.
+// and Pandaward's own SARIF report is never imported back.
 func TestImportedSARIFInReports(t *testing.T) {
 	root := t.TempDir()
 	testfixture.Write(t, root, "src/db.js", "const id = req.query.id;\ndb.query('SELECT * FROM t WHERE id=' + id);\n")
-	testfixture.Write(t, root, ".pensec/sarif/codeql.sarif", `{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"CodeQL","semanticVersion":"2.19.0"}},
+	testfixture.Write(t, root, ".pandaward/sarif/codeql.sarif", `{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"CodeQL","semanticVersion":"2.19.0"}},
 	 "results":[{"ruleId":"js/sql-injection","level":"error","message":{"text":"Query built from user input"},
 	  "locations":[{"physicalLocation":{"artifactLocation":{"uri":"src/db.js"},"region":{"startLine":2}}}]}]}]}`)
 	e, _, err := engine.Init(root, false)
@@ -114,12 +114,12 @@ func TestImportedSARIFInReports(t *testing.T) {
 		}
 	}
 	own, _ := os.ReadFile(paths[3])
-	testfixture.Write(t, root, ".pensec/sarif/pensec.sarif", string(own))
+	testfixture.Write(t, root, ".pandaward/sarif/pandaward.sarif", string(own))
 	res, err := e.Scan(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if res.New != 0 || res.Status != "COMPLETE" {
-		t.Errorf("re-importing PenSec's own report: %d new, %s %v", res.New, res.Status, res.Errors)
+		t.Errorf("re-importing Pandaward's own report: %d new, %s %v", res.New, res.Status, res.Errors)
 	}
 }

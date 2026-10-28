@@ -1,4 +1,4 @@
-// Package model holds the shared types of the PenSec assessment ledger.
+// Package model holds the shared types of the Pandaward assessment ledger.
 package model
 
 // SchemaVersion is written into every exported object.

@@ -1,4 +1,4 @@
-// Package rules embeds the reviewed rule packs PenSec ships with.
+// Package rules embeds the reviewed rule packs Pandaward ships with.
 package rules
 
 import (

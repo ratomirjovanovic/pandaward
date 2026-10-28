@@ -8,8 +8,8 @@ import (
 	"testing"
 )
 
-// Release-blocking: PenSec must not be steered by repository content.
-func TestHostileRepositoryCannotSteerPenSec(t *testing.T) {
+// Release-blocking: Pandaward must not be steered by repository content.
+func TestHostileRepositoryCannotSteerPandaward(t *testing.T) {
 	r, err := Run(context.Background())
 	if err != nil {
 		t.Fatal(err)

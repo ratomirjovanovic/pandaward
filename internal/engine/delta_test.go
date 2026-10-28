@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ratomirjovanovic/pensec/internal/testfixture"
+	"github.com/ratomirjovanovic/pandaward/internal/testfixture"
 )
 
 func rescan(t *testing.T, e *Engine) string {

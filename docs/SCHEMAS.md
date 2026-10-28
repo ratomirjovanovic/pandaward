@@ -4,14 +4,14 @@ These are the formats other programs and people depend on. Their shape is pinned
 
 | Schema | Where | Version field | Current |
 |---|---|---|---|
-| Report JSON | `pensec report --format json`, `report.json` in bundles | `schema_version` | 1 |
-| Evidence record | `.pensec/private/evidence/*.json`, `evidence/` in bundles | `schema_version` | 1 |
-| Bundle manifest | `manifest.json` in `pensec export` bundles | `schema_version` | 1 |
-| Coverage CSV | `pensec report --format csv` header row | shares the report version | 1 |
-| MCP tools | names, input schemas and annotations of `pensec mcp` tools | shares the report version | 1 |
-| Project config | `.pensec/config.yaml` | `schema_version` | 1 |
-| Scope manifest | `.pensec/scope.yaml` | `schema_version` | 1 |
-| Ledger | `.pensec/private/state.db` | `meta.schema_version` (number of migrations) | 2 |
+| Report JSON | `pandaward report --format json`, `report.json` in bundles | `schema_version` | 1 |
+| Evidence record | `.pandaward/private/evidence/*.json`, `evidence/` in bundles | `schema_version` | 1 |
+| Bundle manifest | `manifest.json` in `pandaward export` bundles | `schema_version` | 1 |
+| Coverage CSV | `pandaward report --format csv` header row | shares the report version | 1 |
+| MCP tools | names, input schemas and annotations of `pandaward mcp` tools | shares the report version | 1 |
+| Project config | `.pandaward/config.yaml` | `schema_version` | 1 |
+| Scope manifest | `.pandaward/scope.yaml` | `schema_version` | 1 |
+| Ledger | `.pandaward/private/state.db` | `meta.schema_version` (number of migrations) | 2 |
 
 SARIF output follows SARIF 2.1.0 and is not versioned separately.
 
