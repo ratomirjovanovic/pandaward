@@ -105,6 +105,35 @@ jobs:
           PENSEC_REAL_TOOLS: "1"
         run: go test -count=1 -v -run '^TestRealTools$' ./internal/adapters/
 
+  # Runs the ZAP adapter against a pinned ZAP and the fixture site, which
+  # links to an out-of-scope origin that must never be contacted.
+  real-zap:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      ZAP_VERSION: 2.17.0
+      ZAP_SHA256: efe799aaa3627db683b43f00c9c210aea0b75c00cc8f0a0f0434d12bb3ddde5a
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Install pinned ZAP
+        run: |
+          set -eu
+          cd "$RUNNER_TEMP"
+          curl -fsSLo zap.tar.gz "https://github.com/zaproxy/zaproxy/releases/download/v${ZAP_VERSION}/ZAP_${ZAP_VERSION}_Linux.tar.gz"
+          printf '%s  %s\n' "$ZAP_SHA256" zap.tar.gz | sha256sum -c -
+          tar -xzf zap.tar.gz
+          echo "PENSEC_ZAP_PATH=$RUNNER_TEMP/ZAP_${ZAP_VERSION}/zap.sh" >> "$GITHUB_ENV"
+          java -version
+      - name: Real ZAP adapter test
+        env:
+          PENSEC_REAL_ZAP: "1"
+        run: go test -count=1 -v -timeout 15m -run '^TestRealZAP$' ./internal/zap/
+
   reproducible:
     runs-on: ubuntu-latest
     steps:

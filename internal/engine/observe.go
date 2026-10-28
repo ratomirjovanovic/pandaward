@@ -2,7 +2,6 @@ package engine
 
 import (
 	"context"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -80,31 +79,19 @@ func (e *Engine) Observe(ctx context.Context, progress func(string)) (*ObserveRe
 	if a == nil {
 		return nil, errors.New("run `pensec scan` first; runtime observations attach to the latest assessment")
 	}
-	timeout := time.Duration(m.Limits.TimeoutSeconds) * time.Second
-	tr := &http.Transport{
-		Proxy:                 nil, // never route through an inherited proxy
-		DialContext:           m.DialContext(timeout),
-		TLSClientConfig:       &tls.Config{MinVersion: tls.VersionTLS12},
-		TLSHandshakeTimeout:   timeout,
-		ResponseHeaderTimeout: timeout,
-		MaxIdleConns:          1,
-		DisableCompression:    true,
-	}
-	client := &http.Client{Transport: tr, Timeout: timeout, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	// The guard enforces scope, methods, the budget, the rate limit and
+	// address checks, and never follows redirects.
+	g := scope.NewGuard(m, guardRoots)
+	client := g.Client()
 	res := &ObserveResult{AssessmentID: a.ID, Budget: m.Limits.MaxRequestsTotal}
-	interval := time.Duration(float64(time.Second) / m.Limits.RequestsPerSecond)
 	_ = e.St.Event(e.ProjectID, a.ID, "", "NETWORK_TEST_STARTED", fmt.Sprintf("production-observe under approval %s by %s", ap.ID, ap.ApprovedBy))
 
 	var sigs []model.Signal
 	var evIDs []string
 	decided := 0
-	for i, t := range m.Targets {
+	for _, t := range m.Targets {
 		if ctx.Err() != nil {
 			res.Errors = append(res.Errors, "cancelled")
-			break
-		}
-		if res.Requests >= m.Limits.MaxRequestsTotal {
-			res.Errors = append(res.Errors, "request budget exhausted")
 			break
 		}
 		u, err := scope.ParseTarget(t.URL)
@@ -116,9 +103,6 @@ func (e *Engine) Observe(ctx context.Context, progress func(string)) (*ObserveRe
 			res.Errors = append(res.Errors, "scope guard: "+err.Error())
 			continue
 		}
-		if i > 0 {
-			time.Sleep(interval)
-		}
 		progress("GET " + u.Redacted())
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 		if err != nil {
@@ -126,8 +110,8 @@ func (e *Engine) Observe(ctx context.Context, progress func(string)) (*ObserveRe
 			continue
 		}
 		req.Header.Set("User-Agent", "pensec-observe/1 (authorized passive header review)")
-		res.Requests++
 		resp, err := client.Do(req)
+		res.Requests = g.Sent()
 		if err != nil {
 			res.Errors = append(res.Errors, redact.Line(err.Error()))
 			continue

@@ -88,7 +88,7 @@ var Controls = []Control{
 	{ID: "D-002", Domain: "D", Title: "No shell command construction through a shell interpreter", Method: MethodStatic, Adapter: "builtin-code", Requires: "code", Refs: []string{"CWE-78"}},
 	{ID: "D-003", Domain: "D", Title: "No SQL statements built by string concatenation or interpolation", Method: MethodStatic, Adapter: "builtin-code", Requires: "code", Refs: []string{"CWE-89"}},
 	{ID: "D-004", Domain: "D", Title: "No unsafe deserialization APIs on untrusted data", Method: MethodStatic, Adapter: "builtin-code", Requires: "code", Refs: []string{"CWE-502"}},
-	{ID: "D-005", Domain: "D", Title: "Injection probes executed against approved target", Method: MethodRuntime, Requires: "web", Profile: "staging-active"},
+	{ID: "D-005", Domain: "D", Title: "Injection probes executed against approved target", Method: MethodRuntime, Adapter: "zap", Requires: "web", Profile: "staging-active"},
 	{ID: "D-006", Domain: "D", Title: "Semgrep data-flow rules (SSRF, path traversal, template injection) and project rules report no findings", Method: MethodExternal, Adapter: "semgrep", Requires: "code"},
 
 	{ID: "E-001", Domain: "E", Title: "No high-confidence secret patterns in repository files", Method: MethodStatic, Adapter: "builtin-secrets", Requires: "any", Refs: []string{"CWE-798"}},
@@ -125,7 +125,7 @@ var Controls = []Control{
 	{ID: "L-001", Domain: "L", Title: "iOS App Transport Security does not allow arbitrary loads", Method: MethodStatic, Adapter: "builtin-mobile", Requires: "ios", Refs: []string{"CWE-319"}},
 	{ID: "L-002", Domain: "L", Title: "iOS keychain and storage verified on simulator", Method: MethodRuntime, Requires: "ios", Profile: "local-runtime"},
 
-	{ID: "M-001", Domain: "M", Title: "Passive DAST (ZAP baseline) against approved target", Method: MethodRuntime, Requires: "web", Profile: "staging-active"},
+	{ID: "M-001", Domain: "M", Title: "Passive DAST (ZAP baseline) against approved target", Method: MethodRuntime, Adapter: "zap", Requires: "web", Profile: "staging-active"},
 
 	{ID: "N-001", Domain: "N", Title: "Third-party GitHub Actions pinned to a full commit SHA", Method: MethodStatic, Adapter: "builtin-cicd", Requires: "github_workflows", Refs: []string{"CWE-829"}},
 	{ID: "N-002", Domain: "N", Title: "No untrusted event data interpolated into run: scripts", Method: MethodStatic, Adapter: "builtin-cicd", Requires: "github_workflows", Refs: []string{"CWE-78"}},

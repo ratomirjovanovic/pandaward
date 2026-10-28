@@ -167,7 +167,7 @@ In Claude Code, hooks keep the ledger current without any command. Edited files 
 | A Inventory and architecture | entrypoints with file and line (`pensec routes`): HTTP routes for Express, NestJS, Next.js, Flask, FastAPI, Django, Go, Spring, Laravel, Rails, ASP.NET with router prefixes and mounts resolved; GraphQL schema operations; gRPC services; queue consumers and cron jobs; services in monorepos; OpenAPI drift | threat model |
 | B Authentication | JWT `none` or unverified decode, cookie flags | login, reset and session lifecycle |
 | C Authorization | | object and function level authorization (manual-assisted) |
-| D Injection | eval, shell, SQL concatenation, unsafe deserialization | runtime probes |
+| D Injection | eval, shell, SQL concatenation, unsafe deserialization | ZAP active scan (`staging-active`, opt-in) |
 | E Secrets and crypto | 16 high-specificity secret formats, tracked `.env` and key files, disabled TLS verification, weak hash or random | |
 | F Business logic | | invariants, idempotency, races (manual-assisted) |
 | G APIs and webhooks | webhook signature verification presence | contract vs runtime |
@@ -205,6 +205,7 @@ In Claude Code, hooks keep the ledger current without any command. Edited files 
 | `pensec verify-bundle out.zip` | Recompute every hash in a bundle; compare the printed manifest hash with the sender's |
 | `pensec scope init \| validate \| approve \| revoke` | Authorization for network tests |
 | `pensec test --profile production-observe` | Header and cookie review of approved origins |
+| `pensec test --profile staging-active` | ZAP spider and passive scan of approved staging origins, active scan when the manifest allows it |
 | `pensec feedback false-positive ID \| false-negative \| summary` | Prepare a report about a wrong or missed finding; prints a prefilled issue link, sends nothing |
 | `pensec doctor` | Optional scanners and their network needs |
 | `pensec benchmark` | TP, FP, FN and TN per built-in rule on the bundled corpus |
@@ -230,9 +231,12 @@ pensec scope init                       # writes .pensec/scope.yaml, unusable as
 # fill in owner, written permission reference, purpose, targets, limits, acknowledged: true
 pensec scope approve --by "Jane"        # interactive terminal only, bound to the file's SHA-256
 pensec test --profile production-observe
+pensec test --profile staging-active    # staging or local targets, needs ZAP
 ```
 
 The engine sends at most `max_requests_total` GET requests to the listed origins at the configured rate, never follows redirects, and checks every resolved address at connection time. Loopback, private and link-local addresses are refused unless the manifest explicitly allows a local fixture, and cloud metadata addresses are always refused. Editing `scope.yaml` invalidates the approval. Approvals are also bound to a per-user key kept outside the project (`approval.key` in your user config directory), so a scope file or ledger that arrives with a repository never counts as approved.
+
+`staging-active` runs your installed [ZAP](https://www.zaproxy.org/) (it needs Java 17+; PenSec never installs it) through its automation framework: a spider and the passive scan decide M-001, and with `zap.active_scan: true` in the manifest the active scan also decides D-005 (injection). ZAP is chained to a PenSec proxy on loopback that terminates TLS and sends each request through the same scope guard, so origins, excluded paths, allowed methods, the request budget, the rate limit and the address checks apply to every ZAP request. The guard also stops after three consecutive 429 or 5xx answers. A ZAP run that fails is `ERROR`, a run cut short by the budget or the guard is `INCONCLUSIVE`, and targets marked `environment: production` are refused. Set `runtime.zap_path` in `.pensec/config.yaml` when ZAP is not on `PATH` or in its default install location.
 
 ## In CI
 
@@ -273,7 +277,7 @@ The hook runs `pensec scan --quiet --fail-on high` and blocks the commit when op
 
 - That your application is secure. No tool can prove the absence of vulnerabilities.
 - Anything about controls it reports as `BLOCKED`, `UNSUPPORTED`, `SUSPECTED`, `INCONCLUSIVE`, `ERROR` or `STALE`.
-- Results from runtime profiles other than `production-observe`. `staging-active`, ZAP and emulator tests are on the roadmap and are reported as `UNSUPPORTED` today.
+- Results from runtime tests that are not implemented yet: authorization with role and tenant fixtures and emulator tests are on the roadmap and are reported as `UNSUPPORTED` today.
 
 A PenSec report is an automated technical assessment. It is not a certification, an attestation, a legal opinion or an independently signed penetration test.
 
@@ -284,7 +288,7 @@ A PenSec report is an automated technical assessment. It is not a certification,
 | M0 Foundation | CLI, ledger, scope policy, inventory, static report | done |
 | M1 Public alpha | built-in adapters, optional tool adapters, bundled Semgrep rules, edges, HTML/JSON/SARIF, plugin, signed reproducible releases | done (v0.1.1) |
 | M2 Context-safe beta | per-domain invalidation, targeted retest, evidence bundles, delta reports, hostile-repository suite | done |
-| M3 Runtime beta | staging profile with role and tenant fixtures, ZAP adapter | planned |
+| M3 Runtime beta | staging profile with role and tenant fixtures, ZAP adapter | in progress (ZAP done) |
 | M4 Mobile and AI | MobSF and emulator adapters, prompt-injection suite | planned |
 | 1.0 | frozen schemas ([done](docs/SCHEMAS.md)), benchmark corpus with at least 3 vulnerable and 3 safe cases per rule, external review | in progress |
 

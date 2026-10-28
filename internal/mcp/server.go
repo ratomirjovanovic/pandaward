@@ -243,7 +243,8 @@ func (s *Server) call(ctx context.Context, name string, raw json.RawMessage) (an
 			"1. The human operator fills .pensec/scope.yaml (pensec scope init creates a template) with owner, written permission reference, targets and limits.",
 			"2. The human operator runs `pensec scope approve --by \"<name>\"` in their own interactive terminal; it cannot be run by an agent.",
 			"3. Then `pensec test --profile production-observe` sends at most max_requests_total GET requests to the listed origins, never following redirects.",
-			"staging-active and other intrusive profiles are not implemented in this release and report UNSUPPORTED."}}, nil
+			"4. For targets marked staging or local, `pensec test --profile staging-active` runs a user-installed ZAP (spider and passive scan; the active scan only when the manifest sets zap.active_scan: true), with every ZAP request sent through the PenSec scope guard.",
+			"local-runtime and manual-assisted are not implemented in this release and report UNSUPPORTED."}}, nil
 	}
 	e, err := s.open()
 	if err != nil {

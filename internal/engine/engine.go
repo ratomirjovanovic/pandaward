@@ -174,9 +174,14 @@ func (e *Engine) Plan(inv *inventory.Inventory) []PlanItem {
 				it.Status, it.Reason = "PLANNED", "runs in passive scan via "+c.Adapter
 			}
 		case catalog.MethodRuntime:
-			if c.Adapter == "observe-headers" {
+			switch {
+			case c.Adapter == "observe-headers":
 				it.Status, it.Reason = model.StatusBlocked, "needs `pensec test --profile production-observe` with an approved scope manifest"
-			} else {
+			case c.Adapter == "zap" && c.ID == "D-005":
+				it.Status, it.Reason = model.StatusBlocked, "needs zap.active_scan: true in an approved scope manifest, ZAP installed and `pensec test --profile staging-active`"
+			case c.Adapter == "zap":
+				it.Status, it.Reason = model.StatusBlocked, "needs `pensec test --profile staging-active` with an approved scope manifest and ZAP installed"
+			default:
 				it.Status, it.Reason = model.StatusUnsupported, "runtime adapter for profile "+c.Profile+" is not implemented in this release; use manual-assisted review"
 			}
 		case catalog.MethodManual:

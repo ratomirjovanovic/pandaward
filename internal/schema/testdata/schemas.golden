@@ -198,6 +198,7 @@ profile string
 project.name string
 report.formats[] string
 report.include_untested bool
+runtime.zap_path string
 scan.adapter_timeout_seconds int
 scan.adapters[] string
 scan.allow_tool_network bool
@@ -224,6 +225,8 @@ schema_version int
 targets[].url string
 window.end string
 window.start string
+zap.active_scan bool
+zap.max_duration_minutes int
 
 ## ledger version 2
 migration 1 49a96cfafaf80b086bcf887f1f6bd214b4951f26cf375fe73c7c44c0a7e75f75
