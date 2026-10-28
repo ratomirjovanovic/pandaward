@@ -1,6 +1,7 @@
 package inventory_test
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"slices"
@@ -164,5 +165,38 @@ func TestMinimalEnvKeepsSystemDrive(t *testing.T) {
 	}
 	if strings.Contains(env, "AWS_SECRET_ACCESS_KEY") {
 		t.Error("cloud credentials must be scrubbed")
+	}
+}
+
+// Pandaward's own state is never project input, even when a config from
+// before the rename excludes only .pensec.
+func TestWalkAlwaysSkipsStateDirectories(t *testing.T) {
+	files := map[string]string{
+		"src/a.js":                            "console.log(1);\n",
+		".pandaward/private/evidence/e1.json": `{"snippet": "eval(x)"}`,
+		".pandaward/config.yaml":              "schema_version: 1\n",
+		".pensec/private/evidence/e2.json":    `{"snippet": "eval(x)"}`,
+		"apps/web/.pandaward/reports/r.json":  "{}\n",
+	}
+	inv := walk(t, files, inventory.Options{Exclude: []string{".pensec"}})
+	var paths []string
+	for _, f := range inv.Files {
+		paths = append(paths, f.Path)
+	}
+	if !slices.Equal(paths, []string{"src/a.js"}) {
+		t.Fatalf("analyzed files = %v, want only src/a.js", paths)
+	}
+	root := t.TempDir()
+	for rel, content := range files {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		os.MkdirAll(filepath.Dir(p), 0o755)
+		os.WriteFile(p, []byte(content), 0o644)
+	}
+	hs, err := inventory.Hashes(context.Background(), root, inventory.Options{MaxFileBytes: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(hs) != 1 || hs["src/a.js"] == "" {
+		t.Errorf("Hashes saw %v, want only src/a.js", hs)
 	}
 }

@@ -128,6 +128,12 @@ func Hashes(ctx context.Context, root string, opt Options) (map[string]string, e
 	return out, nil
 }
 
+// stateDirs hold Pandaward's own state (ledger, evidence, reports). They
+// are skipped whatever inventory.exclude says: a config from before the
+// rename lists .pensec, and evidence read back as project files would show
+// up as findings and make every scan look stale.
+var stateDirs = map[string]bool{".pandaward": true, ".pensec": true}
+
 // walkFiles applies the inventory rules (exclusions, no symlinks, sensitive
 // names by name only, size cap, text files of known types) and reports each
 // analyzable file to add. Lines are read only when withLines is set.
@@ -164,7 +170,7 @@ func walkFiles(ctx context.Context, absRoot string, opt Options, withLines bool,
 			return nil
 		}
 		if d.IsDir() {
-			if excl[d.Name()] || excl[rel] {
+			if stateDirs[d.Name()] || excl[d.Name()] || excl[rel] {
 				return fs.SkipDir
 			}
 			return nil
