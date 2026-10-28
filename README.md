@@ -71,6 +71,13 @@ You can also run the same steps from a terminal with `claude plugin marketplace 
 Then, in your project:
 
 ```text
+/pensec:start       # the whole assessment in one go: scan with progress, specialist
+                    # reviews, triage, fix plan and reports, with a live checklist
+```
+
+Or step by step:
+
+```text
 /pensec:init        # create .pensec/ and show what was detected
 /pensec:scan        # passive scan with an honest summary
 /pensec:review      # read-only specialist agents look at what automation could not decide
@@ -104,10 +111,9 @@ Or install with Go 1.23 or later: `go install github.com/ratomirjovanovic/pensec
 Then, in your project:
 
 ```sh
-pensec init
-pensec scan
-pensec findings
-pensec report --format html,sarif
+pensec assess          # init, scan with progress, reports and a summary
+pensec findings        # then dig in
+pensec fix-plan
 ```
 
 Release binaries are reproducible and come with checksums, a CycloneDX SBOM and signed build provenance; [docs/VERIFYING.md](docs/VERIFYING.md) shows how to check them.
@@ -167,6 +173,7 @@ flowchart LR
 
 | Command | What it does |
 |---|---|
+| `pensec assess` | The whole local assessment in one step: init if needed, scan with progress bars, reports and a summary |
 | `pensec init` | Create `.pensec/` with config and a private ledger |
 | `pensec plan` | Applicable controls, gates, candidate edges, inventory gaps |
 | `pensec scan [--fail-on high]` | Passive scan, including SARIF import from `.pensec/sarif/`; exit code 4 when the gate is reached |
