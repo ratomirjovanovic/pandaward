@@ -244,6 +244,20 @@ steps:
 
 The action downloads a release binary, checks it against `SHA256SUMS`, scans, writes SARIF, HTML, Markdown and JSON reports to `pensec-report/`, and adds a short job summary with counts only (`summary: full` lists findings; job summaries of public repositories are public). With `new-only`, the base commit is scanned in a separate worktree and only findings whose fingerprints are new count. Inputs and outputs are documented in [`action.yml`](action.yml).
 
+## Before each commit
+
+With [pre-commit](https://pre-commit.com), add this to `.pre-commit-config.yaml` and run `pensec init` once in the project:
+
+```yaml
+repos:
+  - repo: https://github.com/ratomirjovanovic/pensec
+    rev: v0.1.3
+    hooks:
+      - id: pensec-system   # uses the pensec on your PATH; use id: pensec to build it with Go 1.23+
+```
+
+The hook runs `pensec scan --quiet --fail-on high` and blocks the commit when open high or critical findings exist. It scans the working tree, not only the staged files.
+
 ## What PenSec will not tell you
 
 - That your application is secure. No tool can prove the absence of vulnerabilities.
