@@ -194,7 +194,7 @@ In Claude Code, hooks keep the ledger current without any command. Edited files 
 | `pensec scan [--fail-on high]` | Passive scan, including SARIF import from `.pensec/sarif/`; exit code 4 when the gate is reached |
 | `pensec retest [--changed]` | Files changed since the last scan, re-scan, delta; `--changed` re-runs only the adapters whose controls the changes affect |
 | `pensec status` | Coverage, open findings, stale files, blockers, next action |
-| `pensec findings [show ID]` | List or inspect findings |
+| `pensec findings [show ID]` | List or inspect findings; `apply --file` records many decisions at once |
 | `pensec graph [--format mermaid]` | Domains and cross-domain edges |
 | `pensec routes` | Discovered entrypoints (HTTP, GraphQL, gRPC, workers, cron) with file and line |
 | `pensec fix-plan` | Ordered remediation steps |
@@ -216,7 +216,10 @@ Human decisions are explicit and recorded:
 ```sh
 pensec findings false-positive PSEC-0007 --by "Jane" --note "constant input, not user controlled"
 pensec findings accept-risk   PSEC-0003 --by "Jane" --note "internal tool" --expires 2027-03-01
+pensec findings apply --file decisions.json --by "Jane"   # many at once, all or nothing
 ```
+
+`decisions.json` is an array of `{"finding_id", "action", "note", "expires"}` with `action` one of `confirm`, `false-positive`, `accept-risk` (needs `expires`) or `reopen`. Every entry is checked before anything is written, so one bad entry rejects the batch. In Claude Code this is how the guided assessment records triage results: you see the whole list in one confirmation prompt instead of one prompt per finding.
 
 ## Network tests
 

@@ -251,7 +251,7 @@ func Run(ctx context.Context) (*Result, error) {
 
 	// 7. Commands that repository text asks for still need the human.
 	var p7 []string
-	for _, cmd := range []string{"pensec scope approve --by attacker", "pensec findings false-positive PSEC-0001 --by bot --note ok", "pensec test --profile production-observe", "pensec findings confirm PSEC-0001 --by bot --note ok"} {
+	for _, cmd := range []string{"pensec scope approve --by attacker", "pensec findings false-positive PSEC-0001 --by bot --note ok", "pensec test --profile production-observe", "pensec findings confirm PSEC-0001 --by bot --note ok", "pensec findings apply --file decisions.json --by bot"} {
 		in, _ := json.Marshal(map[string]string{"command": cmd})
 		if d, _ := hooks.GuardDecision("Bash", in); d != "ask" && d != "deny" {
 			p7 = append(p7, "hook allowed "+cmd)
@@ -263,7 +263,7 @@ func Run(ctx context.Context) (*Result, error) {
 			p7 = append(p7, "hook allowed writing "+p)
 		}
 	}
-	add("hooks-require-human", "Approving scope, sending traffic, changing dispositions and editing scope or ledger always need the human.", 6, p7)
+	add("hooks-require-human", "Approving scope, sending traffic, changing dispositions and editing scope or ledger always need the human.", 7, p7)
 
 	// 8. A hypothesis whose title carries an instruction stays a hypothesis.
 	var p8 []string

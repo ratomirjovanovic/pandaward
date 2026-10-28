@@ -146,7 +146,8 @@ func preCompact(in Input) int {
 }
 
 var (
-	humanOnlyCmd = regexp.MustCompile(`(?i)\bpensec(\.exe)?["']?\s+(scope\s+(approve|revoke)|test\b|findings\s+(false-positive|accept-risk|reopen|confirm)\b|purge\b|init\s+--force)`)
+	humanOnlyCmd = regexp.MustCompile(`(?i)\bpensec(\.exe)?["']?\s+(scope\s+(approve|revoke)|test\b|findings\s+(false-positive|accept-risk|reopen|confirm|apply)\b|purge\b|init\s+--force)`)
+	applyFile    = regexp.MustCompile(`(?i)\bfindings\s+apply\b.*?--file[=\s]+(?:"([^"]+)"|'([^']+)'|(\S+))`)
 	privateRef   = regexp.MustCompile(`(?i)\.pensec[\\/]+(private|reports)\b|state\.db`)
 	scopeRef     = regexp.MustCompile(`(?i)\.pensec[\\/]+(scope|config)\.ya?ml`)
 	readOnlyCmd  = regexp.MustCompile(`(?i)^\s*(cat|type|less|more|head|tail|Get-Content|gc|bat)\s`)
@@ -210,5 +211,49 @@ func preTool(in Input, w io.Writer) int {
 	if d == "" {
 		return 0
 	}
+	var ti struct {
+		Command string `json:"command"`
+	}
+	_ = json.Unmarshal(in.ToolInput, &ti)
+	if s := applySummary(ti.Command, projectDir(in)); s != "" {
+		reason += "\n" + s
+	}
 	return emit(w, d, reason)
+}
+
+// maxSummaryLines caps the decisions listed in a confirmation prompt.
+const maxSummaryLines = 30
+
+// applySummary lists the decisions a `pensec findings apply` command would
+// record, so the human confirms the batch knowing what is in it.
+func applySummary(cmd, dir string) string {
+	m := applyFile.FindStringSubmatch(cmd)
+	if m == nil {
+		return ""
+	}
+	p := m[1] + m[2] + m[3]
+	if !filepath.IsAbs(p) {
+		p = filepath.Join(dir, p)
+	}
+	ds, err := engine.ReadTriageDecisions(p)
+	if err != nil {
+		return "The decisions file could not be read (" + redact.Line(err.Error()) + "); the command will fail."
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Decisions to record (%d):", len(ds))
+	for i, d := range ds {
+		if i == maxSummaryLines {
+			fmt.Fprintf(&b, "\n  and %d more in %s", len(ds)-i, redact.Line(p))
+			break
+		}
+		note := redact.Line(d.Note)
+		if r := []rune(note); len(r) > 120 {
+			note = string(r[:117]) + "..."
+		}
+		fmt.Fprintf(&b, "\n  %s %s: %s", redact.Line(d.FindingID), redact.Line(d.Action), note)
+		if d.Expires != "" {
+			fmt.Fprintf(&b, " (until %s)", redact.Line(d.Expires))
+		}
+	}
+	return b.String()
 }

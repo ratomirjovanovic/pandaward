@@ -1,0 +1,99 @@
+package engine
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/ratomirjovanovic/pensec/internal/model"
+	"github.com/ratomirjovanovic/pensec/internal/testfixture"
+)
+
+func openIDs(t *testing.T, e *Engine, n int) []string {
+	t.Helper()
+	fs, err := e.St.Findings(e.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ids []string
+	for _, f := range fs {
+		if f.Status.Active() && len(ids) < n {
+			ids = append(ids, f.ID)
+		}
+	}
+	if len(ids) < n {
+		t.Fatalf("fixture has %d open findings, need %d", len(ids), n)
+	}
+	return ids
+}
+
+func TestTriageBatchAppliesAll(t *testing.T) {
+	e, _ := scan(t, testfixture.VulnerableRepo(t))
+	defer e.Close()
+	ids := openIDs(t, e, 2)
+	out, err := e.TriageBatch([]TriageDecision{
+		{FindingID: ids[0], Action: "false-positive", Note: "test fixture"},
+		{FindingID: ids[1], Action: "confirm", Note: "reachable from the login route"},
+	}, "reviewer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(out) != 2 || out[0].Status != model.FindingFalsePositive {
+		t.Fatalf("unexpected result: %+v", out)
+	}
+	evs, err := e.St.Events(e.ProjectID, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	logged := map[string]bool{}
+	for _, ev := range evs {
+		if strings.HasSuffix(ev.Reason, " by reviewer") {
+			logged[ev.Entity] = true
+		}
+	}
+	if !logged[ids[0]] || !logged[ids[1]] {
+		t.Fatalf("every decision needs an audit event: %+v", evs)
+	}
+}
+
+func TestTriageBatchRejectsWholeBatch(t *testing.T) {
+	e, _ := scan(t, testfixture.VulnerableRepo(t))
+	defer e.Close()
+	ids := openIDs(t, e, 1)
+	cases := map[string][]TriageDecision{
+		"unknown id":     {{FindingID: ids[0], Action: "false-positive", Note: "x"}, {FindingID: "PSEC-9999", Action: "confirm", Note: "x"}},
+		"unknown action": {{FindingID: ids[0], Action: "delete", Note: "x"}},
+		"duplicate":      {{FindingID: ids[0], Action: "false-positive", Note: "x"}, {FindingID: ids[0], Action: "confirm", Note: "x"}},
+		"missing note":   {{FindingID: ids[0], Action: "false-positive", Note: " "}},
+		"bad expiry":     {{FindingID: ids[0], Action: "accept-risk", Note: "x", Expires: "soon"}},
+	}
+	for name, ds := range cases {
+		if _, err := e.TriageBatch(ds, "reviewer"); err == nil {
+			t.Errorf("%s: expected the batch to be rejected", name)
+		}
+	}
+	f, _ := e.St.Finding(e.ProjectID, ids[0])
+	if !f.Status.Active() {
+		t.Fatalf("a rejected batch must not change anything, %s is %s", ids[0], f.Status)
+	}
+	if _, err := e.TriageBatch(nil, "reviewer"); err == nil {
+		t.Error("an empty batch must be rejected")
+	}
+	if _, err := e.TriageBatch([]TriageDecision{{FindingID: ids[0], Action: "confirm", Note: "x"}}, ""); err == nil {
+		t.Error("a reviewer name is required")
+	}
+}
+
+func TestReadTriageDecisionsIsStrict(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "d.json")
+	os.WriteFile(p, []byte(`[{"finding_id":"PSEC-0001","action":"confirm","note":"x","status":"CLOSED"}]`), 0o644)
+	if _, err := ReadTriageDecisions(p); err == nil {
+		t.Error("unknown fields must be rejected")
+	}
+	os.WriteFile(p, []byte(`[{"finding_id":"PSEC-0001","action":"confirm","note":"x"}]`), 0o644)
+	if ds, err := ReadTriageDecisions(p); err != nil || len(ds) != 1 {
+		t.Errorf("valid file: %v %v", ds, err)
+	}
+}
