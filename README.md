@@ -183,6 +183,7 @@ flowchart LR
 | `pensec verify-bundle out.zip` | Recompute every hash in a bundle; compare the printed manifest hash with the sender's |
 | `pensec scope init \| validate \| approve \| revoke` | Authorization for network tests |
 | `pensec test --profile production-observe` | Header and cookie review of approved origins |
+| `pensec feedback false-positive ID \| false-negative \| summary` | Prepare a report about a wrong or missed finding; prints a prefilled issue link, sends nothing |
 | `pensec doctor` | Optional scanners and their network needs |
 | `pensec benchmark` | TP, FP, FN and TN per built-in rule on the bundled corpus |
 | `pensec selftest` | Runs a hostile fixture repository through scan, reports, MCP and hooks and checks PenSec was not steered by it |
@@ -249,6 +250,10 @@ A PenSec report is an automated technical assessment. It is not a certification,
 | 1.0 | frozen schemas ([done](docs/SCHEMAS.md)), benchmark corpus with at least 3 vulnerable and 3 safe cases per rule, external review | in progress |
 
 See the [issues](https://github.com/ratomirjovanovic/pensec/issues) for details.
+
+## Wrong or missed findings
+
+Tell us, and the rule gets fixed. `pensec feedback false-positive <PSEC-ID>` or `pensec feedback false-negative --rule <id>` (or `/pensec:feedback` in Claude Code) prepares a report with rule metadata only and prints a prefilled issue link; nothing is sent unless you submit it. Reports are grouped by rule, prioritized automatically and every fix adds a benchmark case. See [docs/FEEDBACK.md](docs/FEEDBACK.md).
 
 ## Contributing and security
 

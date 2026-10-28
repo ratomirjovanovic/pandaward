@@ -20,6 +20,7 @@ import (
 	"github.com/ratomirjovanovic/pensec/internal/catalog"
 	"github.com/ratomirjovanovic/pensec/internal/engine"
 	"github.com/ratomirjovanovic/pensec/internal/evidence"
+	"github.com/ratomirjovanovic/pensec/internal/feedback"
 	"github.com/ratomirjovanovic/pensec/internal/model"
 	"github.com/ratomirjovanovic/pensec/internal/redact"
 	"github.com/ratomirjovanovic/pensec/internal/report"
@@ -107,6 +108,16 @@ func tools() []tool {
 			"fix":        str("proposed remediation; max 4000 chars"),
 			"proposer":   str("agent or reviewer name"),
 		}, "control_id", "title", "severity", "file", "start_line", "rationale"), localWrite},
+		{"pensec_prepare_feedback", "Prepare a false positive or false negative report for the PenSec project. Returns the report and a prefilled GitHub issue link for the human to review and submit; nothing is sent. By default the report holds only rule metadata and the file type; include_path and include_snippet add redacted location and code and need the user's consent.", obj(map[string]any{
+			"kind":            map[string]any{"type": "string", "enum": []string{"false-positive", "false-negative"}},
+			"finding_id":      str("false-positive: the PSEC finding ID"),
+			"rule":            str("false-negative: rule or control that should have fired, e.g. D-003"),
+			"file":            str("false-negative: file with the missed issue, relative to the project root"),
+			"line":            map[string]any{"type": "integer", "minimum": 1},
+			"note":            str("what happened, in the user's words; max 2000 chars"),
+			"include_path":    map[string]any{"type": "boolean", "description": "add the redacted file path and line (needs the user's consent)"},
+			"include_snippet": map[string]any{"type": "boolean", "description": "add up to 12 redacted lines of code (needs the user's consent)"},
+		}, "kind"), readOnly},
 		{"pensec_request_active_test", "Explains how network-active testing is authorized. It never sends traffic and cannot approve scope.", obj(map[string]any{}), readOnly},
 	}
 }
@@ -399,6 +410,49 @@ func (s *Server) call(ctx context.Context, name string, raw json.RawMessage) (an
 		}
 		return map[string]any{"assessment_id": asmt.ID, "total": total, "entrypoints": eps,
 			"note": "Heuristic extraction from source; completeness is not proven. Each entry has the defining file and line."}, nil
+	case "pensec_prepare_feedback":
+		var a struct {
+			Kind           string `json:"kind"`
+			FindingID      string `json:"finding_id"`
+			Rule           string `json:"rule"`
+			File           string `json:"file"`
+			Line           int    `json:"line"`
+			Note           string `json:"note"`
+			IncludePath    bool   `json:"include_path"`
+			IncludeSnippet bool   `json:"include_snippet"`
+		}
+		if err := strictArgs(raw, &a); err != nil {
+			return nil, err
+		}
+		if len(a.Note) > 2000 || len(a.Rule) > 100 || len(a.File) > 1000 {
+			return nil, errors.New("argument too long")
+		}
+		opts := feedback.Options{IncludePath: a.IncludePath, IncludeSnippet: a.IncludeSnippet, Note: a.Note}
+		var r feedback.Report
+		switch a.Kind {
+		case feedback.FalsePositive:
+			f, err := e.St.Finding(e.ProjectID, a.FindingID)
+			if err != nil {
+				return nil, err
+			}
+			if f == nil {
+				return nil, errors.New("unknown finding_id")
+			}
+			runs, err := e.St.Runs(f.AssessmentID)
+			if err != nil {
+				return nil, err
+			}
+			r = feedback.FromFinding(e.Root, *f, runs, opts)
+		case feedback.FalseNegative:
+			if a.Rule == "" && a.Note == "" {
+				return nil, errors.New("false-negative needs rule or note")
+			}
+			r = feedback.Missed(e.Root, a.Rule, a.File, a.Line, opts)
+		default:
+			return nil, errors.New("kind must be false-positive or false-negative")
+		}
+		return map[string]any{"sent": false, "report": r, "report_markdown": r.Markdown(), "issue_url": r.IssueURL(), "existing_reports_url": r.ExistingURL(),
+			"note": "Nothing was sent. Show the report to the user; they decide whether to open the link and submit it. Suggest checking existing_reports_url first and upvoting a matching report instead of filing a duplicate."}, nil
 	case "pensec_scan_passive":
 		var a struct{}
 		if err := strictArgs(raw, &a); err != nil {

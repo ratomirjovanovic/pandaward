@@ -1,0 +1,75 @@
+name: rule-quality
+
+# Groups open false positive and false negative reports by rule, labels
+# them with the rule and a priority, and keeps the "Rule quality" issue up
+# to date. Issue text is untrusted: it is only parsed by tools/rulequality,
+# which reduces rule names to [a-z0-9._-]; nothing from it reaches a shell.
+
+on:
+  issues:
+    types: [opened, edited, labeled, unlabeled, closed, reopened]
+  schedule:
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: rule-quality
+  cancel-in-progress: false
+
+jobs:
+  update:
+    if: github.event_name != 'issues' || contains(join(github.event.issue.labels.*.name, ','), 'false-')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Build the plan
+        run: |
+          # REST pagination has no result cap, unlike search.
+          for l in false-positive false-negative; do
+            gh api --paginate "repos/$GH_REPO/issues?state=open&labels=$l&per_page=100"
+          done > "$RUNNER_TEMP/issues.json"
+          go run ./tools/rulequality < "$RUNNER_TEMP/issues.json" > "$RUNNER_TEMP/plan.json"
+          jq -r '.groups[] | "\(.priority) \(.rule) score=\(.score)"' "$RUNNER_TEMP/plan.json"
+      - name: Apply labels
+        run: |
+          plan="$RUNNER_TEMP/plan.json"
+          jq -r '[.labels[].add[]] | unique[]' "$plan" | while IFS= read -r l; do
+            case "$l" in
+              priority:P1) color=b60205 ;;
+              priority:P2) color=fbca04 ;;
+              priority:P3) color=c2e0c6 ;;
+              *) color=ededed ;;
+            esac
+            gh label create "$l" --color "$color" --force >/dev/null
+          done
+          jq -c '.labels[]' "$plan" | while IFS= read -r c; do
+            n=$(jq -r '.issue' <<<"$c")
+            args=()
+            while IFS= read -r l; do [ -n "$l" ] && args+=(--add-label "$l"); done < <(jq -r '.add[]?' <<<"$c")
+            while IFS= read -r l; do [ -n "$l" ] && args+=(--remove-label "$l"); done < <(jq -r '.remove[]?' <<<"$c")
+            [ ${#args[@]} -eq 0 ] || gh issue edit "$n" "${args[@]}"
+          done
+      - name: Update the dashboard issue
+        run: |
+          jq -r '.dashboard' "$RUNNER_TEMP/plan.json" > "$RUNNER_TEMP/dashboard.md"
+          gh label create rule-quality --color 5319e7 --description "Rule quality dashboard" --force >/dev/null
+          n=$(gh issue list --state open --label rule-quality --json number --jq '.[0].number // empty')
+          if [ -z "$n" ]; then
+            gh issue create --title "Rule quality dashboard" --label rule-quality --body-file "$RUNNER_TEMP/dashboard.md"
+          else
+            gh issue edit "$n" --body-file "$RUNNER_TEMP/dashboard.md"
+          fi

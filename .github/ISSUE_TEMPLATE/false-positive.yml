@@ -1,0 +1,52 @@
+name: False positive
+description: PenSec reported something that is not a problem.
+title: "[false-positive] "
+labels: [false-positive, needs-triage]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping make PenSec more accurate. The quickest way to fill this in is `pensec feedback false-positive <PSEC-ID>`, which prefills the form from your ledger without code or paths.
+        **Do not paste secrets, private code or reports from private projects.** A few redacted lines or a minimal made-up example are enough.
+  - type: input
+    id: rule
+    attributes:
+      label: Rule ID
+      description: From `pensec findings show <ID>` (`rule_id`), for example `code.sql-concat`.
+      placeholder: code.sql-concat
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: PenSec version
+      description: Output of `pensec version`.
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: The report from `pensec feedback`, or the finding's rule, control, severity, confidence and file type.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why is it not a problem?
+      description: For example, the value is a constant, input is validated earlier, or the file is generated.
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Minimal example (optional)
+      description: A small, made-up snippet that triggers the rule without being a real problem.
+      render: text
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy
+      options:
+        - label: This report contains no secrets, private code, internal hostnames or customer data.
+          required: true
