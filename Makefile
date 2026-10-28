@@ -1,4 +1,4 @@
-VERSION ?= 0.1.5-dev
+VERSION ?= 0.1.6-dev
 LDFLAGS := -s -w -X github.com/ratomirjovanovic/pensec/internal/version.Version=$(VERSION)
 
 .PHONY: build test vet validate dist
