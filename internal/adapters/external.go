@@ -467,5 +467,9 @@ func Tools(ctx context.Context) []ToolInfo {
 		}
 		out = append(out, ti)
 	}
-	return out
+	ti := ToolInfo{Name: "apktool", Binary: "apktool"}
+	if p, err := (apktoolAdapter{}).lookup(); err == nil {
+		ti.Path, ti.Version = p, (apktoolAdapter{}).version(ctx, p)
+	}
+	return append(out, ti)
 }

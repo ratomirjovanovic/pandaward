@@ -12,7 +12,7 @@ import (
 func TestRuleIDsMatchSource(t *testing.T) {
 	ids := RuleIDs()
 	lit := regexp.MustCompile(`"((?:code|cicd|infra|supply|mobile|secret|inventory)\.[a-z0-9-]+)"`)
-	for _, f := range []string{"builtin_code.go", "builtin_static.go"} {
+	for _, f := range []string{"builtin_code.go", "builtin_static.go", "mobile.go"} {
 		b, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)

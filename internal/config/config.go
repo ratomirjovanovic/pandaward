@@ -73,7 +73,7 @@ func Default(name string) *Config {
 	c.Scan.FailOnAdapterError = true
 	c.Scan.AllowToolNetwork = false
 	c.Scan.SemgrepConfig = ""
-	c.Scan.Adapters = []string{"builtin-inventory", "builtin-secrets", "builtin-code", "builtin-cicd", "builtin-infra", "builtin-supply", "builtin-mobile", "gitleaks", "semgrep", "osv-scanner", "trivy"}
+	c.Scan.Adapters = []string{"builtin-inventory", "builtin-secrets", "builtin-code", "builtin-cicd", "builtin-infra", "builtin-supply", "builtin-mobile", "apktool", "gitleaks", "semgrep", "osv-scanner", "trivy"}
 	c.Report.Formats = []string{"html", "markdown", "json", "sarif"}
 	c.Report.IncludeUntested = true
 	c.Policy.AIAnalysis = "opt_in"

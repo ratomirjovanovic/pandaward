@@ -14,7 +14,7 @@ import (
 )
 
 // CorpusVersion changes whenever cases are added, removed or edited.
-const CorpusVersion = "2026.10.1"
+const CorpusVersion = "2026.10.2"
 
 // Case is one repository that a rule must fire on (Vulnerable) or must not
 // fire on (Safe).
@@ -190,6 +190,24 @@ func Corpus() []Case {
 	add(pair("mobile.ios-ats-arbitrary-loads", "builtin-mobile",
 		map[string]string{"ios/App/Info.plist": "<plist><dict>\n<key>NSAllowsArbitraryLoads</key>\n<true/>\n</dict></plist>\n"},
 		map[string]string{"ios/App/Info.plist": "<plist><dict>\n<key>NSAllowsArbitraryLoads</key>\n<false/>\n</dict></plist>\n"}))
+
+	kt := "app/src/main/java/com/acme/Session.kt"
+	add(pair("mobile.android-world-readable", "builtin-mobile",
+		map[string]string{kt: "val prefs = ctx.getSharedPreferences(\"s\", Context.MODE_WORLD_READABLE)\n"},
+		map[string]string{kt: "val prefs = ctx.getSharedPreferences(\"s\", Context.MODE_PRIVATE)\n"}))
+	add(pair("mobile.android-prefs-credential", "builtin-mobile",
+		map[string]string{kt: "prefs.edit().putString(\"auth_token\", token).apply()\n"},
+		map[string]string{kt: "encryptedPrefs.edit().putString(\"auth_token\", token).apply()\n"}))
+	sw := "ios/App/Session.swift"
+	add(pair("mobile.ios-keychain-always", "builtin-mobile",
+		map[string]string{sw: "let q: [String: Any] = [kSecAttrAccessible as String: kSecAttrAccessibleAlways]\n"},
+		map[string]string{sw: "let q: [String: Any] = [kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly]\n"}))
+	add(pair("mobile.ios-userdefaults-credential", "builtin-mobile",
+		map[string]string{sw: "UserDefaults.standard.set(token, forKey: \"refreshToken\")\n"},
+		map[string]string{sw: "UserDefaults.standard.set(theme, forKey: \"preferredTheme\")\n"}))
+	add(pair("mobile.ios-get-task-allow", "builtin-mobile",
+		map[string]string{"ios/App/App.entitlements": "<plist><dict>\n<key>get-task-allow</key>\n<true/>\n</dict></plist>\n"},
+		map[string]string{"ios/App/App.entitlements": "<plist><dict>\n<key>get-task-allow</key>\n<false/>\n</dict></plist>\n"}))
 
 	for _, r := range redact.SecretRules {
 		v := secretSamples[r.ID]
