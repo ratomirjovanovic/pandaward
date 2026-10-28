@@ -40,6 +40,9 @@ jobs:
       - name: Test
         run: go test ./...
 
+      - name: Self-test against a hostile repository
+        run: go run ./cmd/pensec selftest
+
       - name: Install SBOM generator
         run: go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.11.0
 

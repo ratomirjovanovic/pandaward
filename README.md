@@ -222,7 +222,7 @@ In Claude Code, hooks keep the ledger current without any command. Edited files 
 | `pensec feedback false-positive ID \| false-negative \| summary` | Prepare a report about a wrong or missed finding; prints a prefilled issue link, sends nothing |
 | `pensec doctor` | Optional scanners and their network needs |
 | `pensec benchmark` | TP, FP, FN and TN per built-in rule on the bundled corpus |
-| `pensec selftest` | Runs a hostile fixture repository through scan, reports, MCP and hooks and checks PenSec was not steered by it |
+| `pensec selftest` | Runs a hostile fixture repository (instructions in comments, README, OpenAPI, MCP descriptions and scanner output) through scan, reports, MCP and hooks and checks PenSec was not steered by it; CI and every release run it and fail on any case |
 | `pensec mcp` | Local stdio MCP server used by the plugin |
 
 Human decisions are explicit and recorded:

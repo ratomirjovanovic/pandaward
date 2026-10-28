@@ -28,6 +28,9 @@ jobs:
       - run: go vet ./...
       - run: go test ./...
       - run: go build ./cmd/pensec
+      # Release-blocking: the hostile-repository suite must pass on every OS.
+      - name: Self-test against a hostile repository
+        run: go run ./cmd/pensec selftest
       - name: Launcher verification
         if: runner.os != 'Windows'
         run: sh packaging/test-launcher.sh
