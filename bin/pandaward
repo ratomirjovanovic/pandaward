@@ -1,11 +1,11 @@
 #!/bin/sh
-# PenSec launcher for macOS and Linux plugin installs. It selects the binary
+# Pandaward launcher for macOS and Linux plugin installs. It selects the binary
 # for this platform from the plugin's bin/ directory, verifies it against
 # SHA256SUMS, and refuses to run anything that does not match.
 set -eu
 
 die() {
-	echo "pensec launcher: $*" >&2
+	echo "pandaward launcher: $*" >&2
 	exit 126
 }
 
@@ -14,7 +14,7 @@ dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 case "$(uname -s)" in
 Linux) os=linux ;;
 Darwin) os=darwin ;;
-*) die "unsupported operating system $(uname -s); install the pensec-windows plugin on Windows" ;;
+*) die "unsupported operating system $(uname -s); install the pandaward-windows plugin on Windows" ;;
 esac
 case "$(uname -m)" in
 x86_64 | amd64) arch=amd64 ;;
@@ -22,7 +22,7 @@ arm64 | aarch64) arch=arm64 ;;
 *) die "unsupported architecture $(uname -m)" ;;
 esac
 
-name="pensec-$os-$arch"
+name="pandaward-$os-$arch"
 bin="$dir/$name"
 [ -f "$bin" ] || die "missing $name in $dir"
 [ -f "$dir/SHA256SUMS" ] || die "missing SHA256SUMS in $dir"
