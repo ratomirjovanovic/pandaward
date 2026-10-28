@@ -187,7 +187,7 @@ In Claude Code, hooks keep the ledger current without any command. Edited files 
 | H Web | raw HTML sinks, CORS wildcard with credentials | security headers (`production-observe`) |
 | I Supply chain | missing lockfiles, npm install scripts, unpinned Python requirements | advisories via osv-scanner |
 | J Infrastructure | Dockerfile root and unpinned base, privileged containers, public storage and admin ports in Terraform | trivy |
-| K, L Mobile | Android manifest flags and exported components, credentials in SharedPreferences, world-readable storage; iOS ATS, `get-task-allow` in release entitlements, Keychain accessibility and credentials in UserDefaults | built APKs via apktool; device and emulator runtime |
+| K, L Mobile | Android manifest flags and exported components, credentials in SharedPreferences, world-readable storage; iOS ATS, `get-task-allow` in release entitlements, Keychain accessibility and credentials in UserDefaults | built APKs via apktool; plain credentials in app storage on an emulator or simulator (`local-runtime`) |
 | N CI/CD | unpinned actions, script injection, `pull_request_target` checkout, token permissions | |
 | O Observability | credentials in log calls | alerting review |
 | P AI and MCP | model output reaching exec sinks, MCP server pinning and inline credentials | prompt-injection tests |
@@ -218,6 +218,7 @@ In Claude Code, hooks keep the ledger current without any command. Edited files 
 | `pensec verify-bundle out.zip` | Recompute every hash in a bundle; compare the printed manifest hash with the sender's |
 | `pensec scope init \| validate \| approve \| revoke` | Authorization for network tests |
 | `pensec test --profile production-observe` | Header and cookie review of approved origins |
+| `pensec test --profile local-runtime` | Storage of the configured Android test build on a running emulator and the iOS test build in a booted simulator; real devices are refused |
 | `pensec test --profile staging-active` | Authorization checks with test identities, then a ZAP spider and passive scan of approved staging origins, active scan when the manifest allows it |
 | `pensec feedback false-positive ID \| false-negative \| summary` | Prepare a report about a wrong or missed finding; prints a prefilled issue link, sends nothing |
 | `pensec doctor` | Optional scanners and their network needs |
@@ -266,6 +267,19 @@ authorization_checks:
 
 Each check is sent once as every identity and once without credentials. The allowed identities must get a 2xx answer, otherwise the check cannot be judged and is `INCONCLUSIVE`. Any other identity that also gets a 2xx is a finding: `CONFIRMED` when its body matches what the allowed identities got, `STRONGLY_SUPPORTED` when it differs. Object checks decide C-001 (BOLA), function checks C-002, and identities marked `revoked` decide B-004 on every check. Only GET and HEAD are allowed, so no data changes and nothing needs cleaning up. Evidence keeps the status, size, content type and a body hash per identity, never headers, bodies or credentials. A missing credential variable stops the run before the first request.
 
+## Emulator and simulator checks
+
+`pensec test --profile local-runtime` looks at what a test build actually stored. It sends no network traffic, so it needs no scope manifest:
+
+```yaml
+# .pensec/config.yaml
+runtime:
+  android_package: com.acme.shop      # debuggable test build on a running emulator
+  ios_bundle_id: com.acme.shop        # test build in a booted simulator (macOS)
+```
+
+On Android it uses `adb` with an `emulator-*` serial that also reports `ro.kernel.qemu=1`, and reads the app's `shared_prefs` through `run-as`, which only works for debuggable builds. On iOS it uses `xcrun simctl get_app_container booted` and only accepts a container inside CoreSimulator, then reads the app's preferences plist. A non-empty value under a credential-like key (token, password, session and similar) is a finding for K-003 or L-002; PenSec records the key name and never the value. Real devices are refused, and a missing emulator, simulator, tool or setting makes the control `BLOCKED` with the reason. Transport security and Keychain accessibility are not tested at runtime.
+
 ## In CI
 
 ```yaml
@@ -305,7 +319,7 @@ The hook runs `pensec scan --quiet --fail-on high` and blocks the commit when op
 
 - That your application is secure. No tool can prove the absence of vulnerabilities.
 - Anything about controls it reports as `BLOCKED`, `UNSUPPORTED`, `SUSPECTED`, `INCONCLUSIVE`, `ERROR` or `STALE`.
-- Results from runtime tests that are not implemented yet: login, reset and MFA flows (B-003), API contract versus runtime (G-002) and emulator tests are reported as `UNSUPPORTED` today.
+- Results from runtime tests that are not implemented yet: login, reset and MFA flows (B-003), API contract versus runtime (G-002) and prompt-injection tests against an LLM endpoint (P-003) are reported as `UNSUPPORTED` today.
 
 A PenSec report is an automated technical assessment. It is not a certification, an attestation, a legal opinion or an independently signed penetration test.
 
@@ -317,7 +331,7 @@ A PenSec report is an automated technical assessment. It is not a certification,
 | M1 Public alpha | built-in adapters, optional tool adapters, bundled Semgrep rules, edges, HTML/JSON/SARIF, plugin, signed reproducible releases | done (v0.1.1) |
 | M2 Context-safe beta | per-domain invalidation, targeted retest, evidence bundles, delta reports, hostile-repository suite | done |
 | M3 Runtime beta | staging profile with role and tenant fixtures, ZAP adapter | done |
-| M4 Mobile and AI | MobSF and emulator adapters, prompt-injection suite | planned |
+| M4 Mobile and AI | apktool and emulator or simulator storage checks, release-blocking hostile-repository suite; MobSF and LLM endpoint tests | in progress |
 | 1.0 | frozen schemas ([done](docs/SCHEMAS.md)), benchmark corpus with at least 3 vulnerable and 3 safe cases per rule, external review | in progress |
 
 See the [issues](https://github.com/ratomirjovanovic/pensec/issues) for details.

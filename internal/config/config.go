@@ -53,6 +53,11 @@ type Config struct {
 		// ZAPPath points to the ZAP launcher (zap.sh or zap.bat) when it
 		// is not on PATH or in the default install location.
 		ZAPPath string `yaml:"zap_path"`
+		// AndroidPackage and IOSBundleID name the test build that
+		// `pensec test --profile local-runtime` inspects on an emulator or
+		// simulator. Real devices are never used.
+		AndroidPackage string `yaml:"android_package"`
+		IOSBundleID    string `yaml:"ios_bundle_id"`
 	} `yaml:"runtime"`
 	Hooks struct {
 		// AutoRetest lets the Claude Code Stop hook run a changed-only

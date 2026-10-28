@@ -183,6 +183,10 @@ func (e *Engine) Plan(inv *inventory.Inventory) []PlanItem {
 				it.Status, it.Reason = model.StatusBlocked, "needs an identity with revoked: true and authorization_checks in an approved scope manifest, then `pensec test --profile staging-active`"
 			case c.Adapter == "authz":
 				it.Status, it.Reason = model.StatusBlocked, "needs identities and authorization_checks in an approved scope manifest, then `pensec test --profile staging-active`"
+			case c.Adapter == "local-runtime" && c.ID == "L-002":
+				it.Status, it.Reason = model.StatusBlocked, "needs runtime.ios_bundle_id, a booted simulator on macOS with the test build, and `pensec test --profile local-runtime`"
+			case c.Adapter == "local-runtime":
+				it.Status, it.Reason = model.StatusBlocked, "needs runtime.android_package, a running emulator with the debuggable test build, and `pensec test --profile local-runtime`"
 			case c.Adapter == "zap":
 				it.Status, it.Reason = model.StatusBlocked, "needs `pensec test --profile staging-active` with an approved scope manifest and ZAP installed"
 			default:

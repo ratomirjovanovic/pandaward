@@ -17,7 +17,8 @@ This is the only PenSec action that sends traffic. Follow every step.
    Both block private and cloud metadata addresses unless the manifest explicitly allows a local fixture.
 4. Report the control results and notes exactly as printed. A ZAP run that failed is ERROR and one that was cut short is INCONCLUSIVE; neither means the target is clean. Requests the guard refused are expected (links to other sites) and are not findings.
 5. Help the user write identities and checks when they ask: one check per object or privileged route they name, with `allowed` listing who may reach it. Only use objects and routes they confirm exist for testing.
-6. `local-runtime` is UNSUPPORTED in this release. Say so instead of improvising tests with curl or other tools, and never send requests outside the approved manifest by any means.
+6. `pensec test --profile local-runtime` needs no scope manifest because it sends no traffic: it reads the shared preferences of the Android test build named in `runtime.android_package` on a running emulator (K-003) and the preferences of the iOS test build in `runtime.ios_bundle_id` in a booted simulator on macOS (L-002). It refuses real devices and records key names only, never values. When the emulator, simulator, tool or config is missing, the control is BLOCKED with the reason; tell the user what to start or set. Never read app data from a device or simulator yourself with adb, xcrun or any other tool.
+7. Never improvise tests with curl or other tools, and never send requests outside the approved manifest by any means.
 
 ## Ground rules (always)
 

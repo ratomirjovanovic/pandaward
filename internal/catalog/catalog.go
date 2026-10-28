@@ -120,12 +120,12 @@ var Controls = []Control{
 
 	{ID: "K-001", Domain: "K", Title: "Android manifest: not debuggable, no backup, no cleartext traffic", Method: MethodStatic, Adapter: "builtin-mobile", Requires: "android", Refs: []string{"CWE-489", "CWE-530", "CWE-319"}},
 	{ID: "K-002", Domain: "K", Title: "Android exported components protected by permission", Method: MethodStatic, Adapter: "builtin-mobile", Requires: "android", Refs: []string{"CWE-926"}},
-	{ID: "K-003", Domain: "K", Title: "Android runtime storage and transport verified on emulator", Method: MethodRuntime, Requires: "android", Profile: "local-runtime"},
+	{ID: "K-003", Domain: "K", Title: "Android runtime storage and transport verified on emulator", Method: MethodRuntime, Adapter: "local-runtime", Requires: "android", Profile: "local-runtime"},
 	{ID: "K-004", Domain: "K", Title: "Android app does not keep credentials in plain SharedPreferences or world-accessible storage", Method: MethodStatic, Adapter: "builtin-mobile", Requires: "android", Refs: []string{"CWE-312", "CWE-276"}},
 	{ID: "K-005", Domain: "K", Title: "Built APK manifest: not debuggable, no backup or cleartext, no unprotected exported components", Method: MethodExternal, Adapter: "apktool", Requires: "apk", Refs: []string{"CWE-489", "CWE-926"}},
 
 	{ID: "L-001", Domain: "L", Title: "iOS App Transport Security does not allow arbitrary loads", Method: MethodStatic, Adapter: "builtin-mobile", Requires: "ios", Refs: []string{"CWE-319"}},
-	{ID: "L-002", Domain: "L", Title: "iOS keychain and storage verified on simulator", Method: MethodRuntime, Requires: "ios", Profile: "local-runtime"},
+	{ID: "L-002", Domain: "L", Title: "iOS keychain and storage verified on simulator", Method: MethodRuntime, Adapter: "local-runtime", Requires: "ios", Profile: "local-runtime"},
 	{ID: "L-003", Domain: "L", Title: "iOS entitlements do not allow debugging outside debug builds", Method: MethodStatic, Adapter: "builtin-mobile", Requires: "ios", Refs: []string{"CWE-489"}},
 	{ID: "L-004", Domain: "L", Title: "iOS credentials kept in the Keychain with a restrictive accessibility class, not in UserDefaults", Method: MethodStatic, Adapter: "builtin-mobile", Requires: "ios", Refs: []string{"CWE-922", "CWE-312"}},
 

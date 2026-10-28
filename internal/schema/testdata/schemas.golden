@@ -198,6 +198,8 @@ profile string
 project.name string
 report.formats[] string
 report.include_untested bool
+runtime.android_package string
+runtime.ios_bundle_id string
 runtime.zap_path string
 scan.adapter_timeout_seconds int
 scan.adapters[] string
