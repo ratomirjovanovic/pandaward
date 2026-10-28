@@ -15,7 +15,7 @@ var fileRuleIDs = []string{
 	"cicd.unpinned-action", "cicd.script-injection", "cicd.prt-untrusted-checkout", "cicd.no-permissions",
 	"infra.unpinned-base-image", "infra.container-root", "infra.privileged-container", "infra.public-storage", "infra.world-open-admin-port",
 	"supply.missing-lockfile", "supply.install-script", "supply.unpinned-requirements", "supply.mcp-unpinned", "supply.mcp-inline-credential",
-	"mobile.android-debuggable", "mobile.android-allow-backup", "mobile.android-cleartext", "mobile.android-exported-component", "mobile.ios-ats-arbitrary-loads",
+	"mobile.android-debuggable", "mobile.android-allow-backup", "mobile.android-cleartext", "mobile.android-exported-component", "mobile.ios-ats-arbitrary-loads", "mobile.ios-get-task-allow",
 }
 
 // RuleIDs returns every rule ID the built-in adapters can emit, sorted.
@@ -24,6 +24,9 @@ var fileRuleIDs = []string{
 func RuleIDs() []string {
 	out := append([]string{}, fileRuleIDs...)
 	for _, r := range codeRules {
+		out = append(out, r.ID)
+	}
+	for _, r := range mobileStorageRules {
 		out = append(out, r.ID)
 	}
 	for _, r := range redact.SecretRules {

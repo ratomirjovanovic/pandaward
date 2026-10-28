@@ -66,9 +66,9 @@ var langByExt = map[string]string{
 	".vue": "vue", ".svelte": "svelte", ".html": "html", ".htm": "html",
 	".yml": "yaml", ".yaml": "yaml", ".json": "json", ".toml": "toml", ".xml": "xml",
 	".tf": "terraform", ".hcl": "hcl", ".sql": "sql", ".sh": "shell", ".ps1": "powershell",
-	".plist": "plist", ".gradle": "gradle", ".properties": "properties", ".ini": "ini", ".cfg": "ini",
+	".plist": "plist", ".entitlements": "plist", ".gradle": "gradle", ".properties": "properties", ".ini": "ini", ".cfg": "ini",
 	".jinja": "template", ".j2": "template", ".erb": "template", ".ejs": "template", ".hbs": "template",
-	".graphql": "graphql", ".gql": "graphql", ".proto": "proto",
+	".apk": "apk", ".graphql": "graphql", ".gql": "graphql", ".proto": "proto",
 }
 
 // CodeLangs are languages the code heuristics apply to.
@@ -184,6 +184,17 @@ func walkFiles(ctx context.Context, absRoot string, opt Options, withLines bool,
 		if lang == "" {
 			return nil // not a type we analyze; not a coverage gap
 		}
+		if lang == "apk" {
+			// Built Android packages are hashed, never read as text; only
+			// the apktool adapter opens them.
+			sum, err := hashFile(p)
+			if err != nil {
+				skip(rel, err.Error())
+				return nil
+			}
+			add(&File{Path: rel, Lang: lang, Size: info.Size(), SHA256: sum})
+			return nil
+		}
 		if info.Size() > opt.MaxFileBytes {
 			skip(rel, "larger than max_file_bytes")
 			return nil
@@ -221,6 +232,19 @@ func langOf(name string) string {
 		return "manifest"
 	}
 	return langByExt[strings.ToLower(path.Ext(l))]
+}
+
+func hashFile(p string) (string, error) {
+	fh, err := os.Open(p)
+	if err != nil {
+		return "", err
+	}
+	defer fh.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, fh); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 func readText(p string, max int64, withLines bool) (*File, error) {
@@ -462,9 +486,13 @@ func (inv *Inventory) detect() {
 		case lb == "androidmanifest.xml":
 			inv.feature("android", f.Path)
 			domains["K"] = true
-		case lb == "info.plist":
+		case lb == "info.plist" || strings.HasSuffix(lb, ".entitlements"):
 			inv.feature("ios", f.Path)
 			domains["L"] = true
+		case f.Lang == "apk":
+			inv.feature("apk", f.Path)
+			inv.feature("android", f.Path)
+			domains["K"] = true
 		case lb == ".mcp.json" || lb == "mcp.json" || lb == "claude_desktop_config.json" || (strings.Contains(f.Path, ".cursor/") && lb == "mcp.json"):
 			inv.feature("mcp_config", f.Path)
 			domains["P"] = true

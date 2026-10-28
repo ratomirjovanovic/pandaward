@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
-	"io"
 	"path"
 	"regexp"
 	"sort"
@@ -443,10 +442,12 @@ func mergeMaps(a, b map[string]string) map[string]string {
 
 type mobileAdapter struct{}
 
-func (mobileAdapter) Name() string       { return "builtin-mobile" }
-func (mobileAdapter) Controls() []string { return []string{"K-001", "K-002", "L-001"} }
-func (mobileAdapter) Maturity() string   { return MaturityUnvalidated }
-func (mobileAdapter) Network() bool      { return false }
+func (mobileAdapter) Name() string { return "builtin-mobile" }
+func (mobileAdapter) Controls() []string {
+	return []string{"K-001", "K-002", "K-004", "L-001", "L-003", "L-004"}
+}
+func (mobileAdapter) Maturity() string { return MaturityUnvalidated }
+func (mobileAdapter) Network() bool    { return false }
 
 func attr(se xml.StartElement, name string) (string, bool) {
 	for _, a := range se.Attr {
@@ -465,72 +466,10 @@ func (a mobileAdapter) Run(_ context.Context, c *Context) (Result, model.Run) {
 		if f == nil {
 			continue
 		}
-		text := strings.Join(f.Lines, "\n")
-		lineOf := func(off int64) int { return strings.Count(text[:min(int(off), len(text))], "\n") + 1 }
-		dec := xml.NewDecoder(strings.NewReader(text))
-		dec.Strict = false
-		type comp struct {
-			kind, name string
-			line       int
-			exported   string
-			perm       bool
-			launcher   bool
-		}
-		var cur *comp
-		for {
-			off := dec.InputOffset()
-			tok, err := dec.Token()
-			if err == io.EOF {
-				break
-			}
-			if err != nil {
-				res.Decisions["K-001"] = Decision{model.StatusError, "could not parse " + p + ": " + err.Error()}
-				break
-			}
-			switch t := tok.(type) {
-			case xml.StartElement:
-				switch t.Name.Local {
-				case "application":
-					for _, chk := range []struct {
-						attr, bad, id, title string
-						sev                  model.Severity
-						cwe                  string
-					}{
-						{"debuggable", "true", "mobile.android-debuggable", "Android app is debuggable", model.SevHigh, "CWE-489"},
-						{"allowBackup", "true", "mobile.android-allow-backup", "Android backup enabled", model.SevLow, "CWE-530"},
-						{"usesCleartextTraffic", "true", "mobile.android-cleartext", "Android cleartext traffic allowed", model.SevMedium, "CWE-319"},
-					} {
-						if v, ok := attr(t, chk.attr); ok && v == chk.bad {
-							ln := lineOf(off)
-							res.Signals = append(res.Signals, model.Signal{RuleID: chk.id, ControlID: "K-001", Title: chk.title, Severity: chk.sev, Confidence: model.Confirmed, CWE: chk.cwe,
-								File: p, StartLine: ln, EndLine: ln, Snippet: "android:" + chk.attr + "=\"" + chk.bad + "\"",
-								Message: "Manifest sets android:" + chk.attr + "=\"" + chk.bad + "\". Static observation; runtime impact depends on build variant.",
-								Fix:     "Set android:" + chk.attr + " to false for release builds (use build-type manifest placeholders).", Collector: a.Name()})
-						}
-					}
-				case "activity", "activity-alias", "service", "receiver", "provider":
-					name, _ := attr(t, "name")
-					exp, _ := attr(t, "exported")
-					_, perm := attr(t, "permission")
-					cur = &comp{kind: t.Name.Local, name: name, line: lineOf(off), exported: exp, perm: perm}
-				case "action":
-					if cur != nil {
-						if n, _ := attr(t, "name"); n == "android.intent.action.MAIN" {
-							cur.launcher = true
-						}
-					}
-				}
-			case xml.EndElement:
-				if cur != nil && t.Name.Local == cur.kind {
-					if cur.exported == "true" && !cur.perm && !cur.launcher {
-						res.Signals = append(res.Signals, model.Signal{RuleID: "mobile.android-exported-component", ControlID: "K-002", Title: "Exported Android component without permission", Severity: model.SevMedium, Confidence: model.Hypothesis, CWE: "CWE-926",
-							File: p, StartLine: cur.line, EndLine: cur.line, Snippet: redact.Line(cur.kind + " " + cur.name + " exported=true"),
-							Message: "Any installed app can invoke this " + cur.kind + ". Confirm it validates callers and input.",
-							Fix:     "Set android:exported=\"false\" unless required, or protect it with a signature-level permission.", Collector: a.Name(), Key: cur.name})
-					}
-					cur = nil
-				}
-			}
+		sigs, err := manifestSignals(strings.Join(f.Lines, "\n"), p, a.Name(), manifestControls{"K-001", "K-002"})
+		res.Signals = append(res.Signals, sigs...)
+		if err != nil {
+			res.Decisions["K-001"] = Decision{model.StatusError, "could not parse " + p + ": " + err.Error()}
 		}
 	}
 	for _, p := range c.Inv.Features["ios"] {
@@ -553,5 +492,6 @@ func (a mobileAdapter) Run(_ context.Context, c *Context) (Result, model.Run) {
 			}
 		}
 	}
-	return res, finish(run, model.ExitOK, "android manifest and iOS plist checks", len(res.Signals))
+	res.Signals = append(res.Signals, mobileSourceSignals(c.Inv, a.Name())...)
+	return res, finish(run, model.ExitOK, "android manifest, iOS plist and entitlements, mobile storage checks", len(res.Signals))
 }
