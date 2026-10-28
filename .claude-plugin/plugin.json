@@ -1,7 +1,7 @@
 {
   "name": "pensec",
   "displayName": "PenSec",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Local, evidence-based application security assessment: inventory, static checks, cross-domain graph, coverage ledger and reports. Passive by default; network tests need a human-approved scope.",
   "author": {
     "name": "Ratomir Jovanovic",
@@ -18,5 +18,16 @@
   "license": "AGPL-3.0-only",
   "repository": "https://github.com/ratomirjovanovic/pensec",
   "homepage": "https://github.com/ratomirjovanovic/pensec",
-  "icon": "./.claude-plugin/icon.png"
+  "icon": "./.claude-plugin/icon.png",
+  "mcpServers": {
+    "pensec": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/pensec",
+      "args": [
+        "mcp"
+      ],
+      "env": {
+        "PENSEC_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}"
+      }
+    }
+  }
 }
