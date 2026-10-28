@@ -101,6 +101,14 @@ footer { padding: 40px 0 60px; color: var(--muted); font-size: 14px; border-top:
 .term pre { margin: 0; padding: 16px 18px; height: 460px; overflow: auto; font-size: 13px; line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
 .term .prompt { color: #45d6c4; }
 .term .cmd { color: #fff; font-weight: 600; }
+.term .user { color: #fff; background: #23263a; display: inline-block; padding: 2px 8px; border-radius: 4px; }
+.term .claude { color: #c9c3ff; }
+.term .q { color: #ffd479; }
+.term .out { color: var(--term-fg); }
+.term .add { color: #6ee7a0; }
+.term .del { color: #f87171; }
+.term .hook { color: #7dd3fc; }
+.term .step { color: #fff; font-weight: 600; }
 .steps { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 0; }
 .steps button { font: 13px var(--mono); border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 5px 10px; border-radius: 8px; cursor: pointer; }
 .steps button[aria-current="true"] { border-color: var(--accent); color: var(--accent); }

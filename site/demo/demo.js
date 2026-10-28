@@ -14,11 +14,64 @@
     return e;
   }
 
-  // ---- terminal replay ----
+  // ---- session replay ----
+  // Each step is a list of items: user and claude messages, a question,
+  // tool calls with their real output, a diff, a written file, a hook.
   var steps = [];
   var current = 0;
   var playing = !reduced;
   var timer = null;
+
+  function ops(item) {
+    // Returns [{cls, text, typed}] lines to append for one item.
+    var out = [];
+    switch (item.kind) {
+      case "user":
+        out.push({ cls: "user", text: "> " + item.text, typed: true });
+        break;
+      case "claude":
+        out.push({ cls: "claude", text: "● " + item.text });
+        break;
+      case "question":
+        out.push({ cls: "q", text: "? " + item.text });
+        item.options.forEach(function (o, i) { out.push({ cls: "q", text: "  " + (i + 1) + ". " + o }); });
+        break;
+      case "tool":
+        out.push({ cls: "cmd", text: "● Bash(" + item.cmd + ")" });
+        out.push({ cls: "out", text: item.output, flow: true });
+        break;
+      case "file":
+        out.push({ cls: "cmd", text: "● " + item.cmd });
+        out.push({ cls: "out", text: item.output, flow: true });
+        break;
+      case "diff":
+        item.output.split("\n").forEach(function (l) {
+          out.push({ cls: l.charAt(0) === "+" && l.indexOf("+++") !== 0 ? "add" : l.charAt(0) === "-" && l.indexOf("---") !== 0 ? "del" : "out", text: l });
+        });
+        break;
+      case "hook":
+        out.push({ cls: "hook", text: "⚑ " + item.cmd });
+        out.push({ cls: "hook", text: item.output, flow: true });
+        break;
+    }
+    return out;
+  }
+
+  function lines(i) {
+    var all = [];
+    steps[i].items.forEach(function (it, n) {
+      if (n > 0) all.push({ cls: "out", text: "" });
+      all = all.concat(ops(it));
+    });
+    return all;
+  }
+
+  function append(l, text) {
+    var s = el("span", l.cls, text);
+    screen.appendChild(s);
+    screen.appendChild(document.createTextNode("\n"));
+    return s;
+  }
 
   function renderStep(i, instant) {
     clearTimeout(timer);
@@ -27,40 +80,41 @@
       b.setAttribute("aria-current", j === i ? "true" : "false");
     });
     screen.textContent = "";
-    var line = el("span");
-    line.appendChild(el("span", "prompt", "$ "));
-    var cmd = el("span", "cmd", "");
-    line.appendChild(cmd);
-    screen.appendChild(line);
-    var text = steps[i].cmd;
-    var out = steps[i].output;
+    var ls = lines(i);
     if (instant || reduced) {
-      cmd.textContent = text;
-      screen.appendChild(document.createTextNode("\n" + out + "\n"));
+      ls.forEach(function (l) { append(l, l.text); });
+      screen.scrollTop = 0;
       return;
     }
-    var k = 0;
-    (function type() {
-      cmd.textContent = text.slice(0, ++k);
-      if (k < text.length) {
-        timer = setTimeout(type, 28);
+    var n = 0;
+    (function next() {
+      if (n >= ls.length) {
+        if (playing && current < steps.length - 1) timer = setTimeout(function () { renderStep(current + 1); }, 2600);
         return;
       }
-      timer = setTimeout(function () {
-        var lines = out.split("\n");
-        var n = 0;
-        (function flow() {
-          var chunk = lines.slice(n, n + 3).join("\n");
-          screen.appendChild(document.createTextNode("\n" + chunk));
-          screen.scrollTop = screen.scrollHeight;
-          n += 3;
-          if (n < lines.length) {
-            timer = setTimeout(flow, 40);
-          } else if (playing && current < steps.length - 1) {
-            timer = setTimeout(function () { renderStep(current + 1); }, 2200);
-          }
+      var l = ls[n++];
+      if (l.typed) {
+        var s = append(l, "");
+        var k = 0;
+        (function type() {
+          s.textContent = l.text.slice(0, ++k);
+          if (k < l.text.length) timer = setTimeout(type, 24);
+          else timer = setTimeout(next, 500);
         })();
-      }, 250);
+      } else if (l.flow) {
+        var rows = l.text.split("\n");
+        var r = 0;
+        (function flow() {
+          append(l, rows.slice(r, r + 3).join("\n"));
+          screen.scrollTop = screen.scrollHeight;
+          r += 3;
+          timer = setTimeout(r < rows.length ? flow : next, 40);
+        })();
+      } else {
+        append(l, l.text);
+        screen.scrollTop = screen.scrollHeight;
+        timer = setTimeout(next, l.cls === "claude" ? 700 : 120);
+      }
     })();
   }
 
@@ -75,13 +129,12 @@
     playing = false;
     playBtn.textContent = "Play";
     screen.textContent = "";
-    steps.forEach(function (s) {
-      var line = el("span");
-      line.appendChild(el("span", "prompt", "$ "));
-      line.appendChild(el("span", "cmd", s.cmd));
-      screen.appendChild(line);
-      screen.appendChild(document.createTextNode("\n" + s.output + "\n\n"));
+    steps.forEach(function (s, i) {
+      append({ cls: "step" }, "── " + (i + 1) + ". " + s.label + " ──");
+      lines(i).forEach(function (l) { append(l, l.text); });
+      append({ cls: "out" }, "");
     });
+    screen.scrollTop = 0;
   });
 
   fetch("transcript.json")
@@ -89,7 +142,7 @@
     .then(function (data) {
       steps = data;
       steps.forEach(function (s, i) {
-        var b = el("button", null, s.cmd);
+        var b = el("button", null, (i + 1) + ". " + s.label);
         b.type = "button";
         b.addEventListener("click", function () {
           playing = false;
