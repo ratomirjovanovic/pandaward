@@ -33,11 +33,9 @@ jobs:
         id: fx
         run: |
           fx="$RUNNER_TEMP/fixture"
+          # The fixture generator creates a git repository with one commit.
           go run ./tools/demofixture "$fx"
           cd "$fx"
-          git init -q
-          git -c user.name=ci -c user.email=ci@example.invalid add -A
-          git -c user.name=ci -c user.email=ci@example.invalid commit -qm base
           echo "dir=$fx" >> "$GITHUB_OUTPUT"
           echo "base=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
