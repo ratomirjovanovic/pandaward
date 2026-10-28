@@ -104,6 +104,9 @@ footer { padding: 40px 0 60px; color: var(--muted); font-size: 14px; border-top:
 .steps { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 0; }
 .steps button { font: 13px var(--mono); border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 5px 10px; border-radius: 8px; cursor: pointer; }
 .steps button[aria-current="true"] { border-color: var(--accent); color: var(--accent); }
+.os-pick { margin: 0 0 16px; }
+.os-pick[hidden] { display: none; }
+.os-pick button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); }
 
 .filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 14px; }
 .filters button { border: 1px solid var(--line); background: var(--surface); color: var(--fg); padding: 6px 12px; border-radius: 999px; cursor: pointer; font-size: 14px; }
