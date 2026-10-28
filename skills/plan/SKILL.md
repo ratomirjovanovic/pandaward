@@ -9,7 +9,7 @@ description: Show the PenSec assessment plan: applicable controls A-R, which are
 2. Report, per domain, what runs in the passive scan, what is BLOCKED (manual review or authorization needed) and what is UNSUPPORTED in this release.
 3. Point out automatic NOT_APPLICABLE decisions that look wrong for this project (for example a payment flow the inventory missed). Those are inventory gaps, not proof of absence.
 4. List the candidate cross-domain edges (AB1, CG1, ...) and what each means for this project.
-5. Next step: `/pensec:scan`.
+5. Offer to run the assessment (skill `pensec:start`) and run it yourself after a yes.
 
 ## Ground rules (always)
 
