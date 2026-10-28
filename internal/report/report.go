@@ -11,13 +11,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ratomirjovanovic/pensec/internal/catalog"
-	"github.com/ratomirjovanovic/pensec/internal/config"
-	"github.com/ratomirjovanovic/pensec/internal/engine"
-	"github.com/ratomirjovanovic/pensec/internal/evidence"
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/store"
-	"github.com/ratomirjovanovic/pensec/internal/version"
+	"github.com/ratomirjovanovic/pandaward/internal/catalog"
+	"github.com/ratomirjovanovic/pandaward/internal/config"
+	"github.com/ratomirjovanovic/pandaward/internal/engine"
+	"github.com/ratomirjovanovic/pandaward/internal/evidence"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/store"
+	"github.com/ratomirjovanovic/pandaward/internal/version"
 )
 
 // Attestation is printed on every report (PRD 23.2).
@@ -52,7 +52,7 @@ func Build(e *engine.Engine) (*Report, error) {
 		return nil, err
 	}
 	if a == nil {
-		return nil, fmt.Errorf("no completed assessment: run `pensec scan` first")
+		return nil, fmt.Errorf("no completed assessment: run `pandaward scan` first")
 	}
 	return BuildFor(e, a)
 }
@@ -63,7 +63,7 @@ func BuildFor(e *engine.Engine, a *store.Assessment) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &Report{Delta: delta, SchemaVersion: model.SchemaVersion, Generator: "pensec " + version.Version, GeneratedAt: store.Now(), Project: e.Cfg.Project.Name, Assessment: *a, Attestation: Attestation, Domains: catalog.Domains}
+	r := &Report{Delta: delta, SchemaVersion: model.SchemaVersion, Generator: "pandaward " + version.Version, GeneratedAt: store.Now(), Project: e.Cfg.Project.Name, Assessment: *a, Attestation: Attestation, Domains: catalog.Domains}
 	if a.ManifestJSON != "" {
 		r.Manifest = json.RawMessage(a.ManifestJSON)
 	}
@@ -201,7 +201,7 @@ func Write(r *Report, dir string, formats []string) ([]string, error) {
 		if err != nil {
 			return out, err
 		}
-		p := filepath.Join(dir, fmt.Sprintf("pensec-%s-%s.%s", r.Assessment.ID, stamp, ext))
+		p := filepath.Join(dir, fmt.Sprintf("pandaward-%s-%s.%s", r.Assessment.ID, stamp, ext))
 		if err := os.WriteFile(p, b, 0o600); err != nil {
 			return out, err
 		}
@@ -224,7 +224,7 @@ func esc(s string) string {
 func Markdown(r *Report) string {
 	var b strings.Builder
 	w := func(f string, a ...any) { fmt.Fprintf(&b, f, a...) }
-	w("# PenSec assessment report: %s\n\n", esc(r.Project))
+	w("# Pandaward assessment report: %s\n\n", esc(r.Project))
 	w("> %s\n\n", Attestation)
 	w("| Field | Value |\n|---|---|\n")
 	w("| Assessment | %s (%s) |\n", r.Assessment.ID, r.Assessment.Status)
@@ -251,7 +251,7 @@ func Markdown(r *Report) string {
 	w("- Controls: %d applicable, %d decisive (%s decisive coverage), %d not decided\n", r.Coverage.Applicable, r.Coverage.Decisive, pct(r.Coverage.Ratio), len(r.Untested()))
 	w("- Cross-domain edges: %d instantiated, %d verified, %d failed, %d blocked/inconclusive/suspected\n", r.Coverage.EdgesTotal, r.Coverage.EdgesVerified, r.Coverage.EdgesFailed, r.Coverage.EdgesOpen)
 	if len(r.StaleFiles) > 0 {
-		w("- **%d file(s) changed after this assessment; %d dependent control(s) and their edges are STALE until `pensec retest`.**\n", len(r.StaleFiles), r.staleControls())
+		w("- **%d file(s) changed after this assessment; %d dependent control(s) and their edges are STALE until `pandaward retest`.**\n", len(r.StaleFiles), r.staleControls())
 	}
 	w("\n**Important:** %d applicable controls were not decisively tested. They must not be read as secure.\n\n", len(r.Untested()))
 	w("%s\n\n", r.Coverage.Note)
@@ -330,7 +330,7 @@ func Markdown(r *Report) string {
 			w("| %s | %s | %s | %s | %s |\n", f.ID, esc(f.Title), f.Status, orDash(esc(f.Reviewer)), esc(f.Note))
 		}
 	}
-	w("\n## Evidence index\n\n%d redacted artifacts, each stored as `<sha256>.json` under `.pensec/private/evidence/`.\n\n", len(r.EvidenceIndex))
+	w("\n## Evidence index\n\n%d redacted artifacts, each stored as `<sha256>.json` under `.pandaward/private/evidence/`.\n\n", len(r.EvidenceIndex))
 	w("| Evidence | SHA-256 | Collector | Source |\n|---|---|---|---|\n")
 	for _, e := range r.EvidenceIndex {
 		w("| %s | `%s` | %s | %s |\n", e.ID, e.SHA256, esc(e.Collector), esc(e.SourceRef))

@@ -5,7 +5,7 @@ name: release
 # attestations (see docs/VERIFYING.md), and update the two plugin
 # branches that the marketplace installs from:
 #   plugin          macOS and Linux (launcher + binaries)
-#   plugin-windows  Windows (pensec.exe)
+#   plugin-windows  Windows (pandaward.exe)
 on:
   push:
     tags: ["v*"]
@@ -41,7 +41,7 @@ jobs:
         run: go test ./...
 
       - name: Self-test against a hostile repository
-        run: go run ./cmd/pensec selftest
+        run: go run ./cmd/pandaward selftest
 
       - name: Install SBOM generator
         run: go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.11.0
@@ -58,26 +58,26 @@ jobs:
           go clean -cache
           sh packaging/build-release.sh "${GITHUB_REF_NAME#v}" dist-check >/dev/null
           diff dist/SHA256SUMS dist-check/SHA256SUMS
-          jq -e '[.components[] | select((.licenses // []) | length == 0)] | length == 0' dist/pensec.cdx.json
+          jq -e '[.components[] | select((.licenses // []) | length == 0)] | length == 0' dist/pandaward.cdx.json
           rm -rf dist-check
 
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
-          subject-path: dist/pensec-*
+          subject-path: dist/pandaward-*
 
       - uses: actions/attest@59d89421af93a897026c735860bf21b6eb4f7b26 # v4.1.0
         with:
-          subject-path: dist/pensec-*
-          sbom-path: dist/pensec.cdx.json
+          subject-path: dist/pandaward-*
+          sbom-path: dist/pandaward.cdx.json
 
       - name: Rule benchmark
-        run: go run ./cmd/pensec benchmark --strict --json > dist/benchmark.json
+        run: go run ./cmd/pandaward benchmark --strict --json > dist/benchmark.json
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* --title "PenSec $GITHUB_REF_NAME" --generate-notes --verify-tag \
+          gh release create "$GITHUB_REF_NAME" dist/* --title "Pandaward $GITHUB_REF_NAME" --generate-notes --verify-tag \
             $(case "$GITHUB_REF_NAME" in *-*|v0.*) echo --prerelease ;; esac)
 
       - name: Update plugin branches
@@ -97,13 +97,13 @@ jobs:
             printf '* -text\n' > "$stage/.gitattributes"
             mkdir -p "$stage/bin"
             if [ "$branch" = plugin-windows ]; then
-              cp dist/pensec-windows-amd64.exe "$stage/bin/pensec.exe"
-              (cd "$stage/bin" && sha256sum pensec.exe > SHA256SUMS)
+              cp dist/pandaward-windows-amd64.exe "$stage/bin/pandaward.exe"
+              (cd "$stage/bin" && sha256sum pandaward.exe > SHA256SUMS)
             else
-              cp dist/pensec-linux-amd64 dist/pensec-linux-arm64 dist/pensec-darwin-amd64 dist/pensec-darwin-arm64 "$stage/bin/"
-              cp packaging/launcher.sh "$stage/bin/pensec"
-              chmod 0755 "$stage/bin/pensec" "$stage/bin"/pensec-*
-              (cd "$stage/bin" && sha256sum pensec-* > SHA256SUMS)
+              cp dist/pandaward-linux-amd64 dist/pandaward-linux-arm64 dist/pandaward-darwin-amd64 dist/pandaward-darwin-arm64 "$stage/bin/"
+              cp packaging/launcher.sh "$stage/bin/pandaward"
+              chmod 0755 "$stage/bin/pandaward" "$stage/bin"/pandaward-*
+              (cd "$stage/bin" && sha256sum pandaward-* > SHA256SUMS)
             fi
             wt=$(mktemp -d)
             if git ls-remote --exit-code --heads origin "$branch" >/dev/null; then
@@ -118,9 +118,9 @@ jobs:
             cp -R "$stage"/. "$wt"/
             git -C "$wt" add -A
             if [ "$branch" = plugin ]; then
-              git -C "$wt" update-index --chmod=+x bin/pensec bin/pensec-linux-amd64 bin/pensec-linux-arm64 bin/pensec-darwin-amd64 bin/pensec-darwin-arm64
+              git -C "$wt" update-index --chmod=+x bin/pandaward bin/pandaward-linux-amd64 bin/pandaward-linux-arm64 bin/pandaward-darwin-amd64 bin/pandaward-darwin-arm64
             fi
-            git -C "$wt" commit -q -m "PenSec $GITHUB_REF_NAME for $branch" -m "Built from $(git rev-parse HEAD) by the release workflow."
+            git -C "$wt" commit -q -m "Pandaward $GITHUB_REF_NAME for $branch" -m "Built from $(git rev-parse HEAD) by the release workflow."
             git -C "$wt" push -q origin "$branch"
             git worktree remove --force "$wt"
           }

@@ -1,6 +1,6 @@
 /bin/
 /dist/
-.pensec/
+.pandaward/
 *.test
 *.out
 site/_out/

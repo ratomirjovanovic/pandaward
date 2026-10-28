@@ -1,4 +1,4 @@
-module github.com/ratomirjovanovic/pensec
+module github.com/ratomirjovanovic/pandaward
 
 go 1.23.6
 

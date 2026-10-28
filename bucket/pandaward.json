@@ -1,13 +1,13 @@
 {
     "version": "0.1.6",
     "description": "Local, evidence-based application security assessment.",
-    "homepage": "https://github.com/ratomirjovanovic/pensec",
+    "homepage": "https://github.com/ratomirjovanovic/pandaward",
     "license": "AGPL-3.0-only",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/ratomirjovanovic/pensec/releases/download/v0.1.6/pensec-windows-amd64.exe#/pensec.exe",
+            "url": "https://github.com/ratomirjovanovic/pandaward/releases/download/v0.1.6/pandaward-windows-amd64.exe#/pandaward.exe",
             "hash": "7eead5ae10c7eb715bd28dfe15dea5cdce8d78438b868e56ae38edb06edd9e2c"
         }
     },
-    "bin": "pensec.exe"
+    "bin": "pandaward.exe"
 }

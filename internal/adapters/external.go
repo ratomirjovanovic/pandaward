@@ -13,14 +13,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ratomirjovanovic/pensec/internal/catalog"
-	"github.com/ratomirjovanovic/pensec/internal/inventory"
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/redact"
-	"github.com/ratomirjovanovic/pensec/rules"
+	"github.com/ratomirjovanovic/pandaward/internal/catalog"
+	"github.com/ratomirjovanovic/pandaward/internal/inventory"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/redact"
+	"github.com/ratomirjovanovic/pandaward/rules"
 )
 
-// externalTool wraps a user-installed scanner binary. PenSec never installs
+// externalTool wraps a user-installed scanner binary. Pandaward never installs
 // or downloads tools itself. Tools run with an argument array (no shell), a
 // scrubbed environment (no cloud/VCS tokens), a disposable HOME, a timeout,
 // and their stdout/stderr kept apart from evidence.
@@ -92,7 +92,7 @@ func (t *externalTool) Run(ctx context.Context, c *Context) (Result, model.Run) 
 	bin, err := t.Lookup()
 	if err != nil {
 		run := newRun(t.name, "")
-		return res, finish(run, model.ExitBlocked, t.binary+" is not installed (optional; run `pensec doctor`)", 0)
+		return res, finish(run, model.ExitBlocked, t.binary+" is not installed (optional; run `pandaward doctor`)", 0)
 	}
 	run := newRun(t.name, t.Version(ctx))
 	if t.network && !c.Cfg.Scan.AllowToolNetwork {
@@ -106,7 +106,7 @@ func (t *externalTool) Run(ctx context.Context, c *Context) (Result, model.Run) 
 	if err := os.MkdirAll(c.ToolHome, 0o700); err != nil {
 		return res, finish(run, model.ExitError, err.Error(), 0)
 	}
-	tmp, err := os.MkdirTemp("", "pensec-")
+	tmp, err := os.MkdirTemp("", "pandaward-")
 	if err != nil {
 		return res, finish(run, model.ExitError, err.Error(), 0)
 	}
@@ -235,7 +235,7 @@ func gitleaks() Adapter {
 			var out []model.Signal
 			for _, it := range items {
 				out = append(out, model.Signal{RuleID: "gitleaks." + it.RuleID, ControlID: "E-005", Title: "Secret detected: " + it.Description, Severity: model.SevHigh, Confidence: model.StronglySupported, CWE: "CWE-798",
-					File: it.File, StartLine: it.StartLine, EndLine: it.EndLine, Snippet: it.Match, Message: "Gitleaks rule " + it.RuleID + " matched (value redacted by gitleaks and PenSec).",
+					File: it.File, StartLine: it.StartLine, EndLine: it.EndLine, Snippet: it.Match, Message: "Gitleaks rule " + it.RuleID + " matched (value redacted by gitleaks and Pandaward).",
 					Fix: "Rotate the credential, remove it from code and history, load it at runtime from a secret manager.", Key: it.RuleID})
 			}
 			return out, nil
@@ -249,14 +249,14 @@ func semgrep() Adapter {
 		okExit: map[int]bool{0: true, 1: true},
 		args: func(c *Context, out string) ([]string, error) {
 			// The bundled rules always run; they are local and need no network.
-			bundled, err := rules.WriteSemgrep(filepath.Join(c.ToolHome, "pensec-semgrep-rules"))
+			bundled, err := rules.WriteSemgrep(filepath.Join(c.ToolHome, "pandaward-semgrep-rules"))
 			if err != nil {
 				return nil, err
 			}
 			args := []string{"scan", "--config", bundled}
 			cfg := c.Cfg.Scan.SemgrepConfig
 			if cfg == "" {
-				local := filepath.Join(c.Root, ".pensec", "semgrep")
+				local := filepath.Join(c.Root, ".pandaward", "semgrep")
 				if st, err := os.Stat(local); err == nil && st.IsDir() {
 					cfg = local
 				}
@@ -286,7 +286,7 @@ func semgrep() Adapter {
 						Lines    string `json:"lines"`
 						Metadata struct {
 							CWE     any    `json:"cwe"`
-							Control string `json:"pensec-control"`
+							Control string `json:"pandaward-control"`
 						} `json:"metadata"`
 					} `json:"extra"`
 				} `json:"results"`

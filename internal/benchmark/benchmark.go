@@ -9,11 +9,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ratomirjovanovic/pensec/internal/adapters"
-	"github.com/ratomirjovanovic/pensec/internal/catalog"
-	"github.com/ratomirjovanovic/pensec/internal/inventory"
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/version"
+	"github.com/ratomirjovanovic/pandaward/internal/adapters"
+	"github.com/ratomirjovanovic/pandaward/internal/catalog"
+	"github.com/ratomirjovanovic/pandaward/internal/inventory"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/version"
 )
 
 // Thresholds a rule must meet on the corpus to count as benchmarked. A
@@ -45,15 +45,15 @@ type RuleResult struct {
 // Report is the outcome of one benchmark run. It contains no timestamps or
 // paths, so the same code and corpus always produce the same report.
 type Report struct {
-	CorpusVersion  string       `json:"corpus_version"`
-	PensecVersion  string       `json:"pensec_version"`
-	CatalogVersion string       `json:"catalog_version"`
-	MinPrecision   float64      `json:"min_precision"`
-	MinRecall      float64      `json:"min_recall"`
-	MinCases       int          `json:"min_cases_per_label"`
-	Rules          []RuleResult `json:"rules"`
-	Benchmarked    int          `json:"rules_benchmarked"`
-	Note           string       `json:"note"`
+	CorpusVersion    string       `json:"corpus_version"`
+	PandawardVersion string       `json:"pandaward_version"`
+	CatalogVersion   string       `json:"catalog_version"`
+	MinPrecision     float64      `json:"min_precision"`
+	MinRecall        float64      `json:"min_recall"`
+	MinCases         int          `json:"min_cases_per_label"`
+	Rules            []RuleResult `json:"rules"`
+	Benchmarked      int          `json:"rules_benchmarked"`
+	Note             string       `json:"note"`
 }
 
 // Run evaluates every case of the corpus. Cases that need git are skipped
@@ -99,8 +99,8 @@ func Run(ctx context.Context) (*Report, error) {
 			r.TN++
 		}
 	}
-	rep := &Report{CorpusVersion: CorpusVersion, PensecVersion: version.Version, CatalogVersion: catalog.Version, MinPrecision: MinPrecision, MinRecall: MinRecall, MinCases: MinCases,
-		Note: "Measured on PenSec's own small corpus of vulnerable and safe cases. The numbers describe behavior on these cases, not real-world precision or recall."}
+	rep := &Report{CorpusVersion: CorpusVersion, PandawardVersion: version.Version, CatalogVersion: catalog.Version, MinPrecision: MinPrecision, MinRecall: MinRecall, MinCases: MinCases,
+		Note: "Measured on Pandaward's own small corpus of vulnerable and safe cases. The numbers describe behavior on these cases, not real-world precision or recall."}
 	ids := make([]string, 0, len(results))
 	for id := range results {
 		ids = append(ids, id)
@@ -144,7 +144,7 @@ func runCase(ctx context.Context, c Case) (bool, error) {
 	if ad == nil {
 		return false, fmt.Errorf("unknown adapter %s", c.Adapter)
 	}
-	root, err := os.MkdirTemp("", "pensec-bench-")
+	root, err := os.MkdirTemp("", "pandaward-bench-")
 	if err != nil {
 		return false, err
 	}

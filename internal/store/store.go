@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ratomirjovanovic/pensec/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
 
 	_ "modernc.org/sqlite"
 )
@@ -80,7 +80,7 @@ func (s *Store) migrate() error {
 	var v int
 	_ = s.DB.QueryRow(`SELECT CAST(value AS INTEGER) FROM meta WHERE key='schema_version'`).Scan(&v)
 	if v > len(migrations) {
-		return fmt.Errorf("database schema %d is newer than this binary (%d); upgrade pensec", v, len(migrations))
+		return fmt.Errorf("database schema %d is newer than this binary (%d); upgrade pandaward", v, len(migrations))
 	}
 	for i := v; i < len(migrations); i++ {
 		tx, err := s.DB.Begin()
@@ -547,7 +547,7 @@ func (s *Store) Findings(projectID string) ([]model.Finding, error) {
 	return out, rows.Err()
 }
 
-// NextFindingID returns the next display ID (PSEC-0001, ...).
+// NextFindingID returns the next display ID (PW-0001, ...).
 func (s *Store) NextFindingID(projectID string) (string, error) {
 	var n int
 	if err := s.DB.QueryRow(`SELECT COUNT(*) FROM findings WHERE project_id=?`, projectID).Scan(&n); err != nil {
@@ -555,7 +555,7 @@ func (s *Store) NextFindingID(projectID string) (string, error) {
 	}
 	for {
 		n++
-		id := fmt.Sprintf("PSEC-%04d", n)
+		id := fmt.Sprintf("PW-%04d", n)
 		var x int
 		if err := s.DB.QueryRow(`SELECT COUNT(*) FROM findings WHERE id=?`, id).Scan(&x); err != nil {
 			return "", err

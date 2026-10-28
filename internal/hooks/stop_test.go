@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ratomirjovanovic/pensec/internal/config"
-	"github.com/ratomirjovanovic/pensec/internal/engine"
-	"github.com/ratomirjovanovic/pensec/internal/testfixture"
+	"github.com/ratomirjovanovic/pandaward/internal/config"
+	"github.com/ratomirjovanovic/pandaward/internal/engine"
+	"github.com/ratomirjovanovic/pandaward/internal/testfixture"
 )
 
 // assessed returns a scanned fixture project that only uses built-in
@@ -86,7 +86,7 @@ func TestStopReportsNewFindings(t *testing.T) {
 	if err := json.Unmarshal([]byte(runHook(t, "stop", `{}`)), &o); err != nil {
 		t.Fatal(err)
 	}
-	if o.Decision != "block" || !strings.Contains(o.Reason, "PSEC-") || !strings.Contains(o.Reason, "src/extra.js") {
+	if o.Decision != "block" || !strings.Contains(o.Reason, "PW-") || !strings.Contains(o.Reason, "src/extra.js") {
 		t.Fatalf("expected the new finding to reach Claude, got %+v", o)
 	}
 	if out := runHook(t, "stop", `{"stop_hook_active":true}`); out != "" {

@@ -15,15 +15,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ratomirjovanovic/pensec/internal/adapters"
-	"github.com/ratomirjovanovic/pensec/internal/catalog"
-	"github.com/ratomirjovanovic/pensec/internal/config"
-	"github.com/ratomirjovanovic/pensec/internal/evidence"
-	"github.com/ratomirjovanovic/pensec/internal/inventory"
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/redact"
-	"github.com/ratomirjovanovic/pensec/internal/store"
-	"github.com/ratomirjovanovic/pensec/internal/version"
+	"github.com/ratomirjovanovic/pandaward/internal/adapters"
+	"github.com/ratomirjovanovic/pandaward/internal/catalog"
+	"github.com/ratomirjovanovic/pandaward/internal/config"
+	"github.com/ratomirjovanovic/pandaward/internal/evidence"
+	"github.com/ratomirjovanovic/pandaward/internal/inventory"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/redact"
+	"github.com/ratomirjovanovic/pandaward/internal/store"
+	"github.com/ratomirjovanovic/pandaward/internal/version"
 )
 
 // Engine is bound to one project root.
@@ -44,13 +44,16 @@ func ProjectID(root string) string {
 	return "prj_" + hex.EncodeToString(sum[:])[:12]
 }
 
-// FindRoot walks up from dir to the directory that holds .pensec/config.yaml.
+// FindRoot walks up from dir to the directory that holds .pandaward/config.yaml.
 func FindRoot(dir string) (string, error) {
 	d, err := filepath.Abs(dir)
 	if err != nil {
 		return "", err
 	}
 	for {
+		if _, err := config.MigrateLegacy(d); err != nil {
+			return "", err
+		}
 		if _, err := os.Stat(config.Path(d)); err == nil {
 			return d, nil
 		}
@@ -66,6 +69,9 @@ func FindRoot(dir string) (string, error) {
 func Init(root string, force bool) (*Engine, bool, error) {
 	abs, err := filepath.Abs(root)
 	if err != nil {
+		return nil, false, err
+	}
+	if _, err := config.MigrateLegacy(abs); err != nil {
 		return nil, false, err
 	}
 	created := false
@@ -84,6 +90,9 @@ func Init(root string, force bool) (*Engine, bool, error) {
 
 // Open opens an initialized project.
 func Open(root string) (*Engine, error) {
+	if _, err := config.MigrateLegacy(root); err != nil {
+		return nil, err
+	}
 	cfg, h, err := config.Load(root)
 	if err != nil {
 		return nil, err
@@ -115,7 +124,7 @@ func (e *Engine) Inventory() (*inventory.Inventory, error) {
 	if err != nil {
 		return nil, err
 	}
-	// SARIF files usually live in .pensec, which the walk skips; recording
+	// SARIF files usually live in .pandaward, which the walk skips; recording
 	// them makes the import control applicable.
 	if in := adapters.SARIFInputs(e.Root, e.Cfg); len(in) > 0 {
 		inv.Features["sarif"] = in
@@ -176,24 +185,24 @@ func (e *Engine) Plan(inv *inventory.Inventory) []PlanItem {
 		case catalog.MethodRuntime:
 			switch {
 			case c.Adapter == "observe-headers":
-				it.Status, it.Reason = model.StatusBlocked, "needs `pensec test --profile production-observe` with an approved scope manifest"
+				it.Status, it.Reason = model.StatusBlocked, "needs `pandaward test --profile production-observe` with an approved scope manifest"
 			case c.Adapter == "zap" && c.ID == "D-005":
-				it.Status, it.Reason = model.StatusBlocked, "needs zap.active_scan: true in an approved scope manifest, ZAP installed and `pensec test --profile staging-active`"
+				it.Status, it.Reason = model.StatusBlocked, "needs zap.active_scan: true in an approved scope manifest, ZAP installed and `pandaward test --profile staging-active`"
 			case c.Adapter == "authz" && c.ID == "B-004":
-				it.Status, it.Reason = model.StatusBlocked, "needs an identity with revoked: true and authorization_checks in an approved scope manifest, then `pensec test --profile staging-active`"
+				it.Status, it.Reason = model.StatusBlocked, "needs an identity with revoked: true and authorization_checks in an approved scope manifest, then `pandaward test --profile staging-active`"
 			case c.Adapter == "authz":
-				it.Status, it.Reason = model.StatusBlocked, "needs identities and authorization_checks in an approved scope manifest, then `pensec test --profile staging-active`"
+				it.Status, it.Reason = model.StatusBlocked, "needs identities and authorization_checks in an approved scope manifest, then `pandaward test --profile staging-active`"
 			case c.Adapter == "local-runtime" && c.ID == "L-002":
-				it.Status, it.Reason = model.StatusBlocked, "needs runtime.ios_bundle_id, a booted simulator on macOS with the test build, and `pensec test --profile local-runtime`"
+				it.Status, it.Reason = model.StatusBlocked, "needs runtime.ios_bundle_id, a booted simulator on macOS with the test build, and `pandaward test --profile local-runtime`"
 			case c.Adapter == "local-runtime":
-				it.Status, it.Reason = model.StatusBlocked, "needs runtime.android_package, a running emulator with the debuggable test build, and `pensec test --profile local-runtime`"
+				it.Status, it.Reason = model.StatusBlocked, "needs runtime.android_package, a running emulator with the debuggable test build, and `pandaward test --profile local-runtime`"
 			case c.Adapter == "zap":
-				it.Status, it.Reason = model.StatusBlocked, "needs `pensec test --profile staging-active` with an approved scope manifest and ZAP installed"
+				it.Status, it.Reason = model.StatusBlocked, "needs `pandaward test --profile staging-active` with an approved scope manifest and ZAP installed"
 			default:
 				it.Status, it.Reason = model.StatusUnsupported, "runtime adapter for profile "+c.Profile+" is not implemented in this release; use manual-assisted review"
 			}
 		case catalog.MethodManual:
-			it.Status, it.Reason = model.StatusBlocked, "manual-assisted review required (/pensec:review); not decided by automation"
+			it.Status, it.Reason = model.StatusBlocked, "manual-assisted review required (/pandaward:review); not decided by automation"
 		}
 		out = append(out, it)
 	}
@@ -258,7 +267,7 @@ func ComputeCoverage(cs []model.ControlResult, es []model.Edge, stale int) Cover
 	c.Stale = stale
 	c.Note = "Coverage counts decisively tested controls (PASS/FAIL) over applicable controls. It is not a percentage of vulnerabilities found. BLOCKED, UNSUPPORTED, SUSPECTED, INCONCLUSIVE, ERROR and STALE never count as secure."
 	if stale > 0 {
-		c.Note += fmt.Sprintf(" %d file(s) changed since the assessment; controls and edges that depend on them are STALE until `pensec retest`.", stale)
+		c.Note += fmt.Sprintf(" %d file(s) changed since the assessment; controls and edges that depend on them are STALE until `pandaward retest`.", stale)
 	}
 	return c
 }
@@ -627,7 +636,7 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 		status = "INCOMPLETE"
 	}
 	res.Status = status
-	manifest, _ := json.Marshal(map[string]any{"schema_version": model.SchemaVersion, "pensec_version": version.Version, "catalog_version": catalog.Version, "profile": "local-passive",
+	manifest, _ := json.Marshal(map[string]any{"schema_version": model.SchemaVersion, "pandaward_version": version.Version, "catalog_version": catalog.Version, "profile": "local-passive",
 		"git_commit": inv.GitCommit, "git_dirty": inv.GitDirty, "config_sha256": e.ConfigHash, "runs": res.Runs, "files_analyzed": len(inv.Files), "files_skipped": len(inv.Skipped),
 		"network_requests_to_targets": 0})
 	if err := e.St.FinishAssessment(e.ProjectID, asmt.ID, status, string(manifest)); err != nil {
@@ -748,7 +757,7 @@ func (e *Engine) upsertFinding(asmt, fp string, s model.Signal, evID string) (is
 	f := model.Finding{Fingerprint: fp, RuleID: s.RuleID, ControlID: s.ControlID, Title: s.Title, Severity: s.Severity, Confidence: s.Confidence, CWE: s.CWE, File: s.File,
 		StartLine: s.StartLine, EndLine: s.EndLine, Message: s.Message, Fix: s.Fix, Retest: s.Retest, Collector: s.Collector, LastSeen: now, EvidenceIDs: []string{evID}, AssessmentID: asmt}
 	if f.Retest == "" {
-		f.Retest = "Apply the fix, then run `pensec retest`; the finding becomes REMEDIATED only when " + s.Collector + " completes and no longer observes it."
+		f.Retest = "Apply the fix, then run `pandaward retest`; the finding becomes REMEDIATED only when " + s.Collector + " completes and no longer observes it."
 	}
 	if old == nil {
 		id, err := e.St.NextFindingID(e.ProjectID)

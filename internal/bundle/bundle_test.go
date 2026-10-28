@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ratomirjovanovic/pensec/internal/engine"
-	"github.com/ratomirjovanovic/pensec/internal/report"
-	"github.com/ratomirjovanovic/pensec/internal/testfixture"
+	"github.com/ratomirjovanovic/pandaward/internal/engine"
+	"github.com/ratomirjovanovic/pandaward/internal/report"
+	"github.com/ratomirjovanovic/pandaward/internal/testfixture"
 )
 
 func exported(t *testing.T) (string, *engine.Engine) {

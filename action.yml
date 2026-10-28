@@ -1,4 +1,4 @@
-name: PenSec
+name: Pandaward
 description: Local, evidence-based application security assessment. Passive scan with SARIF output and an optional gate.
 author: Ratomir Jovanovic
 branding:
@@ -7,8 +7,8 @@ branding:
 
 inputs:
   version:
-    description: PenSec release to download (without the leading v)
-    default: "0.1.6"
+    description: Pandaward release to download (without the leading v)
+    default: "0.2.0"
   working-directory:
     description: Project directory to scan
     default: "."
@@ -23,7 +23,7 @@ inputs:
     default: ""
   output-dir:
     description: Directory for reports, relative to the workspace
-    default: "pensec-report"
+    default: "pandaward-report"
   summary:
     description: Job summary detail. "counts" (default) shows numbers only, "full" also lists findings with file and line, "none" writes nothing. Job summaries of public repositories are public.
     default: "counts"
@@ -42,27 +42,27 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Install PenSec
+    - name: Install Pandaward
       shell: bash
       env:
-        PENSEC_VERSION: ${{ inputs.version }}
+        PANDAWARD_VERSION: ${{ inputs.version }}
       run: |
         set -euo pipefail
         case "$RUNNER_OS-$RUNNER_ARCH" in
-          Linux-X64) asset=pensec-linux-amd64 ;;
-          Linux-ARM64) asset=pensec-linux-arm64 ;;
-          macOS-X64) asset=pensec-darwin-amd64 ;;
-          macOS-ARM64) asset=pensec-darwin-arm64 ;;
-          Windows-X64) asset=pensec-windows-amd64.exe ;;
-          *) echo "::error::PenSec has no release binary for $RUNNER_OS $RUNNER_ARCH"; exit 1 ;;
+          Linux-X64) asset=pandaward-linux-amd64 ;;
+          Linux-ARM64) asset=pandaward-linux-arm64 ;;
+          macOS-X64) asset=pandaward-darwin-amd64 ;;
+          macOS-ARM64) asset=pandaward-darwin-arm64 ;;
+          Windows-X64) asset=pandaward-windows-amd64.exe ;;
+          *) echo "::error::Pandaward has no release binary for $RUNNER_OS $RUNNER_ARCH"; exit 1 ;;
         esac
-        case "$PENSEC_VERSION" in
-          *[!0-9A-Za-z.-]* | "") echo "::error::invalid version '$PENSEC_VERSION'"; exit 1 ;;
+        case "$PANDAWARD_VERSION" in
+          *[!0-9A-Za-z.-]* | "") echo "::error::invalid version '$PANDAWARD_VERSION'"; exit 1 ;;
         esac
-        dir="$RUNNER_TEMP/pensec-bin"
+        dir="$RUNNER_TEMP/pandaward-bin"
         mkdir -p "$dir"
         cd "$dir"
-        base="https://github.com/ratomirjovanovic/pensec/releases/download/v$PENSEC_VERSION"
+        base="https://github.com/ratomirjovanovic/pandaward/releases/download/v$PANDAWARD_VERSION"
         curl -fsSL --retry 3 -o "$asset" "$base/$asset"
         curl -fsSL --retry 3 -o SHA256SUMS "$base/SHA256SUMS"
         want=$(awk -v n="$asset" '{ sub(/\r$/, "") } $2 == n || $2 == "*" n { print $1 }' SHA256SUMS)
@@ -71,9 +71,9 @@ runs:
           echo "::error::checksum mismatch for $asset; refusing to run it"
           exit 1
         fi
-        if [ "$RUNNER_OS" = Windows ]; then mv "$asset" pensec.exe; else mv "$asset" pensec && chmod +x pensec; fi
+        if [ "$RUNNER_OS" = Windows ]; then mv "$asset" pandaward.exe; else mv "$asset" pandaward && chmod +x pandaward; fi
         echo "$dir" >> "$GITHUB_PATH"
-        "$dir/pensec" version
+        "$dir/pandaward" version
 
     - name: Scan the base for comparison
       if: inputs.new-only == 'true'
@@ -90,13 +90,13 @@ runs:
         top=$(git rev-parse --show-toplevel)
         rel=$(git rev-parse --show-prefix)
         git fetch --no-tags --depth=1 origin "$BASE_REF" 2>/dev/null || true
-        base="$RUNNER_TEMP/pensec-base"
+        base="$RUNNER_TEMP/pandaward-base"
         rm -rf "$base"
         git -C "$top" -c core.hooksPath=/dev/null worktree add --detach "$base" "$BASE_REF" >/dev/null
         cd "$base/$rel"
-        pensec init >/dev/null
-        pensec scan --quiet >/dev/null
-        pensec findings --json > "$RUNNER_TEMP/pensec-base-findings.json"
+        pandaward init >/dev/null
+        pandaward scan --quiet >/dev/null
+        pandaward findings --json > "$RUNNER_TEMP/pandaward-base-findings.json"
         cd "$top"
         git worktree remove --force "$base"
 
@@ -105,9 +105,9 @@ runs:
       working-directory: ${{ inputs.working-directory }}
       run: |
         set -euo pipefail
-        [ -f .pensec/config.yaml ] || pensec init >/dev/null
-        pensec scan --quiet
-        pensec findings --json > "$RUNNER_TEMP/pensec-findings.json"
+        [ -f .pandaward/config.yaml ] || pandaward init >/dev/null
+        pandaward scan --quiet
+        pandaward findings --json > "$RUNNER_TEMP/pandaward-findings.json"
 
     - name: Report
       id: report
@@ -117,7 +117,7 @@ runs:
         OUT: ${{ github.workspace }}/${{ inputs.output-dir }}
       run: |
         set -euo pipefail
-        pensec report --format sarif,html,markdown,json --out "$OUT"
+        pandaward report --format sarif,html,markdown,json --out "$OUT"
         echo "sarif=$(ls "$OUT"/*.sarif | head -n 1)" >> "$GITHUB_OUTPUT"
 
     - name: Gate and summary
@@ -132,8 +132,8 @@ runs:
         set -euo pipefail
         # jq on Windows runners may end lines with CRLF.
         num() { jq "$@" | tr -d '\r'; }
-        head="$RUNNER_TEMP/pensec-findings.json"
-        base="$RUNNER_TEMP/pensec-base-findings.json"
+        head="$RUNNER_TEMP/pandaward-findings.json"
+        base="$RUNNER_TEMP/pandaward-base-findings.json"
         rank='{"critical":4,"high":3,"medium":2,"low":1,"info":0}'
         if [ "$NEW_ONLY" = true ] && [ -f "$base" ]; then
           sel=$(jq --slurpfile b "$base" '[.[] | select(.fingerprint as $f | ($b[0] | map(.fingerprint) | index($f)) | not)]' "$head")
@@ -153,9 +153,9 @@ runs:
         echo "gated=$gated" >> "$GITHUB_OUTPUT"
         if [ "$SUMMARY" != none ]; then
           {
-            echo "## PenSec"
+            echo "## Pandaward"
             echo
-            pensec status --json | jq -r '"Assessment `\(.assessment.id)`: \(.assessment.status). Decisive coverage: \(.coverage.decisive_controls)/\(.coverage.applicable_controls) applicable controls."'
+            pandaward status --json | jq -r '"Assessment `\(.assessment.id)`: \(.assessment.status). Decisive coverage: \(.coverage.decisive_controls)/\(.coverage.applicable_controls) applicable controls."'
             echo
             echo "| Severity | Findings ($scope) |"
             echo "|---|---|"
@@ -173,6 +173,6 @@ runs:
           } >> "$GITHUB_STEP_SUMMARY"
         fi
         if [ "$gated" -gt 0 ]; then
-          echo "::error::PenSec: $gated $scope finding(s) at or above $FAIL_ON"
+          echo "::error::Pandaward: $gated $scope finding(s) at or above $FAIL_ON"
           exit 4
         fi

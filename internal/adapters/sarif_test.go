@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ratomirjovanovic/pensec/internal/config"
-	"github.com/ratomirjovanovic/pensec/internal/inventory"
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/testfixture"
+	"github.com/ratomirjovanovic/pandaward/internal/config"
+	"github.com/ratomirjovanovic/pandaward/internal/inventory"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/testfixture"
 )
 
 // sarifLog builds a minimal SARIF 2.1.0 log with one CodeQL-like run.
@@ -50,7 +50,7 @@ func sarifResultAt(rule string, idx int, uri, base string, line int, msg string)
 
 func sarifContext(t *testing.T, root string) *Context {
 	t.Helper()
-	inv, err := inventory.Walk(root, inventory.Options{Exclude: []string{".pensec"}, MaxFileBytes: 1 << 20, MaxFiles: 1000})
+	inv, err := inventory.Walk(root, inventory.Options{Exclude: []string{".pandaward"}, MaxFileBytes: 1 << 20, MaxFiles: 1000})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -136,10 +136,10 @@ func TestSARIFImportRejectsSymlink(t *testing.T) {
 	if err := os.WriteFile(target, []byte(sarifLog(t)), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join(root, ".pensec", "sarif"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, ".pandaward", "sarif"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(target, filepath.Join(root, ".pensec", "sarif", "link.sarif")); err != nil {
+	if err := os.Symlink(target, filepath.Join(root, ".pandaward", "sarif", "link.sarif")); err != nil {
 		t.Skip("symlinks not available:", err)
 	}
 	_, run := sarifAdapter{}.Run(context.Background(), sarifContext(t, root))
@@ -157,10 +157,10 @@ func TestSARIFImportRejectsJunction(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(outside, "x.sarif"), []byte(sarifLog(t)), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.MkdirAll(filepath.Join(root, ".pensec"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(root, ".pandaward"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if out, err := exec.Command("cmd", "/c", "mklink", "/J", filepath.Join(root, ".pensec", "sarif"), outside).CombinedOutput(); err != nil {
+	if out, err := exec.Command("cmd", "/c", "mklink", "/J", filepath.Join(root, ".pandaward", "sarif"), outside).CombinedOutput(); err != nil {
 		t.Skipf("mklink /J failed: %v %s", err, out)
 	}
 	_, run := sarifAdapter{}.Run(context.Background(), sarifContext(t, root))
@@ -213,9 +213,9 @@ func TestSARIFInputs(t *testing.T) {
 	testfixture.Write(t, root, SARIFDir+"/a.sarif.json", "{}")
 	testfixture.Write(t, root, SARIFDir+"/notes.txt", "x")
 	cfg := config.Default("x")
-	cfg.Scan.SARIFFiles = []string{"out/x.sarif", "./.pensec/sarif/b.sarif", " "}
+	cfg.Scan.SARIFFiles = []string{"out/x.sarif", "./.pandaward/sarif/b.sarif", " "}
 	got := strings.Join(SARIFInputs(root, cfg), ",")
-	if got != ".pensec/sarif/a.sarif.json,.pensec/sarif/b.sarif,out/x.sarif" {
+	if got != ".pandaward/sarif/a.sarif.json,.pandaward/sarif/b.sarif,out/x.sarif" {
 		t.Errorf("inputs: %s", got)
 	}
 	if n := len(SARIFInputs(t.TempDir(), config.Default("x"))); n != 0 {

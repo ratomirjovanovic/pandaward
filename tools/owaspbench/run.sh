@@ -1,6 +1,6 @@
 #!/bin/sh
 # Fetches OWASP BenchmarkJava at the pinned commit into a temporary
-# directory outside the repository and measures PenSec's built-in rules on
+# directory outside the repository and measures Pandaward's built-in rules on
 # it. The checkout is only read: no build script, Maven goal or other code
 # from it is run. Extra arguments go to the tool, e.g. --json.
 #

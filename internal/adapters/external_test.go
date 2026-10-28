@@ -11,25 +11,25 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ratomirjovanovic/pensec/internal/config"
-	"github.com/ratomirjovanovic/pensec/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/config"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
 )
 
 func TestSemgrepNormalizeMapsControlsAndStableIDs(t *testing.T) {
 	raw := []byte(`{"results":[
-	 {"check_id":"tmp.home.pensec-semgrep-rules.pensec-js-eval","path":"src/a.js","start":{"line":3},"end":{"line":3},
-	  "extra":{"message":"eval","severity":"ERROR","lines":"eval(x)","metadata":{"cwe":"CWE-95: x","pensec-control":"D-001"}}},
+	 {"check_id":"tmp.home.pandaward-semgrep-rules.pandaward-js-eval","path":"src/a.js","start":{"line":3},"end":{"line":3},
+	  "extra":{"message":"eval","severity":"ERROR","lines":"eval(x)","metadata":{"cwe":"CWE-95: x","pandaward-control":"D-001"}}},
 	 {"check_id":"custom.rule","path":"src/b.js","start":{"line":1},"end":{"line":1},
 	  "extra":{"message":"m","severity":"WARNING","lines":"y","metadata":{"cwe":["CWE-918: SSRF"]}}},
 	 {"check_id":"bad.mapping","path":"src/c.js","start":{"line":1},"end":{"line":1},
-	  "extra":{"message":"m","severity":"INFO","lines":"z","metadata":{"pensec-control":"R-001"}}}
+	  "extra":{"message":"m","severity":"INFO","lines":"z","metadata":{"pandaward-control":"R-001"}}}
 	],"errors":[]}`)
 	sigs, err := semgrep().(*externalTool).normalize(&Context{Root: "."}, raw)
 	if err != nil {
 		t.Fatal(err)
 	}
 	want := []struct{ rule, control, cwe string }{
-		{"semgrep.pensec-js-eval", "D-001", "CWE-95"},
+		{"semgrep.pandaward-js-eval", "D-001", "CWE-95"},
 		{"semgrep.rule", "D-006", "CWE-918"},
 		{"semgrep.mapping", "D-006", ""},
 	}
@@ -47,16 +47,16 @@ func TestSemgrepNormalizeMapsControlsAndStableIDs(t *testing.T) {
 
 func TestSemgrepNormalizeDropsLoginPlaceholder(t *testing.T) {
 	raw := []byte(`{"version":"1.182.0","results":[
-	 {"check_id":"pensec.private.tool-home.pensec-semgrep-rules.pensec-py-eval","path":"/w/fx/app.py",
+	 {"check_id":"pandaward.private.tool-home.pandaward-semgrep-rules.pandaward-py-eval","path":"/w/fx/app.py",
 	  "start":{"line":7,"col":5,"offset":180},"end":{"line":7,"col":49,"offset":224},
-	  "extra":{"message":"Dynamic code evaluation.","metadata":{"pensec-control":"D-001","cwe":"CWE-95: Eval Injection"},
+	  "extra":{"message":"Dynamic code evaluation.","metadata":{"pandaward-control":"D-001","cwe":"CWE-95: Eval Injection"},
 	   "severity":"ERROR","fingerprint":"requires login","lines":"requires login","validation_state":"NO_VALIDATOR","engine_kind":"OSS"}}],
 	 "errors":[],"paths":{"scanned":["/w/fx/app.py"]},"skipped_rules":[]}`)
 	sigs, err := semgrep().(*externalTool).normalize(&Context{Root: "/w/fx"}, raw)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(sigs) != 1 || sigs[0].RuleID != "semgrep.pensec-py-eval" || sigs[0].ControlID != "D-001" || sigs[0].StartLine != 7 {
+	if len(sigs) != 1 || sigs[0].RuleID != "semgrep.pandaward-py-eval" || sigs[0].ControlID != "D-001" || sigs[0].StartLine != 7 {
 		t.Fatalf("unexpected signals %+v", sigs)
 	}
 	if sigs[0].Snippet != "" {

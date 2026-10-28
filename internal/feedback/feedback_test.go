@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/testfixture"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/testfixture"
 )
 
 func project(t *testing.T) string {
@@ -22,7 +22,7 @@ func project(t *testing.T) string {
 	return root
 }
 
-var finding = model.Finding{ID: "PSEC-0004", RuleID: "secret.stripe-live", ControlID: "E-001", Severity: model.SevHigh,
+var finding = model.Finding{ID: "PW-0004", RuleID: "secret.stripe-live", ControlID: "E-001", Severity: model.SevHigh,
 	Confidence: model.Confirmed, Collector: "builtin-secrets", File: "src/billing/charge.js", StartLine: 2, EndLine: 2,
 	Title: "Hardcoded Stripe live secret key", Message: "m"}
 
@@ -30,7 +30,7 @@ var finding = model.Finding{ID: "PSEC-0004", RuleID: "secret.stripe-live", Contr
 func TestDefaultReportCarriesNoProjectData(t *testing.T) {
 	root := project(t)
 	r := FromFinding(root, finding, []model.Run{{Adapter: "builtin-secrets", ToolVersion: "builtin"}}, Options{})
-	if r.RuleID != "secret.stripe-live" || r.ControlID != "E-001" || r.FileType != ".js" || r.ToolVersion != "builtin" || r.PenSec == "" || r.Catalog == "" {
+	if r.RuleID != "secret.stripe-live" || r.ControlID != "E-001" || r.FileType != ".js" || r.ToolVersion != "builtin" || r.Pandaward == "" || r.Catalog == "" {
 		t.Fatalf("metadata missing: %+v", r)
 	}
 	all := r.Markdown() + r.IssueURL()

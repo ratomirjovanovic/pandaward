@@ -14,12 +14,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ratomirjovanovic/pensec/internal/catalog"
-	"github.com/ratomirjovanovic/pensec/internal/evidence"
-	"github.com/ratomirjovanovic/pensec/internal/inventory"
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/redact"
-	"github.com/ratomirjovanovic/pensec/internal/store"
+	"github.com/ratomirjovanovic/pandaward/internal/catalog"
+	"github.com/ratomirjovanovic/pandaward/internal/evidence"
+	"github.com/ratomirjovanovic/pandaward/internal/inventory"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/redact"
+	"github.com/ratomirjovanovic/pandaward/internal/store"
 )
 
 // Status is the compact resumable state.
@@ -54,7 +54,7 @@ func (e *Engine) Status() (*Status, error) {
 		if s.StaleFiles, err = e.St.StaleFiles(e.ProjectID); err != nil {
 			return nil, err
 		}
-		s.NextAction = "run `pensec scan` (/pensec:scan) for the first passive assessment"
+		s.NextAction = "run `pandaward scan` (/pandaward:scan) for the first passive assessment"
 		return s, nil
 	}
 	s.Assessment = a
@@ -106,13 +106,13 @@ func (e *Engine) Status() (*Status, error) {
 	}
 	switch {
 	case len(s.StaleFiles) > 0:
-		s.NextAction = fmt.Sprintf("%d file(s) changed since %s, %d control(s) STALE: run `pensec retest --changed`", len(s.StaleFiles), a.ID, len(s.StaleControls))
+		s.NextAction = fmt.Sprintf("%d file(s) changed since %s, %d control(s) STALE: run `pandaward retest --changed`", len(s.StaleFiles), a.ID, len(s.StaleControls))
 	case s.Confirmed > 0:
-		s.NextAction = "review findings (`pensec findings`) and build a fix plan (/pensec:fix-plan)"
+		s.NextAction = "review findings (`pandaward findings`) and build a fix plan (/pandaward:fix-plan)"
 	case s.Suspected > 0:
-		s.NextAction = "triage suspected signals (/pensec:review triage)"
+		s.NextAction = "triage suspected signals (/pandaward:review triage)"
 	default:
-		s.NextAction = "run manual-assisted review for BLOCKED controls (/pensec:review) and generate a report"
+		s.NextAction = "run manual-assisted review for BLOCKED controls (/pandaward:review) and generate a report"
 	}
 	return s, nil
 }
@@ -132,7 +132,7 @@ func (e *Engine) MarkChanged(p string) (bool, error) {
 		return false, nil
 	}
 	rel = filepath.ToSlash(rel)
-	if strings.HasPrefix(rel, ".pensec/") {
+	if strings.HasPrefix(rel, ".pandaward/") {
 		return false, nil
 	}
 	return true, e.St.MarkStale(e.ProjectID, rel)
@@ -172,7 +172,7 @@ func (e *Engine) RecordHypothesis(in HypothesisInput) (*model.Finding, error) {
 		return nil, errors.New("rationale and fix are limited to 4000 characters")
 	}
 	clean := filepath.ToSlash(filepath.Clean(in.File))
-	if in.File == "" || filepath.IsAbs(in.File) || strings.HasPrefix(clean, "../") || clean == ".." || strings.HasPrefix(clean, ".pensec/") || strings.HasPrefix(clean, ".git/") {
+	if in.File == "" || filepath.IsAbs(in.File) || strings.HasPrefix(clean, "../") || clean == ".." || strings.HasPrefix(clean, ".pandaward/") || strings.HasPrefix(clean, ".git/") {
 		return nil, errors.New("file must be a relative path inside the project")
 	}
 	abs := filepath.Join(e.Root, filepath.FromSlash(clean))

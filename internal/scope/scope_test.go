@@ -82,8 +82,8 @@ targets: [{url: "https://staging.example.com"}]
 allowed_methods: [GET, HEAD]
 limits: {requests_per_second: 1, max_requests_total: 20, timeout_seconds: 10}
 identities:
-  - {name: alice, header: Authorization, value_env: PENSEC_ALICE}
-  - {name: old, header: Authorization, value_env: PENSEC_OLD, revoked: true}
+  - {name: alice, header: Authorization, value_env: PANDAWARD_ALICE}
+  - {name: old, header: Authorization, value_env: PANDAWARD_OLD, revoked: true}
 authorization_checks:
 `
 	for check, want := range map[string]string{
@@ -107,7 +107,7 @@ authorization_checks:
 		}
 	}
 	m := &Manifest{}
-	yaml.Unmarshal([]byte(strings.Replace(base, "value_env: PENSEC_ALICE", "value_env: \"Bearer abc\"", 1)+"  - {name: ok, kind: object, method: GET, path: /x, allowed: [alice]}\n"), m)
+	yaml.Unmarshal([]byte(strings.Replace(base, "value_env: PANDAWARD_ALICE", "value_env: \"Bearer abc\"", 1)+"  - {name: ok, kind: object, method: GET, path: /x, allowed: [alice]}\n"), m)
 	if got := strings.Join(m.Validate(time.Now()), "; "); !strings.Contains(got, "value_env") {
 		t.Errorf("a credential pasted into value_env must be rejected: %q", got)
 	}

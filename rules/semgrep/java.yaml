@@ -1,10 +1,10 @@
 rules:
-  - id: pensec-java-sql-string
+  - id: pandaward-java-sql-string
     languages: [java]
     severity: ERROR
     message: SQL text is built by string concatenation. Use PreparedStatement with placeholders.
     metadata:
-      pensec-control: D-003
+      pandaward-control: D-003
       cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
     patterns:
       - pattern-either:
@@ -17,12 +17,12 @@ rules:
           metavariable: $EXEC
           regex: ^(execute|executeQuery|executeUpdate|addBatch|prepareStatement|createQuery|createNativeQuery|queryForObject|queryForList|query|update)$
 
-  - id: pensec-java-command-exec
+  - id: pandaward-java-command-exec
     languages: [java]
     severity: ERROR
     message: An OS command is built from a non-constant string. Pass a fixed program and separate arguments to ProcessBuilder.
     metadata:
-      pensec-control: D-002
+      pandaward-control: D-002
       cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
     patterns:
       - pattern-either:
@@ -33,12 +33,12 @@ rules:
       - pattern-not: Runtime.getRuntime().exec("...", ...)
       - pattern-not: new ProcessBuilder($SH, $FLAG, "...", ...)
 
-  - id: pensec-java-deserialization
+  - id: pandaward-java-deserialization
     languages: [java]
     severity: ERROR
     message: Java native deserialization of a stream can execute code from its input. Do not deserialize untrusted data.
     metadata:
-      pensec-control: D-004
+      pandaward-control: D-004
       cwe: "CWE-502: Deserialization of Untrusted Data"
     pattern-either:
       - pattern: (java.io.ObjectInputStream $IN).readObject()
@@ -46,12 +46,12 @@ rules:
       - pattern: new java.beans.XMLDecoder(...)
       - pattern: new XMLDecoder(...)
 
-  - id: pensec-java-weak-cipher
+  - id: pandaward-java-weak-cipher
     languages: [java]
     severity: WARNING
     message: This cipher or mode is weak (DES, RC4, or ECB). Use AES-GCM.
     metadata:
-      pensec-control: E-004
+      pandaward-control: E-004
       cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
     patterns:
       - pattern: Cipher.getInstance("$ALG", ...)
@@ -59,12 +59,12 @@ rules:
           metavariable: $ALG
           regex: (?i)^(DES|DESede|RC4|ARCFOUR|Blowfish|AES)(/ECB/.*)?$|.*/ECB/.*
 
-  - id: pensec-java-path-traversal
+  - id: pandaward-java-path-traversal
     languages: [java]
     severity: WARNING
     message: A file path comes from the incoming request. Resolve it and check it stays inside the intended directory.
     metadata:
-      pensec-control: D-006
+      pandaward-control: D-006
       cwe: "CWE-22: Improper Limitation of a Pathname to a Restricted Directory"
     mode: taint
     pattern-sources:
@@ -83,12 +83,12 @@ rules:
     pattern-sanitizers:
       - pattern: FilenameUtils.getName(...)
 
-  - id: pensec-java-ssrf
+  - id: pandaward-java-ssrf
     languages: [java]
     severity: WARNING
     message: An outbound request URL comes from the incoming request. Validate it against an allowlist to prevent SSRF.
     metadata:
-      pensec-control: D-006
+      pandaward-control: D-006
       cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
     mode: taint
     pattern-sources:

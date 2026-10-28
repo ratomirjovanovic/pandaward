@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/ratomirjovanovic/pensec/internal/adapters"
+	"github.com/ratomirjovanovic/pandaward/internal/adapters"
 )
 
 // Every built-in rule has at least one vulnerable and one safe case, and on

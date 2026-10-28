@@ -10,10 +10,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/scope"
-	"github.com/ratomirjovanovic/pensec/internal/testfixture"
-	"github.com/ratomirjovanovic/pensec/internal/zap"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/scope"
+	"github.com/ratomirjovanovic/pandaward/internal/testfixture"
+	"github.com/ratomirjovanovic/pandaward/internal/zap"
 )
 
 // fakeZAP stands in for ZAP: it sends its requests through the guard like

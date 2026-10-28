@@ -1,12 +1,12 @@
 name: False negative (missed issue)
-description: PenSec did not report a real problem.
+description: Pandaward did not report a real problem.
 title: "[false-negative] "
 labels: [false-negative, needs-triage]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for reporting a miss. `pensec feedback false-negative --rule <rule or control> --note "..."` prefills this form.
+        Thanks for reporting a miss. `pandaward feedback false-negative --rule <rule or control> --note "..."` prefills this form.
         **Do not paste secrets, private code or exploit details for systems you do not own.** A minimal made-up example is the most useful thing you can give.
   - type: input
     id: rule
@@ -19,15 +19,15 @@ body:
   - type: input
     id: version
     attributes:
-      label: PenSec version
-      description: Output of `pensec version`.
+      label: Pandaward version
+      description: Output of `pandaward version`.
     validations:
       required: true
   - type: textarea
     id: details
     attributes:
       label: Details
-      description: The report from `pensec feedback`, the language or file type, and which adapters ran (`pensec status`).
+      description: The report from `pandaward feedback`, the language or file type, and which adapters ran (`pandaward status`).
     validations:
       required: true
   - type: textarea

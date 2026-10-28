@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/testfixture"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/testfixture"
 )
 
 const prefsXML = `<?xml version='1.0' encoding='utf-8' standalone='yes' ?>

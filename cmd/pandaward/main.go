@@ -1,4 +1,4 @@
-// Command pensec is the PenSec CLI: local, evidence-based application
+// Command pandaward is the Pandaward CLI: local, evidence-based application
 // security assessment. Passive local analysis is the default; anything that
 // sends network traffic requires a scope manifest approved by a human in an
 // interactive terminal.
@@ -21,34 +21,34 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ratomirjovanovic/pensec/internal/adapters"
-	"github.com/ratomirjovanovic/pensec/internal/adversarial"
-	"github.com/ratomirjovanovic/pensec/internal/benchmark"
-	"github.com/ratomirjovanovic/pensec/internal/bundle"
-	"github.com/ratomirjovanovic/pensec/internal/catalog"
-	"github.com/ratomirjovanovic/pensec/internal/config"
-	"github.com/ratomirjovanovic/pensec/internal/engine"
-	"github.com/ratomirjovanovic/pensec/internal/evidence"
-	"github.com/ratomirjovanovic/pensec/internal/feedback"
-	"github.com/ratomirjovanovic/pensec/internal/hooks"
-	"github.com/ratomirjovanovic/pensec/internal/mcp"
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/redact"
-	"github.com/ratomirjovanovic/pensec/internal/report"
-	"github.com/ratomirjovanovic/pensec/internal/scope"
-	"github.com/ratomirjovanovic/pensec/internal/store"
-	"github.com/ratomirjovanovic/pensec/internal/version"
-	"github.com/ratomirjovanovic/pensec/internal/zap"
+	"github.com/ratomirjovanovic/pandaward/internal/adapters"
+	"github.com/ratomirjovanovic/pandaward/internal/adversarial"
+	"github.com/ratomirjovanovic/pandaward/internal/benchmark"
+	"github.com/ratomirjovanovic/pandaward/internal/bundle"
+	"github.com/ratomirjovanovic/pandaward/internal/catalog"
+	"github.com/ratomirjovanovic/pandaward/internal/config"
+	"github.com/ratomirjovanovic/pandaward/internal/engine"
+	"github.com/ratomirjovanovic/pandaward/internal/evidence"
+	"github.com/ratomirjovanovic/pandaward/internal/feedback"
+	"github.com/ratomirjovanovic/pandaward/internal/hooks"
+	"github.com/ratomirjovanovic/pandaward/internal/mcp"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/redact"
+	"github.com/ratomirjovanovic/pandaward/internal/report"
+	"github.com/ratomirjovanovic/pandaward/internal/scope"
+	"github.com/ratomirjovanovic/pandaward/internal/store"
+	"github.com/ratomirjovanovic/pandaward/internal/version"
+	"github.com/ratomirjovanovic/pandaward/internal/zap"
 )
 
-const usage = `pensec - local, evidence-based application security assessment
+const usage = `pandaward - local, evidence-based application security assessment
 
-Usage: pensec <command> [flags]
+Usage: pandaward <command> [flags]
 
 Assessment (local, no target network traffic):
   assess          Run the whole local assessment in one step: init if needed, scan with progress,
                   reports and a summary (start here)
-  init            Create .pensec/ (config, private ledger) in the project root
+  init            Create .pandaward/ (config, private ledger) in the project root
   plan            Show applicable controls, gates and missing prerequisites
   scan            Run the passive local scan (inventory, static checks, adapters)
   retest          Show files changed since the last scan, re-scan, show the delta
@@ -75,12 +75,12 @@ Integration and tooling:
   doctor          Environment, optional scanners and their network needs
   capabilities    Control catalog with adapter maturity
   benchmark       TP/FP/FN/TN per built-in rule on the bundled corpus (--json, --strict)
-  selftest        Run the hostile-repository suite: can repository text steer PenSec? (--json)
+  selftest        Run the hostile-repository suite: can repository text steer Pandaward? (--json)
   mcp             Serve the MCP stdio interface
   hook <name>     Claude Code lifecycle hook (session-start, post-edit, pre-tool, pre-compact, stop)
   version         Print version
 
-Global flag: --root <dir>  project directory (default: current directory or nearest parent with .pensec/)
+Global flag: --root <dir>  project directory (default: current directory or nearest parent with .pandaward/)
 Exit codes: 0 ok, 1 error, 2 usage, 3 not authorized, 4 --fail-on threshold reached
 `
 
@@ -107,7 +107,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	var err error
 	switch cmd {
 	case "version", "--version":
-		fmt.Fprintln(stdout, "pensec", version.Version, "catalog", catalog.Version)
+		fmt.Fprintln(stdout, "pandaward", version.Version, "catalog", catalog.Version)
 	case "hook":
 		if len(rest) != 1 {
 			return 2
@@ -169,14 +169,14 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		var ee exitErr
 		if errors.As(err, &ee) {
 			if ee.msg != "" {
-				fmt.Fprintln(stderr, "pensec:", ee.msg)
+				fmt.Fprintln(stderr, "pandaward:", ee.msg)
 			}
 			return ee.code
 		}
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
 		}
-		fmt.Fprintln(stderr, "pensec:", redact.Line(err.Error()))
+		fmt.Fprintln(stderr, "pandaward:", redact.Line(err.Error()))
 		return 1
 	}
 	return 0
@@ -228,7 +228,7 @@ func cmdMCP(ctx context.Context, args []string, stdin io.Reader, stdout io.Write
 	// Unresolved ${...} placeholders or missing directories fall back to the
 	// working directory, which Claude Code sets to the project.
 	r := "."
-	for _, c := range []string{*root, os.Getenv("PENSEC_PROJECT_DIR"), os.Getenv("CLAUDE_PROJECT_DIR")} {
+	for _, c := range []string{*root, config.Env("PROJECT_DIR"), os.Getenv("CLAUDE_PROJECT_DIR")} {
 		if c == "" || strings.Contains(c, "${") {
 			continue
 		}
@@ -260,9 +260,9 @@ func cmdInit(args []string, w io.Writer) error {
 		return err
 	}
 	if created {
-		fmt.Fprintf(w, "Initialized PenSec in %s\n", filepath.Join(e.Root, config.Dir))
+		fmt.Fprintf(w, "Initialized Pandaward in %s\n", filepath.Join(e.Root, config.Dir))
 	} else {
-		fmt.Fprintf(w, "PenSec already initialized in %s\n", filepath.Join(e.Root, config.Dir))
+		fmt.Fprintf(w, "Pandaward already initialized in %s\n", filepath.Join(e.Root, config.Dir))
 	}
 	fmt.Fprintf(w, "  config:   %s (safe to commit)\n  private:  %s (gitignored ledger and evidence)\n", config.Path(e.Root), config.PrivateDir(e.Root))
 	fmt.Fprintf(w, "  profile:  local-passive (no network traffic to any target)\n\n")
@@ -292,9 +292,9 @@ func cmdInit(args []string, w io.Writer) error {
 		fmt.Fprintf(w, "Sensitive files recorded by name only (content not read): %d\n", len(inv.SensitiveNames))
 	}
 	if len(inv.Skipped) > 0 {
-		fmt.Fprintf(w, "Skipped: %d (see `pensec plan`)\n", len(inv.Skipped))
+		fmt.Fprintf(w, "Skipped: %d (see `pandaward plan`)\n", len(inv.Skipped))
 	}
-	fmt.Fprintln(w, "\nNext: pensec plan, then pensec scan")
+	fmt.Fprintln(w, "\nNext: pandaward plan, then pandaward scan")
 	return nil
 }
 
@@ -386,7 +386,7 @@ func cmdScan(ctx context.Context, args []string, w, ew io.Writer, retest bool) e
 	asJSON := fs.Bool("json", false, "JSON output")
 	quiet := fs.Bool("quiet", false, "no progress output")
 	failLevel := fs.String("fail-on", "", "exit 4 if open confirmed findings at or above this severity exist (critical|high|medium|low)")
-	mode := fs.String("mode", "passive", "scan mode; only passive is supported here (use `pensec test` for runtime profiles)")
+	mode := fs.String("mode", "passive", "scan mode; only passive is supported here (use `pandaward test` for runtime profiles)")
 	var onlyChanged *bool
 	if retest {
 		onlyChanged = fs.Bool("changed", false, "re-run only adapters whose inputs changed; carry over the rest")
@@ -395,7 +395,7 @@ func cmdScan(ctx context.Context, args []string, w, ew io.Writer, retest bool) e
 		return err
 	}
 	if *mode != "passive" {
-		return exitErr{2, "scan supports --mode passive only; runtime profiles run through `pensec test`"}
+		return exitErr{2, "scan supports --mode passive only; runtime profiles run through `pandaward test`"}
 	}
 	e, err := openProject(*root)
 	if err != nil {
@@ -470,7 +470,7 @@ func cmdScan(ctx context.Context, args []string, w, ew io.Writer, retest bool) e
 			fmt.Fprintln(w, "  "+e)
 		}
 	}
-	fmt.Fprintln(w, "\nBLOCKED/UNSUPPORTED/SUSPECTED controls are not secure; see `pensec status` and `pensec findings`.")
+	fmt.Fprintln(w, "\nBLOCKED/UNSUPPORTED/SUSPECTED controls are not secure; see `pandaward status` and `pandaward findings`.")
 	return failOn(e, *failLevel)
 }
 
@@ -586,7 +586,7 @@ func cmdFindings(args []string, w io.Writer) error {
 		return nil
 	case "show":
 		if len(pos) != 1 {
-			return exitErr{2, "usage: pensec findings show <PSEC-ID>"}
+			return exitErr{2, "usage: pandaward findings show <PW-ID>"}
 		}
 		f, err := e.St.Finding(e.ProjectID, pos[0])
 		if err != nil {
@@ -598,7 +598,7 @@ func cmdFindings(args []string, w io.Writer) error {
 		return printJSON(w, f)
 	case "add":
 		if *file == "" {
-			return exitErr{2, "usage: pensec findings add --file hypothesis.json"}
+			return exitErr{2, "usage: pandaward findings add --file hypothesis.json"}
 		}
 		b, err := os.ReadFile(*file)
 		if err != nil {
@@ -618,7 +618,7 @@ func cmdFindings(args []string, w io.Writer) error {
 		return nil
 	case "false-positive", "accept-risk", "reopen", "confirm":
 		if len(pos) != 1 {
-			return exitErr{2, "usage: pensec findings " + sub + " <PSEC-ID> --by <name> --note <text>"}
+			return exitErr{2, "usage: pandaward findings " + sub + " <PW-ID> --by <name> --note <text>"}
 		}
 		var exp time.Time
 		if *expires != "" {
@@ -635,7 +635,7 @@ func cmdFindings(args []string, w io.Writer) error {
 		return nil
 	case "apply":
 		if *file == "" || len(pos) != 0 {
-			return exitErr{2, "usage: pensec findings apply --file decisions.json --by <name>"}
+			return exitErr{2, "usage: pandaward findings apply --file decisions.json --by <name>"}
 		}
 		ds, err := engine.ReadTriageDecisions(*file)
 		if err != nil {
@@ -672,7 +672,7 @@ func cmdRoutes(args []string, w io.Writer) error {
 		return err
 	}
 	if a == nil {
-		return errors.New("no completed assessment; run `pensec scan` first")
+		return errors.New("no completed assessment; run `pandaward scan` first")
 	}
 	if *asJSON {
 		return printJSON(w, map[string]any{"assessment_id": a.ID, "entrypoints": eps})
@@ -820,16 +820,16 @@ func cmdFixPlan(args []string, w io.Writer) error {
 		fmt.Fprintf(w, "   Retest: %s\n\n", s.Findings[0].Retest)
 	}
 	if len(susp) > 0 {
-		fmt.Fprintf(w, "Triage first (%d suspected signals, not confirmed): use /pensec:review triage or `pensec findings false-positive <id> --by <name> --note <why>`\n", len(susp))
+		fmt.Fprintf(w, "Triage first (%d suspected signals, not confirmed): use /pandaward:review triage or `pandaward findings false-positive <id> --by <name> --note <why>`\n", len(susp))
 	}
-	fmt.Fprintf(w, "Untested controls: %d (manual-assisted review or runtime profile needed; see `pensec status`).\n", len(r.Untested()))
+	fmt.Fprintf(w, "Untested controls: %d (manual-assisted review or runtime profile needed; see `pandaward status`).\n", len(r.Untested()))
 	return nil
 }
 
 func cmdReport(args []string, w io.Writer) error {
 	fs, root := newFS("report")
 	format := fs.String("format", "", "comma-separated: html,markdown,json,sarif,csv (default from config)")
-	out := fs.String("out", "", "output directory (default .pensec/reports)")
+	out := fs.String("out", "", "output directory (default .pandaward/reports)")
 	if _, err := parse(fs, args); err != nil {
 		return err
 	}
@@ -878,7 +878,7 @@ func cmdEvidence(args []string, w io.Writer) error {
 	switch sub {
 	case "show":
 		if len(pos) != 1 {
-			return exitErr{2, "usage: pensec evidence show <ev_id>"}
+			return exitErr{2, "usage: pandaward evidence show <ev_id>"}
 		}
 		row, err := e.St.Evidence(pos[0])
 		if err != nil {
@@ -970,7 +970,7 @@ func cmdScope(args []string, stdin io.Reader, w io.Writer) error {
 		if err := os.WriteFile(p, []byte(scope.Template), 0o644); err != nil {
 			return err
 		}
-		fmt.Fprintf(w, "Wrote %s. Fill it in yourself; then run `pensec scope approve --by \"<name>\"` in an interactive terminal.\n", p)
+		fmt.Fprintf(w, "Wrote %s. Fill it in yourself; then run `pandaward scope approve --by \"<name>\"` in an interactive terminal.\n", p)
 		return nil
 	case "show", "validate":
 		m, err := scope.Load(e.Root)
@@ -1080,7 +1080,7 @@ func cmdTest(ctx context.Context, args []string, w, ew io.Writer) error {
 		}
 		return nil
 	case "manual-assisted":
-		return exitErr{3, "profile " + *profile + " is UNSUPPORTED in this release: no runtime adapter is implemented, so related controls stay UNSUPPORTED/BLOCKED in the report. Use /pensec:review for manual-assisted analysis."}
+		return exitErr{3, "profile " + *profile + " is UNSUPPORTED in this release: no runtime adapter is implemented, so related controls stay UNSUPPORTED/BLOCKED in the report. Use /pandaward:review for manual-assisted analysis."}
 	case "":
 		return exitErr{2, "--profile is required"}
 	default:
@@ -1160,15 +1160,15 @@ func cmdDoctor(ctx context.Context, args []string, w io.Writer) error {
 	if *asJSON {
 		return printJSON(w, map[string]any{"version": version.Version, "initialized": initialized, "tools": tools})
 	}
-	fmt.Fprintf(w, "pensec %s (catalog %s)\n", version.Version, catalog.Version)
+	fmt.Fprintf(w, "pandaward %s (catalog %s)\n", version.Version, catalog.Version)
 	if initialized {
 		fmt.Fprintf(w, "Project: %s (initialized)\n", projRoot)
 		fmt.Fprintf(w, "  allow_tool_network: %v\n", cfg.Scan.AllowToolNetwork)
 	} else {
-		fmt.Fprintln(w, "Project: not initialized here (run `pensec init`)")
+		fmt.Fprintln(w, "Project: not initialized here (run `pandaward init`)")
 	}
-	fmt.Fprintln(w, "\nBuilt-in adapters (always available, offline): inventory, secrets, code, cicd, infra, supply, mobile, sarif-import (for files in .pensec/sarif or scan.sarif_files)")
-	fmt.Fprintln(w, "Optional scanners (never installed or downloaded by PenSec):")
+	fmt.Fprintln(w, "\nBuilt-in adapters (always available, offline): inventory, secrets, code, cicd, infra, supply, mobile, sarif-import (for files in .pandaward/sarif or scan.sarif_files)")
+	fmt.Fprintln(w, "Optional scanners (never installed or downloaded by Pandaward):")
 	for _, t := range tools {
 		state := "not installed"
 		if t.Path != "" {
@@ -1185,9 +1185,9 @@ func cmdDoctor(ctx context.Context, args []string, w io.Writer) error {
 		zapPath = cfg.Runtime.ZAPPath
 	}
 	if l, err := zap.Locate(zapPath); err == nil {
-		fmt.Fprintf(w, "  %-12s found %s (%s) [runtime: pensec test --profile staging-active]\n", "zap", zap.Version(l), l)
+		fmt.Fprintf(w, "  %-12s found %s (%s) [runtime: pandaward test --profile staging-active]\n", "zap", zap.Version(l), l)
 	} else {
-		fmt.Fprintf(w, "  %-12s not installed [runtime: pensec test --profile staging-active; needs Java 17+]\n", "zap")
+		fmt.Fprintf(w, "  %-12s not installed [runtime: pandaward test --profile staging-active; needs Java 17+]\n", "zap")
 	}
 	fmt.Fprintln(w, "\nMissing optional scanners make their controls BLOCKED with a reason; they never count as PASS.")
 	return nil
@@ -1255,7 +1255,7 @@ func cmdSelftest(ctx context.Context, args []string, w io.Writer) error {
 		fmt.Fprintf(w, "\n%d passed, %d failed. %s\n", r.Passed, r.Failed, r.Note)
 	}
 	if r.Failed > 0 {
-		return exitErr{1, "PenSec was steered by repository content in at least one case"}
+		return exitErr{1, "Pandaward was steered by repository content in at least one case"}
 	}
 	return nil
 }
@@ -1280,7 +1280,7 @@ func cmdDiff(args []string, w io.Writer) error {
 			return err
 		}
 		if a == nil {
-			return errors.New("no completed assessment; run `pensec scan` first")
+			return errors.New("no completed assessment; run `pandaward scan` first")
 		}
 		if d, err = e.DeltaToPrevious(a.ID); err != nil {
 			return err
@@ -1293,7 +1293,7 @@ func cmdDiff(args []string, w io.Writer) error {
 			return err
 		}
 	default:
-		return exitErr{2, "usage: pensec diff [FROM TO] [--json]"}
+		return exitErr{2, "usage: pandaward diff [FROM TO] [--json]"}
 	}
 	if *asJSON {
 		return printJSON(w, d)
@@ -1320,7 +1320,7 @@ func cmdExport(args []string, w io.Writer) error {
 		return err
 	}
 	if *out == "" {
-		return exitErr{2, "usage: pensec export --bundle out.zip [--assessment ID]"}
+		return exitErr{2, "usage: pandaward export --bundle out.zip [--assessment ID]"}
 	}
 	e, err := openProject(*root)
 	if err != nil {
@@ -1337,7 +1337,7 @@ func cmdExport(args []string, w io.Writer) error {
 		return err
 	}
 	if a == nil {
-		return errors.New("assessment not found; run `pensec scan` first or check the ID")
+		return errors.New("assessment not found; run `pandaward scan` first or check the ID")
 	}
 	r, err := report.BuildFor(e, a)
 	if err != nil {
@@ -1348,7 +1348,7 @@ func cmdExport(args []string, w io.Writer) error {
 		return err
 	}
 	fmt.Fprintf(w, "Wrote %s: %s with %d files (report and redacted evidence; no raw tool output).\n", *out, a.ID, n)
-	fmt.Fprintf(w, "Manifest SHA-256: %s\nShare this value with the recipient through a separate channel; they run `pensec verify-bundle %s`.\n", sum, filepath.Base(*out))
+	fmt.Fprintf(w, "Manifest SHA-256: %s\nShare this value with the recipient through a separate channel; they run `pandaward verify-bundle %s`.\n", sum, filepath.Base(*out))
 	return nil
 }
 
@@ -1359,7 +1359,7 @@ func cmdVerifyBundle(args []string, w io.Writer) error {
 		return err
 	}
 	if len(pos) != 1 {
-		return exitErr{2, "usage: pensec verify-bundle <bundle.zip>"}
+		return exitErr{2, "usage: pandaward verify-bundle <bundle.zip>"}
 	}
 	m, sum, err := bundle.Verify(pos[0])
 	if err != nil {
@@ -1391,7 +1391,7 @@ func cmdBenchmark(ctx context.Context, args []string, w io.Writer) error {
 			return err
 		}
 	} else {
-		fmt.Fprintf(w, "Corpus %s, pensec %s, catalog %s\n\n", rep.CorpusVersion, rep.PensecVersion, rep.CatalogVersion)
+		fmt.Fprintf(w, "Corpus %s, pandaward %s, catalog %s\n\n", rep.CorpusVersion, rep.PandawardVersion, rep.CatalogVersion)
 		fmt.Fprintf(w, "%-36s %4s %4s %3s %3s %3s %3s %5s %6s  %s\n", "rule", "vuln", "safe", "TP", "FP", "FN", "TN", "prec", "recall", "maturity")
 		for _, r := range rep.Rules {
 			fmt.Fprintf(w, "%-36s %4d %4d %3d %3d %3d %3d %5.2f %6.2f  %s\n", r.Rule, r.Vulnerable, r.Safe, r.TP, r.FP, r.FN, r.TN, r.Precision, r.Recall, r.Maturity)
@@ -1435,7 +1435,7 @@ func cmdFeedback(args []string, w io.Writer) error {
 	switch sub {
 	case feedback.FalsePositive:
 		if len(pos) != 1 {
-			return exitErr{2, "usage: pensec feedback false-positive <PSEC-ID> [--note text] [--include-path] [--include-snippet]"}
+			return exitErr{2, "usage: pandaward feedback false-positive <PW-ID> [--note text] [--include-path] [--include-snippet]"}
 		}
 		f, err := e.St.Finding(e.ProjectID, pos[0])
 		if err != nil {
@@ -1451,7 +1451,7 @@ func cmdFeedback(args []string, w io.Writer) error {
 		r = feedback.FromFinding(e.Root, *f, runs, opts)
 	case feedback.FalseNegative:
 		if *rule == "" && *note == "" {
-			return exitErr{2, "usage: pensec feedback false-negative --rule <rule or control> [--file f --line n] --note text"}
+			return exitErr{2, "usage: pandaward feedback false-negative --rule <rule or control> [--file f --line n] --note text"}
 		}
 		r = feedback.Missed(e.Root, *rule, *file, *line, opts)
 	case "summary":
@@ -1471,10 +1471,10 @@ func cmdFeedback(args []string, w io.Writer) error {
 		for _, c := range sum {
 			fmt.Fprintf(w, "%-40s %8d %6d\n", redact.Line(c.RuleID), c.FalsePositives, c.Open)
 		}
-		fmt.Fprintln(w, "\nReport a rule with: pensec feedback false-positive <PSEC-ID>")
+		fmt.Fprintln(w, "\nReport a rule with: pandaward feedback false-positive <PW-ID>")
 		return nil
 	default:
-		return exitErr{2, "feedback subcommands: false-positive <PSEC-ID>, false-negative --rule <id>, summary"}
+		return exitErr{2, "feedback subcommands: false-positive <PW-ID>, false-negative --rule <id>, summary"}
 	}
 	if *asJSON {
 		return printJSON(w, map[string]any{"report": r, "issue_url": r.IssueURL()})
@@ -1489,7 +1489,7 @@ func cmdFeedback(args []string, w io.Writer) error {
 	fmt.Fprintln(w, r.IssueURL())
 	fmt.Fprintln(w, "Already reported? Upvote the existing issue instead:", r.ExistingURL())
 	if r.Kind == feedback.FalsePositive {
-		fmt.Fprintln(w, "\nTo close it in this project as well: pensec findings false-positive "+redact.Line(pos[0])+" --by <name> --note <why>")
+		fmt.Fprintln(w, "\nTo close it in this project as well: pandaward findings false-positive "+redact.Line(pos[0])+" --by <name> --note <why>")
 	}
 	return nil
 }

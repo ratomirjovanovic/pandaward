@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/testfixture"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/testfixture"
 )
 
 func openIDs(t *testing.T, e *Engine, n int) []string {
@@ -62,7 +62,7 @@ func TestTriageBatchRejectsWholeBatch(t *testing.T) {
 	defer e.Close()
 	ids := openIDs(t, e, 1)
 	cases := map[string][]TriageDecision{
-		"unknown id":     {{FindingID: ids[0], Action: "false-positive", Note: "x"}, {FindingID: "PSEC-9999", Action: "confirm", Note: "x"}},
+		"unknown id":     {{FindingID: ids[0], Action: "false-positive", Note: "x"}, {FindingID: "PW-9999", Action: "confirm", Note: "x"}},
 		"unknown action": {{FindingID: ids[0], Action: "delete", Note: "x"}},
 		"duplicate":      {{FindingID: ids[0], Action: "false-positive", Note: "x"}, {FindingID: ids[0], Action: "confirm", Note: "x"}},
 		"missing note":   {{FindingID: ids[0], Action: "false-positive", Note: " "}},
@@ -88,11 +88,11 @@ func TestTriageBatchRejectsWholeBatch(t *testing.T) {
 func TestReadTriageDecisionsIsStrict(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "d.json")
-	os.WriteFile(p, []byte(`[{"finding_id":"PSEC-0001","action":"confirm","note":"x","status":"CLOSED"}]`), 0o644)
+	os.WriteFile(p, []byte(`[{"finding_id":"PW-0001","action":"confirm","note":"x","status":"CLOSED"}]`), 0o644)
 	if _, err := ReadTriageDecisions(p); err == nil {
 		t.Error("unknown fields must be rejected")
 	}
-	os.WriteFile(p, []byte(`[{"finding_id":"PSEC-0001","action":"confirm","note":"x"}]`), 0o644)
+	os.WriteFile(p, []byte(`[{"finding_id":"PW-0001","action":"confirm","note":"x"}]`), 0o644)
 	if ds, err := ReadTriageDecisions(p); err != nil || len(ds) != 1 {
 		t.Errorf("valid file: %v %v", ds, err)
 	}

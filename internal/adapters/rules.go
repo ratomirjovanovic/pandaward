@@ -3,7 +3,7 @@ package adapters
 import (
 	"sort"
 
-	"github.com/ratomirjovanovic/pensec/internal/redact"
+	"github.com/ratomirjovanovic/pandaward/internal/redact"
 )
 
 // fileRuleIDs are the rules built-in adapters emit outside the codeRules
@@ -20,7 +20,7 @@ var fileRuleIDs = []string{
 
 // RuleIDs returns every rule ID the built-in adapters can emit, sorted.
 // Rule IDs of optional tools and of imported SARIF results
-// (sarif.<tool>.<rule>) come from outside PenSec and are not listed.
+// (sarif.<tool>.<rule>) come from outside Pandaward and are not listed.
 func RuleIDs() []string {
 	out := append([]string{}, fileRuleIDs...)
 	for _, r := range codeRules {

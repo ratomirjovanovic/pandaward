@@ -5,8 +5,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/version"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/version"
 )
 
 // SARIF renders open findings with a source location as SARIF 2.1.0.
@@ -71,8 +71,8 @@ func SARIF(r *Report) ([]byte, error) {
 			loc.PhysicalLocation.Region = &region{StartLine: f.StartLine, EndLine: f.EndLine}
 		}
 		results = append(results, result{RuleID: f.RuleID, Level: level, Message: msg{f.ID + ": " + f.Message}, Locations: []location{loc},
-			PartialFingerprints: map[string]string{"pensecFingerprint/v1": f.Fingerprint},
-			Properties:          map[string]any{"pensec_id": f.ID, "severity": f.Severity, "confidence": f.Confidence, "control": f.ControlID, "evidence": f.EvidenceIDs}})
+			PartialFingerprints: map[string]string{"pandawardFingerprint/v1": f.Fingerprint},
+			Properties:          map[string]any{"pandaward_id": f.ID, "severity": f.Severity, "confidence": f.Confidence, "control": f.ControlID, "evidence": f.EvidenceIDs}})
 	}
 	var rl []rule
 	for _, v := range rules {
@@ -86,7 +86,7 @@ func SARIF(r *Report) ([]byte, error) {
 		"$schema": "https://json.schemastore.org/sarif-2.1.0.json",
 		"version": "2.1.0",
 		"runs": []any{map[string]any{
-			"tool":       map[string]any{"driver": map[string]any{"name": "PenSec", "version": version.Version, "rules": rl}},
+			"tool":       map[string]any{"driver": map[string]any{"name": "Pandaward", "version": version.Version, "rules": rl}},
 			"results":    results,
 			"properties": map[string]any{"assessment_id": r.Assessment.ID, "attestation": Attestation},
 		}},

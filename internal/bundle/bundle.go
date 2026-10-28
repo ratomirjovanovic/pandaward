@@ -19,12 +19,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ratomirjovanovic/pensec/internal/evidence"
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/redact"
-	"github.com/ratomirjovanovic/pensec/internal/report"
-	"github.com/ratomirjovanovic/pensec/internal/store"
-	"github.com/ratomirjovanovic/pensec/internal/version"
+	"github.com/ratomirjovanovic/pandaward/internal/evidence"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/redact"
+	"github.com/ratomirjovanovic/pandaward/internal/report"
+	"github.com/ratomirjovanovic/pandaward/internal/store"
+	"github.com/ratomirjovanovic/pandaward/internal/version"
 )
 
 // ManifestName is the manifest's path inside a bundle.
@@ -82,7 +82,7 @@ func Export(r *report.Report, private, out string) (string, int, error) {
 	}
 	sort.Strings(names)
 
-	m := Manifest{SchemaVersion: model.SchemaVersion, Generator: "pensec " + version.Version, CreatedAt: store.Now(), Project: r.Project, Assessment: r.Assessment,
+	m := Manifest{SchemaVersion: model.SchemaVersion, Generator: "pandaward " + version.Version, CreatedAt: store.Now(), Project: r.Project, Assessment: r.Assessment,
 		Note: "Every file is listed with its SHA-256. Compare the manifest's own SHA-256 with the value the sender gave you through a separate channel."}
 	for _, n := range names {
 		sum := sha256.Sum256(files[n])

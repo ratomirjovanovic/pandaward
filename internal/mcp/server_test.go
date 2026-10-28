@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ratomirjovanovic/pensec/internal/engine"
-	"github.com/ratomirjovanovic/pensec/internal/testfixture"
+	"github.com/ratomirjovanovic/pandaward/internal/engine"
+	"github.com/ratomirjovanovic/pandaward/internal/testfixture"
 )
 
 func rpc(t *testing.T, s *Server, msgs ...string) []map[string]any {
@@ -44,10 +44,10 @@ func TestProtocol(t *testing.T) {
 		`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}`,
 		`{"jsonrpc":"2.0","method":"notifications/initialized"}`,
 		`{"jsonrpc":"2.0","id":2,"method":"tools/list"}`,
-		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"pensec_get_status","arguments":{"extra":"x"}}}`,
-		`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"pensec_get_evidence","arguments":{"evidence_id":"../../etc/passwd"}}}`,
-		`{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"pensec_request_active_test","arguments":{}}}`,
-		`{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"pensec_scan_passive","arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"pandaward_get_status","arguments":{"extra":"x"}}}`,
+		`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"pandaward_get_evidence","arguments":{"evidence_id":"../../etc/passwd"}}}`,
+		`{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"pandaward_request_active_test","arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"pandaward_scan_passive","arguments":{}}}`,
 		`not json`,
 	)
 	if len(res) != 7 {
@@ -87,7 +87,7 @@ func TestRetestTool(t *testing.T) {
 	s := &Server{Root: root}
 	call := func(id int, args string) map[string]any {
 		t.Helper()
-		res := rpc(t, s, `{"jsonrpc":"2.0","id":`+fmt.Sprint(id)+`,"method":"tools/call","params":{"name":"pensec_retest","arguments":`+args+`}}`)
+		res := rpc(t, s, `{"jsonrpc":"2.0","id":`+fmt.Sprint(id)+`,"method":"tools/call","params":{"name":"pandaward_retest","arguments":`+args+`}}`)
 		return res[0]["result"].(map[string]any)
 	}
 	if r := call(1, `{"changed_only":"yes"}`); r["isError"] != true {
@@ -125,8 +125,8 @@ func TestRetestTool(t *testing.T) {
 		t.Fatalf("targeted retest over MCP: changed=%v runs=%v", out.Changed, runs)
 	}
 	for _, tl := range tools() {
-		if tl.Name == "pensec_retest" && tl.Annotations["readOnlyHint"] != false {
-			t.Fatal("pensec_retest writes to the ledger and must not be marked read-only")
+		if tl.Name == "pandaward_retest" && tl.Annotations["readOnlyHint"] != false {
+			t.Fatal("pandaward_retest writes to the ledger and must not be marked read-only")
 		}
 	}
 }
@@ -140,10 +140,10 @@ func TestListEntrypoints(t *testing.T) {
 	e.Close()
 	s := &Server{Root: root}
 	res := rpc(t, s,
-		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pensec_list_entrypoints","arguments":{}}}`,
-		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"pensec_scan_passive","arguments":{}}}`,
-		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"pensec_list_entrypoints","arguments":{"kind":"bogus"}}}`,
-		`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"pensec_list_entrypoints","arguments":{"kind":"route"}}}`,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pandaward_list_entrypoints","arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"pandaward_scan_passive","arguments":{}}}`,
+		`{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"pandaward_list_entrypoints","arguments":{"kind":"bogus"}}}`,
+		`{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"pandaward_list_entrypoints","arguments":{"kind":"route"}}}`,
 	)
 	for _, i := range []int{0, 2} {
 		if res[i]["result"].(map[string]any)["isError"] != true {
@@ -196,10 +196,10 @@ func TestPrepareFeedbackTool(t *testing.T) {
 	s := &Server{Root: root}
 	call := func(n int, args string) map[string]any {
 		t.Helper()
-		res := rpc(t, s, `{"jsonrpc":"2.0","id":`+fmt.Sprint(n)+`,"method":"tools/call","params":{"name":"pensec_prepare_feedback","arguments":`+args+`}}`)
+		res := rpc(t, s, `{"jsonrpc":"2.0","id":`+fmt.Sprint(n)+`,"method":"tools/call","params":{"name":"pandaward_prepare_feedback","arguments":`+args+`}}`)
 		return res[0]["result"].(map[string]any)
 	}
-	for i, bad := range []string{`{}`, `{"kind":"other"}`, `{"kind":"false-positive","finding_id":"PSEC-9999"}`, `{"kind":"false-negative"}`, `{"kind":"false-positive","finding_id":"` + id + `","send":true}`} {
+	for i, bad := range []string{`{}`, `{"kind":"other"}`, `{"kind":"false-positive","finding_id":"PW-9999"}`, `{"kind":"false-negative"}`, `{"kind":"false-positive","finding_id":"` + id + `","send":true}`} {
 		if r := call(i+1, bad); r["isError"] != true {
 			t.Errorf("%s must be rejected: %v", bad, r)
 		}

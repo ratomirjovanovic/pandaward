@@ -18,8 +18,8 @@ cp "$here/demo/index.html" "$here/demo/demo.js" "$out/demo/"
 if [ -f "$repo/.claude-plugin/icon.png" ]; then cp "$repo/.claude-plugin/icon.png" "$out/icon.png"; fi
 
 version="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$repo/.claude-plugin/plugin.json" | head -n 1)"
-bin="$work/pensec"
-(cd "$repo" && go build -ldflags "-X github.com/ratomirjovanovic/pensec/internal/version.Version=$version" -o "$bin" ./cmd/pensec)
+bin="$work/pandaward"
+(cd "$repo" && go build -ldflags "-X github.com/ratomirjovanovic/pandaward/internal/version.Version=$version" -o "$bin" ./cmd/pandaward)
 fixture="$work/acme-shop"
 mkdir -p "$fixture"
 (cd "$repo" && go run ./tools/demofixture "$fixture")
@@ -27,7 +27,7 @@ cd "$fixture"
 
 rec="$work/rec"
 mkdir -p "$rec"
-run() { # run NAME ARGS...: save the real output of one pensec command
+run() { # run NAME ARGS...: save the real output of one pandaward command
   local name="$1"
   shift
   "$bin" "$@" >"$rec/$name.txt" 2>&1 || true
@@ -66,21 +66,21 @@ stop = json.loads(txt("stop.json"))
 # outputs no longer match them.
 first = plan[1]
 assert "pull_request_target" in first, "fix plan step 1 changed: " + first[:80]
-fixed = re.search(r"PSEC-\d+", first).group(0)
+fixed = re.search(r"PW-\d+", first).group(0)
 delta = re.search(r"\((\d+) new, (\d+) reopened, (\d+) remediated", txt("retest.txt"))
 assert delta and delta.group(1) == "0" and delta.group(2) == "0" and delta.group(3) != "0", "retest delta changed"
 assert stop.get("decision") == "block" and "1 new" in stop.get("reason", ""), "stop hook output changed"
 steps = [
     {"label": "Ask", "items": [
         {"kind": "user", "text": "Check the security of this project."},
-        {"kind": "claude", "text": "I'll run the PenSec assessment from start to finish and keep a checklist. Nothing is sent to any server; PenSec only reads the repository."},
+        {"kind": "claude", "text": "I'll run the Pandaward assessment from start to finish and keep a checklist. Nothing is sent to any server; Pandaward only reads the repository."},
     ]},
     {"label": "Assess", "items": [
-        {"kind": "tool", "cmd": "pensec assess", "output": txt("assess.txt")},
+        {"kind": "tool", "cmd": "pandaward assess", "output": txt("assess.txt")},
         {"kind": "claude", "text": "The scan is complete but not everything was decided: BLOCKED, SUSPECTED and UNSUPPORTED controls are gaps, not a clean result. Next, specialist reviewers look at the undecided areas; whatever they find stays a hypothesis until you decide."},
     ]},
     {"label": "Fix plan", "items": [
-        {"kind": "tool", "cmd": "pensec fix-plan", "output": "\n\n".join(plan[:4])},
+        {"kind": "tool", "cmd": "pandaward fix-plan", "output": "\n\n".join(plan[:4])},
     ]},
     {"label": "One question", "items": [
         {"kind": "question", "text": "What should I do next?", "options": [
@@ -94,14 +94,14 @@ steps = [
     {"label": "Fix and retest", "items": [
         {"kind": "claude", "text": "Step 1: the workflow runs untrusted pull request code with repository secrets. Switching the trigger to pull_request:"},
         {"kind": "diff", "output": txt("fix.diff")},
-        {"kind": "tool", "cmd": "pensec retest --changed", "output": txt("retest.txt")},
+        {"kind": "tool", "cmd": "pandaward retest --changed", "output": txt("retest.txt")},
         {"kind": "claude", "text": fixed + " is remediated and nothing new appeared. Shall I continue with the next steps? The hardcoded keys also have to be revoked at the provider, which only you can do; I can remove them from the code meanwhile."},
     ]},
     {"label": "Automatic retest", "items": [
         {"kind": "user", "text": "Add an export endpoint that zips the requested file."},
         {"kind": "file", "cmd": "Write src/export.js", "output": txt("export.js")},
-        {"kind": "hook", "cmd": "PenSec Stop hook", "output": stop.get("reason") or stop.get("systemMessage", "")},
-        {"kind": "claude", "text": "PenSec retested the file I just wrote and found a new high finding: the shell command is built from the request. I'll switch it to execFile with a fixed argument list and an allow-listed file name, unless you want it another way."},
+        {"kind": "hook", "cmd": "Pandaward Stop hook", "output": stop.get("reason") or stop.get("systemMessage", "")},
+        {"kind": "claude", "text": "Pandaward retested the file I just wrote and found a new high finding: the shell command is built from the request. I'll switch it to execFile with a fixed argument list and an allow-listed file name, unless you want it another way."},
     ]},
 ]
 dest.write_text(json.dumps(steps, ensure_ascii=False), encoding="utf-8")

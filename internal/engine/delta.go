@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/ratomirjovanovic/pensec/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
 )
 
 // DeltaItem is one finding in a delta between two assessments.
@@ -63,7 +63,7 @@ func (e *Engine) Diff(fromID, toID string) (*Delta, error) {
 		return nil, err
 	}
 	if !okFrom || !okTo {
-		return nil, fmt.Errorf("%s or %s was recorded by an older pensec without observation tracking; compare newer assessments", fromID, toID)
+		return nil, fmt.Errorf("%s or %s was recorded by an older pandaward without observation tracking; compare newer assessments", fromID, toID)
 	}
 	before, err := e.St.ObservedBefore(e.ProjectID, from.Seq)
 	if err != nil {

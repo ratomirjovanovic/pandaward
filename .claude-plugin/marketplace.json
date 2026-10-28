@@ -1,28 +1,28 @@
 {
-  "name": "pensec",
+  "name": "pandaward",
   "owner": {
     "name": "Ratomir Jovanovic",
     "url": "https://github.com/ratomirjovanovic"
   },
   "plugins": [
     {
-      "name": "pensec",
+      "name": "pandaward",
       "source": {
         "source": "url",
-        "url": "https://github.com/ratomirjovanovic/pensec.git",
+        "url": "https://github.com/ratomirjovanovic/pandaward.git",
         "ref": "plugin"
       },
-      "description": "PenSec for macOS and Linux: local, evidence-based application security assessment. Prebuilt binaries verified by checksum."
+      "description": "Pandaward for macOS and Linux: local, evidence-based application security assessment. Prebuilt binaries verified by checksum."
     },
     {
-      "name": "pensec-windows",
+      "name": "pandaward-windows",
       "source": {
         "source": "url",
-        "url": "https://github.com/ratomirjovanovic/pensec.git",
+        "url": "https://github.com/ratomirjovanovic/pandaward.git",
         "ref": "plugin-windows"
       },
-      "description": "PenSec for Windows: local, evidence-based application security assessment. Prebuilt pensec.exe."
+      "description": "Pandaward for Windows: local, evidence-based application security assessment. Prebuilt pandaward.exe."
     }
   ],
-  "description": "PenSec: local, evidence-based application security assessment for Claude Code."
+  "description": "Pandaward: local, evidence-based application security assessment for Claude Code."
 }

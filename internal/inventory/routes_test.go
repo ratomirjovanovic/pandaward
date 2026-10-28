@@ -7,8 +7,8 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/ratomirjovanovic/pensec/internal/inventory"
-	"github.com/ratomirjovanovic/pensec/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/inventory"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
 )
 
 // entrypoints returns "kind id" for every entrypoint asset, sorted.

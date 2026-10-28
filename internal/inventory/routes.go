@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ratomirjovanovic/pensec/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
 )
 
 // Entrypoint extraction. Everything here is heuristic and line based: it

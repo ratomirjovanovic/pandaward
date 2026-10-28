@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ratomirjovanovic/pensec/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
 )
 
 func open(t *testing.T) (*Store, string) {
@@ -67,7 +67,7 @@ func TestAssessmentLifecycle(t *testing.T) {
 
 func TestStaleMarkersFlagFindings(t *testing.T) {
 	s, _ := open(t)
-	f := model.Finding{ID: "PSEC-0001", Fingerprint: "fp1", RuleID: "r", ControlID: "D-001", Title: "t", Severity: model.SevHigh,
+	f := model.Finding{ID: "PW-0001", Fingerprint: "fp1", RuleID: "r", ControlID: "D-001", Title: "t", Severity: model.SevHigh,
 		Confidence: model.Confirmed, Status: model.FindingOpen, File: "src/a.js", Collector: "builtin-code"}
 	if err := s.UpsertFinding("p1", f); err != nil {
 		t.Fatal(err)
@@ -79,7 +79,7 @@ func TestStaleMarkersFlagFindings(t *testing.T) {
 	if files, _ := s.StaleFiles("p1"); !slices.Equal(files, []string{"src/a.js"}) {
 		t.Fatalf("stale files = %v", files)
 	}
-	got, _ := s.Finding("p1", "PSEC-0001")
+	got, _ := s.Finding("p1", "PW-0001")
 	if got == nil || !got.Stale {
 		t.Fatalf("finding in a changed file must be flagged stale: %+v", got)
 	}
@@ -94,21 +94,21 @@ func TestStaleMarkersFlagFindings(t *testing.T) {
 func TestFindingUpsertKeepsIdentityByFingerprint(t *testing.T) {
 	s, _ := open(t)
 	id, _ := s.NextFindingID("p1")
-	if id != "PSEC-0001" {
+	if id != "PW-0001" {
 		t.Fatalf("first ID = %s", id)
 	}
 	f := model.Finding{ID: id, Fingerprint: "fp1", RuleID: "r", ControlID: "D-001", Title: "first", Severity: model.SevHigh,
 		Confidence: model.Hypothesis, Status: model.FindingOpen, EvidenceIDs: []string{"ev_1"}}
 	s.UpsertFinding("p1", f)
-	f.ID, f.Title, f.Status = "PSEC-9999", "second", model.FindingRemediated
+	f.ID, f.Title, f.Status = "PW-9999", "second", model.FindingRemediated
 	if err := s.UpsertFinding("p1", f); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := s.FindingByFingerprint("p1", "fp1")
-	if got == nil || got.ID != "PSEC-0001" || got.Title != "second" || got.Status != model.FindingRemediated || !slices.Equal(got.EvidenceIDs, []string{"ev_1"}) {
+	if got == nil || got.ID != "PW-0001" || got.Title != "second" || got.Status != model.FindingRemediated || !slices.Equal(got.EvidenceIDs, []string{"ev_1"}) {
 		t.Fatalf("upsert must update in place and keep the original ID: %+v", got)
 	}
-	if next, _ := s.NextFindingID("p1"); next != "PSEC-0002" {
+	if next, _ := s.NextFindingID("p1"); next != "PW-0002" {
 		t.Fatalf("next ID = %s", next)
 	}
 }

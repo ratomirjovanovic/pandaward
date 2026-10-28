@@ -1,4 +1,4 @@
-// Command demofixture writes PenSec's deliberately vulnerable fixture into a
+// Command demofixture writes Pandaward's deliberately vulnerable fixture into a
 // directory. It is used to produce the website demo; all secret-shaped
 // values are synthetic.
 package main
@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/ratomirjovanovic/pensec/internal/testfixture"
+	"github.com/ratomirjovanovic/pandaward/internal/testfixture"
 )
 
 func main() {

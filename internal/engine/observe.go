@@ -12,11 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ratomirjovanovic/pensec/internal/evidence"
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/redact"
-	"github.com/ratomirjovanovic/pensec/internal/scope"
-	"github.com/ratomirjovanovic/pensec/internal/store"
+	"github.com/ratomirjovanovic/pandaward/internal/evidence"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/redact"
+	"github.com/ratomirjovanovic/pandaward/internal/scope"
+	"github.com/ratomirjovanovic/pandaward/internal/store"
 )
 
 // ApprovalKind binds approvals for network-active tests to the scope hash.
@@ -57,7 +57,7 @@ func (e *Engine) CheckScope(now time.Time) (*scope.Manifest, *store.Approval, er
 		}
 	}
 	if ap == nil {
-		return m, nil, errors.New("no valid approval for this exact scope manifest; a human must run `pensec scope approve --by \"<name>\"` in an interactive terminal (editing scope.yaml invalidates earlier approvals)")
+		return m, nil, errors.New("no valid approval for this exact scope manifest; a human must run `pandaward scope approve --by \"<name>\"` in an interactive terminal (editing scope.yaml invalidates earlier approvals)")
 	}
 	return m, ap, nil
 }
@@ -77,7 +77,7 @@ func (e *Engine) Observe(ctx context.Context, progress func(string)) (*ObserveRe
 		return nil, err
 	}
 	if a == nil {
-		return nil, errors.New("run `pensec scan` first; runtime observations attach to the latest assessment")
+		return nil, errors.New("run `pandaward scan` first; runtime observations attach to the latest assessment")
 	}
 	// The guard enforces scope, methods, the budget, the rate limit and
 	// address checks, and never follows redirects.
@@ -109,7 +109,7 @@ func (e *Engine) Observe(ctx context.Context, progress func(string)) (*ObserveRe
 			res.Errors = append(res.Errors, err.Error())
 			continue
 		}
-		req.Header.Set("User-Agent", "pensec-observe/1 (authorized passive header review)")
+		req.Header.Set("User-Agent", "pandaward-observe/1 (authorized passive header review)")
 		resp, err := client.Do(req)
 		res.Requests = g.Sent()
 		if err != nil {
@@ -222,7 +222,7 @@ func headerSignals(u *url.URL, resp *http.Response) []model.Signal {
 	h := resp.Header
 	add := func(id, title string, sev model.Severity, cwe, msg, fix string) {
 		out = append(out, model.Signal{RuleID: "observe." + id, ControlID: "H-003", Title: title, Severity: sev, Confidence: model.Confirmed, CWE: cwe, File: u.Redacted(),
-			Message: msg, Fix: fix, Collector: "observe-headers", Key: id, Retest: "Deploy the change, then run `pensec test --profile production-observe` again (needs a valid approval)."})
+			Message: msg, Fix: fix, Collector: "observe-headers", Key: id, Retest: "Deploy the change, then run `pandaward test --profile production-observe` again (needs a valid approval)."})
 	}
 	if u.Scheme == "https" && h.Get("Strict-Transport-Security") == "" {
 		add("missing-hsts", "Missing Strict-Transport-Security", model.SevMedium, "CWE-319", "HTTPS response without HSTS; first visits can be downgraded.", "Send Strict-Transport-Security: max-age=31536000; includeSubDomains.")

@@ -11,23 +11,23 @@ case "$(uname -s)" in Linux) os=linux ;; Darwin) os=darwin ;; *) echo "skip: $(u
 case "$(uname -m)" in x86_64 | amd64) arch=amd64 ;; arm64 | aarch64) arch=arm64 ;; esac
 
 mkdir -p "$work/bin"
-(cd "$repo" && CGO_ENABLED=0 go build -o "$work/bin/pensec-$os-$arch" ./cmd/pensec)
-cp "$repo/packaging/launcher.sh" "$work/bin/pensec"
-chmod +x "$work/bin/pensec"
-(cd "$work/bin" && if command -v sha256sum >/dev/null; then sha256sum "pensec-$os-$arch"; else shasum -a 256 "pensec-$os-$arch"; fi > SHA256SUMS)
+(cd "$repo" && CGO_ENABLED=0 go build -o "$work/bin/pandaward-$os-$arch" ./cmd/pandaward)
+cp "$repo/packaging/launcher.sh" "$work/bin/pandaward"
+chmod +x "$work/bin/pandaward"
+(cd "$work/bin" && if command -v sha256sum >/dev/null; then sha256sum "pandaward-$os-$arch"; else shasum -a 256 "pandaward-$os-$arch"; fi > SHA256SUMS)
 
-"$work/bin/pensec" version | grep -q '^pensec ' || { echo "FAIL: verified binary did not run"; exit 1; }
+"$work/bin/pandaward" version | grep -q '^pandaward ' || { echo "FAIL: verified binary did not run"; exit 1; }
 echo "ok: verified binary runs"
 
 # A checkout with core.autocrlf rewrites SHA256SUMS with CRLF line endings.
 awk '{ printf "%s\r\n", $0 }' "$work/bin/SHA256SUMS" > "$work/sums.crlf" && cp "$work/sums.crlf" "$work/bin/SHA256SUMS"
-"$work/bin/pensec" version | grep -q '^pensec ' || { echo "FAIL: CRLF SHA256SUMS was not accepted"; exit 1; }
+"$work/bin/pandaward" version | grep -q '^pandaward ' || { echo "FAIL: CRLF SHA256SUMS was not accepted"; exit 1; }
 echo "ok: CRLF SHA256SUMS accepted"
 
-printf 'x' >> "$work/bin/pensec-$os-$arch"
-if "$work/bin/pensec" version >/dev/null 2>&1; then echo "FAIL: modified binary ran"; exit 1; fi
+printf 'x' >> "$work/bin/pandaward-$os-$arch"
+if "$work/bin/pandaward" version >/dev/null 2>&1; then echo "FAIL: modified binary ran"; exit 1; fi
 echo "ok: modified binary refused"
 
-rm "$work/bin/pensec-$os-$arch"
-if "$work/bin/pensec" version >/dev/null 2>&1; then echo "FAIL: missing binary did not fail"; exit 1; fi
+rm "$work/bin/pandaward-$os-$arch"
+if "$work/bin/pandaward" version >/dev/null 2>&1; then echo "FAIL: missing binary did not fail"; exit 1; fi
 echo "ok: missing binary refused"

@@ -1,5 +1,5 @@
 // Package feedback builds false positive and false negative reports that a
-// user can send to the PenSec project. Nothing is sent from here: a report
+// user can send to the Pandaward project. Nothing is sent from here: a report
 // is text and a prefilled issue link the user decides to open. By default a
 // report carries only rule metadata and the file type; the path and the
 // lines are added only on request, and then redacted.
@@ -15,10 +15,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ratomirjovanovic/pensec/internal/catalog"
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/redact"
-	"github.com/ratomirjovanovic/pensec/internal/version"
+	"github.com/ratomirjovanovic/pandaward/internal/catalog"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/redact"
+	"github.com/ratomirjovanovic/pandaward/internal/version"
 )
 
 // Kinds of report, also the issue template names.
@@ -28,7 +28,7 @@ const (
 )
 
 // Repo is where reports are filed.
-const Repo = "https://github.com/ratomirjovanovic/pensec"
+const Repo = "https://github.com/ratomirjovanovic/pandaward"
 
 // MaxSnippetLines bounds the code a report may carry.
 const MaxSnippetLines = 12
@@ -42,7 +42,7 @@ type Report struct {
 	Confidence  string `json:"confidence,omitempty"`
 	Adapter     string `json:"adapter,omitempty"`
 	ToolVersion string `json:"tool_version,omitempty"`
-	PenSec      string `json:"pensec_version"`
+	Pandaward   string `json:"pandaward_version"`
 	Catalog     string `json:"catalog_version"`
 	FileType    string `json:"file_type,omitempty"`
 	Path        string `json:"path,omitempty"`
@@ -62,7 +62,7 @@ type Options struct {
 // adapter runs of the finding's assessment, used for the tool version.
 func FromFinding(root string, f model.Finding, runs []model.Run, o Options) Report {
 	r := Report{Kind: FalsePositive, RuleID: f.RuleID, ControlID: f.ControlID, Severity: string(f.Severity),
-		Confidence: string(f.Confidence), Adapter: f.Collector, PenSec: version.Version, Catalog: catalog.Version,
+		Confidence: string(f.Confidence), Adapter: f.Collector, Pandaward: version.Version, Catalog: catalog.Version,
 		FileType: FileType(f.File), Note: clean(o.Note)}
 	for _, run := range runs {
 		if run.Adapter == f.Collector {
@@ -73,10 +73,10 @@ func FromFinding(root string, f model.Finding, runs []model.Run, o Options) Repo
 	return r
 }
 
-// Missed builds a false negative report: a problem PenSec did not flag.
+// Missed builds a false negative report: a problem Pandaward did not flag.
 // rule may be a rule ID or a control ID; either may be empty.
 func Missed(root, rule, file string, line int, o Options) Report {
-	r := Report{Kind: FalseNegative, PenSec: version.Version, Catalog: catalog.Version, FileType: FileType(file), Note: clean(o.Note)}
+	r := Report{Kind: FalseNegative, Pandaward: version.Version, Catalog: catalog.Version, FileType: FileType(file), Note: clean(o.Note)}
 	if catalog.ControlByID(strings.ToUpper(rule)) != nil {
 		r.ControlID = strings.ToUpper(rule)
 	} else {
@@ -179,7 +179,7 @@ func (r Report) Markdown() string {
 	rows := [][2]string{
 		{"Kind", r.Kind}, {"Rule", r.RuleID}, {"Control", r.ControlID}, {"Severity", r.Severity},
 		{"Confidence", r.Confidence}, {"Adapter", r.Adapter}, {"Tool version", r.ToolVersion},
-		{"PenSec", r.PenSec}, {"Catalog", r.Catalog}, {"File type", r.FileType},
+		{"Pandaward", r.Pandaward}, {"Catalog", r.Catalog}, {"File type", r.FileType},
 	}
 	if r.Path != "" {
 		rows = append(rows, [2]string{"Location", fmt.Sprintf("%s:%d", r.Path, r.Line)})
@@ -210,7 +210,7 @@ func (r Report) IssueURL() string {
 		rule = r.ControlID
 	}
 	q.Set("rule", rule)
-	q.Set("version", r.PenSec)
+	q.Set("version", r.Pandaward)
 	q.Set("details", r.Markdown())
 	return Repo + "/issues/new?" + q.Encode()
 }

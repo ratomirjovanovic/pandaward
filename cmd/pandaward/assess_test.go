@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ratomirjovanovic/pensec/internal/testfixture"
+	"github.com/ratomirjovanovic/pandaward/internal/testfixture"
 )
 
 func TestBar(t *testing.T) {
@@ -40,7 +40,7 @@ func TestAssessFromScratch(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := out.String()
-	for _, want := range []string{"by Ratomir Jovanovic", "100%", "Decisive coverage", "Fix first", "Reports", "/pensec:review"} {
+	for _, want := range []string{"by Ratomir Jovanovic", "100%", "Decisive coverage", "Fix first", "Reports", "/pandaward:review"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("output lacks %q", want)
 		}
@@ -51,11 +51,11 @@ func TestAssessFromScratch(t *testing.T) {
 	if strings.Contains(s, testfixture.FakeStripe) {
 		t.Error("secret value in the summary")
 	}
-	reports, _ := filepath.Glob(filepath.Join(root, ".pensec", "reports", "*.html"))
+	reports, _ := filepath.Glob(filepath.Join(root, ".pandaward", "reports", "*.html"))
 	if len(reports) != 1 {
 		t.Fatalf("expected one HTML report, got %v", reports)
 	}
-	if _, err := os.Stat(filepath.Join(root, ".pensec", "config.yaml")); err != nil {
+	if _, err := os.Stat(filepath.Join(root, ".pandaward", "config.yaml")); err != nil {
 		t.Fatal("assess did not initialize the project")
 	}
 	out.Reset()

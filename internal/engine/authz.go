@@ -10,11 +10,11 @@ import (
 	"os"
 	"strings"
 
-	"github.com/ratomirjovanovic/pensec/internal/evidence"
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/redact"
-	"github.com/ratomirjovanovic/pensec/internal/scope"
-	"github.com/ratomirjovanovic/pensec/internal/store"
+	"github.com/ratomirjovanovic/pandaward/internal/evidence"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/redact"
+	"github.com/ratomirjovanovic/pandaward/internal/scope"
+	"github.com/ratomirjovanovic/pandaward/internal/store"
 )
 
 // authzControls maps check kinds to the controls they decide. Revoked
@@ -91,7 +91,7 @@ func (e *Engine) runAuthz(ctx context.Context, a *store.Assessment, m *scope.Man
 				ans.Error = err.Error()
 				return ans
 			}
-			req.Header.Set("User-Agent", "pensec-authz/1 (authorized authorization test)")
+			req.Header.Set("User-Agent", "pandaward-authz/1 (authorized authorization test)")
 			if cr, ok := creds[name]; ok {
 				req.Header.Set(cr.header, cr.value)
 				ans.Tenant = cr.id.Tenant
@@ -263,5 +263,5 @@ func authzSignal(c scope.AuthCheck, cid, target string, ans authzAnswer, sameBod
 	return model.Signal{RuleID: rule, ControlID: cid, Title: title, Severity: model.SevHigh, Confidence: conf, CWE: cwe, File: target,
 		Message: redact.Line(fmt.Sprintf("%s got %d for check %q, which only %s may access, %s.", who, ans.Status, c.Name, strings.Join(c.Allowed, ", "), how)),
 		Fix:     fix, Collector: "authz", Key: c.Name + "|" + ans.Identity,
-		Retest: "Deploy the fix to the approved target, then run `pensec test --profile staging-active` again (needs a valid approval and the identity variables)."}
+		Retest: "Deploy the fix to the approved target, then run `pandaward test --profile staging-active` again (needs a valid approval and the identity variables)."}
 }

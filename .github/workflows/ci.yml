@@ -27,16 +27,16 @@ jobs:
         run: test -z "$(gofmt -l .)"
       - run: go vet ./...
       - run: go test ./...
-      - run: go build ./cmd/pensec
+      - run: go build ./cmd/pandaward
       # Release-blocking: the hostile-repository suite must pass on every OS.
       - name: Self-test against a hostile repository
-        run: go run ./cmd/pensec selftest
+        run: go run ./cmd/pandaward selftest
       - name: Launcher verification
         if: runner.os != 'Windows'
         run: sh packaging/test-launcher.sh
       - name: Rule benchmark
         if: runner.os == 'Linux'
-        run: go run ./cmd/pensec benchmark --strict --json > benchmark.json
+        run: go run ./cmd/pandaward benchmark --strict --json > benchmark.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: runner.os == 'Linux'
         with:
@@ -85,19 +85,19 @@ jobs:
           SEMGREP_ENABLE_VERSION_CHECK=0 semgrep --version
           osv-scanner --version
           trivy --version
-      - name: Scan the demo fixture with the pensec CLI
+      - name: Scan the demo fixture with the pandaward CLI
         run: |
           set -eu
-          go build -o "$RUNNER_TEMP/pensec" ./cmd/pensec
+          go build -o "$RUNNER_TEMP/pandaward" ./cmd/pandaward
           fx="$RUNNER_TEMP/fixture"
           mkdir "$fx"
           go run ./tools/demofixture "$fx"
           cd "$fx"
-          "$RUNNER_TEMP/pensec" init
-          sed -i 's/allow_tool_network: false/allow_tool_network: true/' .pensec/config.yaml
-          grep -q 'allow_tool_network: true' .pensec/config.yaml
+          "$RUNNER_TEMP/pandaward" init
+          sed -i 's/allow_tool_network: false/allow_tool_network: true/' .pandaward/config.yaml
+          grep -q 'allow_tool_network: true' .pandaward/config.yaml
           rc=0
-          "$RUNNER_TEMP/pensec" scan --json > "$RUNNER_TEMP/scan.json" || rc=$?
+          "$RUNNER_TEMP/pandaward" scan --json > "$RUNNER_TEMP/scan.json" || rc=$?
           jq -r '.scan.runs[] | "\(.adapter) \(.tool_version) \(.exit_class) \(.signals) \(.detail)"' "$RUNNER_TEMP/scan.json"
           for a in gitleaks semgrep osv-scanner trivy; do
             jq -e --arg a "$a" '[.scan.runs[] | select(.adapter == $a and .exit_class == "OK" and .signals > 0)] | length == 1' "$RUNNER_TEMP/scan.json" >/dev/null || { echo "$a did not complete with signals"; exit 1; }
@@ -105,7 +105,7 @@ jobs:
           exit "$rc"
       - name: Real-tool adapter test
         env:
-          PENSEC_REAL_TOOLS: "1"
+          PANDAWARD_REAL_TOOLS: "1"
         run: go test -count=1 -v -run '^TestRealTools$' ./internal/adapters/
 
   # Runs the ZAP adapter against a pinned ZAP and the fixture site, which
@@ -130,11 +130,11 @@ jobs:
           curl -fsSLo zap.tar.gz "https://github.com/zaproxy/zaproxy/releases/download/v${ZAP_VERSION}/ZAP_${ZAP_VERSION}_Linux.tar.gz"
           printf '%s  %s\n' "$ZAP_SHA256" zap.tar.gz | sha256sum -c -
           tar -xzf zap.tar.gz
-          echo "PENSEC_ZAP_PATH=$RUNNER_TEMP/ZAP_${ZAP_VERSION}/zap.sh" >> "$GITHUB_ENV"
+          echo "PANDAWARD_ZAP_PATH=$RUNNER_TEMP/ZAP_${ZAP_VERSION}/zap.sh" >> "$GITHUB_ENV"
           java -version
       - name: Real ZAP adapter test
         env:
-          PENSEC_REAL_ZAP: "1"
+          PANDAWARD_REAL_ZAP: "1"
         run: go test -count=1 -v -timeout 15m -run '^TestRealZAP$' ./internal/zap/
 
   reproducible:
@@ -155,4 +155,4 @@ jobs:
           go clean -cache
           sh packaging/build-release.sh 0.0.0-ci b >/dev/null
           diff a/SHA256SUMS b/SHA256SUMS
-          jq -e '[.components[] | select((.licenses // []) | length == 0)] | length == 0' a/pensec.cdx.json
+          jq -e '[.components[] | select((.licenses // []) | length == 0)] | length == 0' a/pandaward.cdx.json

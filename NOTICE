@@ -1,14 +1,14 @@
 Copyright (C) 2026 Ratomir Jovanovic
 
-PenSec is free software: you can redistribute it and/or modify it under the
+Pandaward is free software: you can redistribute it and/or modify it under the
 terms of the GNU Affero General Public License as published by the Free
 Software Foundation, version 3 only.
 
-PenSec is distributed in the hope that it will be useful, but WITHOUT ANY
+Pandaward is distributed in the hope that it will be useful, but WITHOUT ANY
 WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR
 A PARTICULAR PURPOSE. See the LICENSE file for details.
 
 Third-party Go modules are listed in go.mod and keep their own licenses.
 
-The Semgrep rules in rules/semgrep/ were written for PenSec and are covered by
-the license above. Semgrep itself is not distributed with PenSec.
+The Semgrep rules in rules/semgrep/ were written for Pandaward and are covered by
+the license above. Semgrep itself is not distributed with Pandaward.

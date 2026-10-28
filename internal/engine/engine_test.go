@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ratomirjovanovic/pensec/internal/adapters"
-	"github.com/ratomirjovanovic/pensec/internal/evidence"
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/testfixture"
+	"github.com/ratomirjovanovic/pandaward/internal/adapters"
+	"github.com/ratomirjovanovic/pandaward/internal/evidence"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/testfixture"
 )
 
 func scan(t *testing.T, root string) (*Engine, *ScanResult) {
@@ -206,7 +206,7 @@ func TestHypothesisValidation(t *testing.T) {
 	defer e.Close()
 	bad := []HypothesisInput{
 		{ControlID: "C-001", Title: "Escape attempt", Severity: "high", File: "../outside.txt", StartLine: 1, Rationale: "x"},
-		{ControlID: "C-001", Title: "Private state", Severity: "high", File: ".pensec/private/state.db", StartLine: 1, Rationale: "x"},
+		{ControlID: "C-001", Title: "Private state", Severity: "high", File: ".pandaward/private/state.db", StartLine: 1, Rationale: "x"},
 		{ControlID: "Z-999", Title: "Unknown control", Severity: "high", File: "src/server.js", StartLine: 1, Rationale: "x"},
 		{ControlID: "C-001", Title: "Bad line", Severity: "high", File: "src/server.js", StartLine: 999, Rationale: "x"},
 		{ControlID: "C-001", Title: "Bad severity", Severity: "urgent", File: "src/server.js", StartLine: 1, Rationale: "x"},

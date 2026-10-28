@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ratomirjovanovic/pensec/internal/evidence"
-	"github.com/ratomirjovanovic/pensec/internal/model"
-	"github.com/ratomirjovanovic/pensec/internal/redact"
+	"github.com/ratomirjovanovic/pandaward/internal/evidence"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/redact"
 )
 
 // LocalRuntimeResult summarizes a local-runtime run.
@@ -67,7 +67,7 @@ func (e *Engine) LocalRuntime(ctx context.Context, progress func(string)) (*Loca
 		return nil, err
 	}
 	if a == nil {
-		return nil, errors.New("run `pensec scan` first; runtime results attach to the latest assessment")
+		return nil, errors.New("run `pandaward scan` first; runtime results attach to the latest assessment")
 	}
 	res := &LocalRuntimeResult{AssessmentID: a.ID, Controls: map[string]string{}}
 	set := func(cid string, st model.Status, reason string) error {
@@ -129,7 +129,7 @@ func firstLineOf(s string) string {
 func (e *Engine) androidRuntime(ctx context.Context, progress func(string)) ([]model.Signal, []string, model.Status, string) {
 	pkg := e.Cfg.Runtime.AndroidPackage
 	if pkg == "" {
-		return nil, nil, model.StatusBlocked, "set runtime.android_package in .pensec/config.yaml to the package of a debuggable test build"
+		return nil, nil, model.StatusBlocked, "set runtime.android_package in .pandaward/config.yaml to the package of a debuggable test build"
 	}
 	if !pkgRe.MatchString(pkg) {
 		return nil, nil, model.StatusError, "runtime.android_package is not a package name"
@@ -210,7 +210,7 @@ func (e *Engine) iosRuntime(ctx context.Context, progress func(string)) ([]model
 		return nil, nil, model.StatusBlocked, "iOS simulator checks need macOS with Xcode; this host is " + HostOS
 	}
 	if id == "" {
-		return nil, nil, model.StatusBlocked, "set runtime.ios_bundle_id in .pensec/config.yaml to the bundle ID of the test build"
+		return nil, nil, model.StatusBlocked, "set runtime.ios_bundle_id in .pandaward/config.yaml to the bundle ID of the test build"
 	}
 	if !pkgRe.MatchString(id) {
 		return nil, nil, model.StatusError, "runtime.ios_bundle_id is not a bundle ID"
@@ -281,5 +281,5 @@ func runtimeSignal(rule, cid, title, file, key, fix string) model.Signal {
 	return model.Signal{RuleID: rule, ControlID: cid, Title: title, Severity: model.SevHigh, Confidence: model.Confirmed, CWE: "CWE-312", File: file,
 		Message: "The test build stored a non-empty value under " + key + " in plain app storage. The value was not recorded.",
 		Fix:     fix, Collector: "local-runtime", Key: key,
-		Retest: "Install the fixed test build on the emulator or simulator, run the flow that stores the credential, then `pensec test --profile local-runtime` again."}
+		Retest: "Install the fixed test build on the emulator or simulator, run the flow that stores the credential, then `pandaward test --profile local-runtime` again."}
 }
