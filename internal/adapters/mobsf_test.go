@@ -304,3 +304,47 @@ func TestRealMobSF(t *testing.T) {
 		os.WriteFile(filepath.Join(dir, "mobsf-signals.json"), out, 0o644)
 	}
 }
+
+// TestMobSFRealScorecard parses the scorecard MobSF 4.5.3 returned for
+// ClipDump.apk in the real-mobsf CI job (saved by the adapter, so the
+// candidate secrets are already omitted). Regenerate it from the job's
+// artifact when the pinned version changes.
+func TestMobSFRealScorecard(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("testdata", "mobsf-4.5.3-clipdump.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, err := parseMobSFScorecard(b)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if card.Version != "v4.5.3" {
+		t.Errorf("version %q", card.Version)
+	}
+	got := map[string]model.Severity{}
+	info := 0
+	for _, s := range mobsfSignals(card, "app.apk", "K-006", "mobsf") {
+		if s.Confidence != model.Hypothesis || s.ControlID != "K-006" {
+			t.Errorf("signal %+v", s)
+		}
+		if s.Severity == model.SevInfo {
+			info++
+			continue
+		}
+		got[s.RuleID+" "+s.Title] = s.Severity
+	}
+	want := map[string]model.Severity{
+		"mobsf.certificate Application vulnerable to Janus Vulnerability":                                        model.SevHigh,
+		"mobsf.manifest App can be installed on a vulnerable unpatched Android version 4.0.3-4.0.4, [minSdk=15]": model.SevHigh,
+		"mobsf.manifest Application Data can be Backed up [android:allowBackup=true]":                            model.SevMedium,
+		"mobsf.manifest Service (opensecurity.clipdump.ClipDumper) is not Protected. [android:exported=true]":    model.SevMedium,
+	}
+	if len(got) != len(want) || info != 2 {
+		t.Errorf("got %d high or medium and %d info signals, want %d and 2: %v", len(got), info, len(want), got)
+	}
+	for k, sev := range want {
+		if got[k] != sev {
+			t.Errorf("%s: severity %q, want %q", k, got[k], sev)
+		}
+	}
+}

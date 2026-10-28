@@ -1,0 +1,56 @@
+{
+  "app_name": "ClipDump",
+  "efr01": false,
+  "file_name": "app.apk",
+  "hash": "89c5f2dbd53c3fc5eefa04560437f2f7",
+  "high": [
+    {
+      "description": "Application is signed with v1 signature scheme, making it vulnerable to Janus vulnerability on Android 5.0-8.0, if signed only with v1 signature scheme. Applications running on Android 5.0-7.0 signed with v1, and v2/v3 scheme is also vulnerable.",
+      "section": "certificate",
+      "title": "Application vulnerable to Janus Vulnerability"
+    },
+    {
+      "description": "This application can be installed on an older version of android that has multiple unfixed vulnerabilities. These devices won't receive reasonable security updates from Google. Support an Android version =\u003e 10, API 29 to receive reasonable security updates.",
+      "section": "manifest",
+      "title": "App can be installed on a vulnerable unpatched Android version 4.0.3-4.0.4, [minSdk=15]"
+    }
+  ],
+  "hotspot": [],
+  "info": [
+    {
+      "description": "The App logs information. Sensitive information should never be logged.\nhttps://github.com/MobSF/owasp-mstg/blob/master/Document/0x05d-Testing-Data-Storage.md#logs\n\nFiles:\nopensecurity/clipdump/ClipDumper.java, line(s) 23",
+      "section": "code",
+      "title": "The App logs information. Sensitive information should never be logged."
+    },
+    {
+      "description": "This app listens to Clipboard changes. Some malware also listen to Clipboard changes.\nhttps://github.com/MobSF/owasp-mstg/blob/master/Document/0x04b-Mobile-App-Security-Testing.md#clipboard\n\nFiles:\nopensecurity/clipdump/ClipDumper.java, line(s) 19,4",
+      "section": "code",
+      "title": "This app listens to Clipboard changes. Some malware also listen to Clipboard changes."
+    }
+  ],
+  "secure": [
+    {
+      "description": "This application does not include any user or device trackers. Unable to find trackers during static analysis.",
+      "section": "trackers",
+      "title": "This application has no privacy trackers"
+    }
+  ],
+  "security_score": 44,
+  "title": "AppSec Scorecard",
+  "total_trackers": 432,
+  "trackers": 0,
+  "version": "v4.5.3",
+  "version_name": "1.0",
+  "warning": [
+    {
+      "description": "This flag allows anyone to backup your application data via adb. It allows users who have enabled USB debugging to copy application data off of the device.",
+      "section": "manifest",
+      "title": "Application Data can be Backed up [android:allowBackup=true]"
+    },
+    {
+      "description": "A Service is found to be shared with other apps on the device therefore leaving it accessible to any other application on the device.",
+      "section": "manifest",
+      "title": "Service (opensecurity.clipdump.ClipDumper) is not Protected. [android:exported=true]"
+    }
+  ]
+}
