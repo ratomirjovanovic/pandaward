@@ -202,13 +202,23 @@ The engine sends at most `max_requests_total` GET requests to the listed origins
 ## In CI
 
 ```yaml
-- run: go install github.com/ratomirjovanovic/pensec/cmd/pensec@latest
-- run: pensec init && pensec scan --fail-on high
-- run: pensec report --format sarif --out reports
-- uses: github/codeql-action/upload-sarif@<pinned-sha>
-  with:
-    sarif_file: reports
+permissions:
+  contents: read
+  security-events: write
+steps:
+  - uses: actions/checkout@<pinned-sha>
+  - id: pensec
+    uses: ratomirjovanovic/pensec@<pinned-sha>   # v0.1.3 or later
+    with:
+      fail-on: high          # empty to never fail on findings
+      new-only: "true"       # on pull requests, gate only on findings the change introduces
+  - if: always()
+    uses: github/codeql-action/upload-sarif@<pinned-sha>
+    with:
+      sarif_file: ${{ steps.pensec.outputs.sarif-file }}
 ```
+
+The action downloads a release binary, checks it against `SHA256SUMS`, scans, writes SARIF, HTML, Markdown and JSON reports to `pensec-report/`, and adds a short job summary with counts only (`summary: full` lists findings; job summaries of public repositories are public). With `new-only`, the base commit is scanned in a separate worktree and only findings whose fingerprints are new count. Inputs and outputs are documented in [`action.yml`](action.yml).
 
 ## What PenSec will not tell you
 
