@@ -1,0 +1,23 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.ratomirjovanovic/pandaward",
+  "title": "Pandaward",
+  "description": "Local, evidence-based application security assessment with an evidence ledger and retests.",
+  "repository": {
+    "url": "https://github.com/ratomirjovanovic/pandaward",
+    "source": "github"
+  },
+  "websiteUrl": "https://ratomirjovanovic.github.io/pandaward/",
+  "version": "0.2.1",
+  "packages": [
+    {
+      "registryType": "mcpb",
+      "identifier": "https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.1/pandaward-mcp.mcpb",
+      "version": "0.2.1",
+      "fileSha256": "dcb247aa6cacaf305b1220110a0cc1a4c67fd1cbac761eebe3fafac5921206a1",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
