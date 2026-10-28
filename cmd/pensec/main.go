@@ -1062,7 +1062,24 @@ func cmdTest(ctx context.Context, args []string, w, ew io.Writer) error {
 	defer e.Close()
 	switch *profile {
 	case "production-observe", "staging-active":
-	case "local-runtime", "manual-assisted":
+	case "local-runtime":
+		res, err := e.LocalRuntime(ctx, func(m string) {
+			if !*asJSON {
+				fmt.Fprintln(ew, "·", m)
+			}
+		})
+		if err != nil {
+			return err
+		}
+		if *asJSON {
+			return printJSON(w, res)
+		}
+		fmt.Fprintf(w, "local-runtime: K-003 %s, L-002 %s, %d finding signal(s)\n", res.Controls["K-003"], res.Controls["L-002"], res.Findings)
+		for _, n := range res.Notes {
+			fmt.Fprintln(w, "  note:", n)
+		}
+		return nil
+	case "manual-assisted":
 		return exitErr{3, "profile " + *profile + " is UNSUPPORTED in this release: no runtime adapter is implemented, so related controls stay UNSUPPORTED/BLOCKED in the report. Use /pensec:review for manual-assisted analysis."}
 	case "":
 		return exitErr{2, "--profile is required"}
@@ -1194,7 +1211,7 @@ func cmdCapabilities(args []string, w io.Writer) error {
 		switch {
 		case c.Method == catalog.MethodManual:
 			m = "manual-assisted"
-		case c.Adapter == "observe-headers" || c.Adapter == "zap" || c.Adapter == "authz":
+		case c.Adapter == "observe-headers" || c.Adapter == "zap" || c.Adapter == "authz" || c.Adapter == "local-runtime":
 			m = MaturityObserve
 		case m == "" && c.Method == catalog.MethodRuntime:
 			m = "planned (not implemented)"
