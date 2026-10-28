@@ -8,7 +8,7 @@ branding:
 inputs:
   version:
     description: Pandaward release to download (without the leading v)
-    default: "0.1.6"
+    default: "0.2.0"
   working-directory:
     description: Project directory to scan
     default: "."
