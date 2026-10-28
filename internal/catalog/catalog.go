@@ -78,10 +78,10 @@ var Controls = []Control{
 	{ID: "B-001", Domain: "B", Title: "JWT verification is not disabled and does not accept the 'none' algorithm", Method: MethodStatic, Adapter: "builtin-code", Requires: "code", Refs: []string{"CWE-347"}},
 	{ID: "B-002", Domain: "B", Title: "Session cookies are not explicitly configured without Secure/HttpOnly", Method: MethodStatic, Adapter: "builtin-code", Requires: "web", Refs: []string{"CWE-614", "CWE-1004"}},
 	{ID: "B-003", Domain: "B", Title: "Login, reset and MFA state machine tested with negative cases", Method: MethodRuntime, Requires: "auth", Profile: "staging-active", Refs: []string{"API2:2023"}},
-	{ID: "B-004", Domain: "B", Title: "Session expiry and revocation enforced server-side", Method: MethodRuntime, Requires: "auth", Profile: "staging-active", Refs: []string{"CWE-613"}},
+	{ID: "B-004", Domain: "B", Title: "Session expiry and revocation enforced server-side", Method: MethodRuntime, Adapter: "authz", Requires: "auth", Profile: "staging-active", Refs: []string{"CWE-613"}},
 
-	{ID: "C-001", Domain: "C", Title: "Object-level authorization enforced on parameterized routes (BOLA)", Method: MethodRuntime, Requires: "param_routes", Profile: "staging-active", Refs: []string{"API1:2023", "CWE-639"}},
-	{ID: "C-002", Domain: "C", Title: "Function-level authorization enforced on privileged routes", Method: MethodRuntime, Requires: "admin_routes", Profile: "staging-active", Refs: []string{"API5:2023", "CWE-285"}},
+	{ID: "C-001", Domain: "C", Title: "Object-level authorization enforced on parameterized routes (BOLA)", Method: MethodRuntime, Adapter: "authz", Requires: "param_routes", Profile: "staging-active", Refs: []string{"API1:2023", "CWE-639"}},
+	{ID: "C-002", Domain: "C", Title: "Function-level authorization enforced on privileged routes", Method: MethodRuntime, Adapter: "authz", Requires: "admin_routes", Profile: "staging-active", Refs: []string{"API5:2023", "CWE-285"}},
 	{ID: "C-003", Domain: "C", Title: "Authorization checks reviewed for every route handler", Method: MethodManual, Requires: "web", Refs: []string{"CWE-862"}},
 
 	{ID: "D-001", Domain: "D", Title: "No dynamic code evaluation (eval/new Function/exec of strings)", Method: MethodStatic, Adapter: "builtin-code", Requires: "code", Refs: []string{"CWE-95"}},

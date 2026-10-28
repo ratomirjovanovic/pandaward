@@ -1194,7 +1194,7 @@ func cmdCapabilities(args []string, w io.Writer) error {
 		switch {
 		case c.Method == catalog.MethodManual:
 			m = "manual-assisted"
-		case c.Adapter == "observe-headers" || c.Adapter == "zap":
+		case c.Adapter == "observe-headers" || c.Adapter == "zap" || c.Adapter == "authz":
 			m = MaturityObserve
 		case m == "" && c.Method == catalog.MethodRuntime:
 			m = "planned (not implemented)"

@@ -42,9 +42,10 @@ var ZAPRunner = zap.Run
 var injectionCWEs = map[int]bool{22: true, 74: true, 77: true, 78: true, 79: true, 89: true, 90: true, 91: true, 94: true, 95: true, 97: true, 113: true, 611: true, 643: true, 917: true, 943: true, 1336: true}
 
 // StagingActive runs the staging-active profile against the approved
-// manifest: a ZAP spider and passive scan (M-001) and, when the manifest
-// sets zap.active_scan, the ZAP active scan (D-005). All ZAP traffic goes
-// through the scope guard.
+// manifest: the authorization checks (C-001, C-002, B-004) first, then a
+// ZAP spider and passive scan (M-001) and, when the manifest sets
+// zap.active_scan, the ZAP active scan (D-005). Every request goes through
+// one scope guard, so all of them share the request budget.
 func (e *Engine) StagingActive(ctx context.Context, progress func(string)) (*StagingResult, error) {
 	m, ap, err := e.CheckScope(time.Now())
 	if err != nil {
@@ -60,10 +61,21 @@ func (e *Engine) StagingActive(ctx context.Context, progress func(string)) (*Sta
 	if a == nil {
 		return nil, errors.New("run `pensec scan` first; runtime results attach to the latest assessment")
 	}
+	var creds map[string]authzCred
+	if len(m.AuthorizationChecks) > 0 {
+		if creds, err = credentials(m); err != nil {
+			return nil, err
+		}
+	}
 	g := scope.NewGuard(m, guardRoots)
 	res := &StagingResult{AssessmentID: a.ID, Budget: m.Limits.MaxRequestsTotal, Controls: map[string]string{}, ActiveScan: m.ZAP.ActiveScan}
 	_ = e.St.Event(e.ProjectID, a.ID, "", "NETWORK_TEST_STARTED", fmt.Sprintf("staging-active under approval %s by %s", ap.ID, ap.ApprovedBy))
-	err = e.runZAP(ctx, a, m, ap, g, res, progress)
+	if len(m.AuthorizationChecks) > 0 {
+		err = e.runAuthz(ctx, a, m, ap, g, creds, res, progress)
+	}
+	if err == nil {
+		err = e.runZAP(ctx, a, m, ap, g, res, progress)
+	}
 	res.Requests, res.Refused = g.Sent(), g.Refused()
 	_ = e.St.Event(e.ProjectID, a.ID, "NETWORK_TEST_STARTED", "NETWORK_TEST_FINISHED", fmt.Sprintf("%d requests of budget %d", res.Requests, res.Budget))
 	if err != nil {

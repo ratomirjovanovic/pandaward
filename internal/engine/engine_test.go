@@ -68,7 +68,7 @@ func TestVulnerableFixture(t *testing.T) {
 	cm := controlMap(t, e, res.AssessmentID)
 	expect := map[string]model.Status{
 		"E-001": model.StatusFail, "N-001": model.StatusFail, "N-003": model.StatusFail, "J-001": model.StatusFail, "D-001": model.StatusFail,
-		"C-001": model.StatusUnsupported, "A-004": model.StatusBlocked, "H-003": model.StatusBlocked, "L-001": model.StatusNotApplicable, "R-001": model.StatusPass,
+		"C-001": model.StatusBlocked, "B-003": model.StatusUnsupported, "A-004": model.StatusBlocked, "H-003": model.StatusBlocked, "L-001": model.StatusNotApplicable, "R-001": model.StatusPass,
 		"G-001": model.StatusSuspected,
 	}
 	if testfixture.HasGit() {
