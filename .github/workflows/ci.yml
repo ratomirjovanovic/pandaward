@@ -108,6 +108,55 @@ jobs:
           PANDAWARD_REAL_TOOLS: "1"
         run: go test -count=1 -v -run '^TestRealTools$' ./internal/adapters/
 
+  # Runs the MobSF adapter against a pinned MobSF image and an APK that ships
+  # inside that image, so no binary fixture lives in this repository. Keep
+  # the version in sync with internal/adapters/mobsf.go and README.md.
+  real-mobsf:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      MOBSF_VERSION: v4.5.3
+      MOBSF_IMAGE: opensecurity/mobile-security-framework-mobsf:v4.5.3@sha256:5113fbad0727445dda01afdccafea5e107bfa8632ead8a169492f5caa8aa1b7c
+      MOBSF_APK: /home/mobsf/Mobile-Security-Framework-MobSF/mobsf/DynamicAnalyzer/tools/onDevice/xposed/ClipDump.apk
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Start MobSF on loopback
+        run: |
+          set -eu
+          key="$(openssl rand -hex 32)"
+          echo "::add-mask::$key"
+          echo "MOBSF_API_KEY=$key" >> "$GITHUB_ENV"
+          docker run -d --name mobsf -p 127.0.0.1:8000:8000 -e MOBSF_API_KEY="$key" "$MOBSF_IMAGE"
+          docker cp "mobsf:$MOBSF_APK" "$RUNNER_TEMP/fixture.apk"
+          for _ in $(seq 1 60); do
+            curl -sf -o /dev/null http://127.0.0.1:8000/ && exit 0
+            sleep 5
+          done
+          echo "MobSF did not start"
+          exit 1
+      - name: MobSF adapter test
+        env:
+          PANDAWARD_MOBSF_URL: http://127.0.0.1:8000
+          PANDAWARD_MOBSF_APK: ${{ runner.temp }}/fixture.apk
+          PANDAWARD_MOBSF_OUT: ${{ runner.temp }}/mobsf-out
+        run: |
+          mkdir -p "$PANDAWARD_MOBSF_OUT"
+          PANDAWARD_MOBSF_VERSION="$MOBSF_VERSION" go test -count=1 -v -run '^TestRealMobSF$' ./internal/adapters/
+      - name: MobSF log
+        if: failure()
+        run: docker logs mobsf 2>&1 | tail -n 100
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: mobsf
+          path: ${{ runner.temp }}/mobsf-out
+          if-no-files-found: ignore
+
   # Runs the ZAP adapter against a pinned ZAP and the fixture site, which
   # links to an out-of-scope origin that must never be contacted.
   real-zap:

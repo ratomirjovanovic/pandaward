@@ -68,7 +68,7 @@ var langByExt = map[string]string{
 	".tf": "terraform", ".hcl": "hcl", ".sql": "sql", ".sh": "shell", ".ps1": "powershell",
 	".plist": "plist", ".entitlements": "plist", ".gradle": "gradle", ".properties": "properties", ".ini": "ini", ".cfg": "ini",
 	".jinja": "template", ".j2": "template", ".erb": "template", ".ejs": "template", ".hbs": "template",
-	".apk": "apk", ".graphql": "graphql", ".gql": "graphql", ".proto": "proto",
+	".apk": "apk", ".ipa": "ipa", ".graphql": "graphql", ".gql": "graphql", ".proto": "proto",
 }
 
 // CodeLangs are languages the code heuristics apply to.
@@ -190,9 +190,9 @@ func walkFiles(ctx context.Context, absRoot string, opt Options, withLines bool,
 		if lang == "" {
 			return nil // not a type we analyze; not a coverage gap
 		}
-		if lang == "apk" {
-			// Built Android packages are hashed, never read as text; only
-			// the apktool adapter opens them.
+		if lang == "apk" || lang == "ipa" {
+			// Built Android and iOS packages are hashed, never read as
+			// text; only the apktool and MobSF adapters open them.
 			sum, err := hashFile(p)
 			if err != nil {
 				skip(rel, err.Error())
@@ -499,6 +499,10 @@ func (inv *Inventory) detect() {
 			inv.feature("apk", f.Path)
 			inv.feature("android", f.Path)
 			domains["K"] = true
+		case f.Lang == "ipa":
+			inv.feature("ipa", f.Path)
+			inv.feature("ios", f.Path)
+			domains["L"] = true
 		case lb == ".mcp.json" || lb == "mcp.json" || lb == "claude_desktop_config.json" || (strings.Contains(f.Path, ".cursor/") && lb == "mcp.json"):
 			inv.feature("mcp_config", f.Path)
 			domains["P"] = true

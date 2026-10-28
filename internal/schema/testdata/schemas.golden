@@ -206,6 +206,7 @@ scan.adapters[] string
 scan.allow_tool_network bool
 scan.fail_on_adapter_error bool
 scan.max_duration_minutes int
+scan.mobsf_url string
 scan.sarif_files[] string
 scan.semgrep_config string
 schema_version int
