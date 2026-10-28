@@ -116,7 +116,7 @@ scoop bucket add pensec https://github.com/ratomirjovanovic/pensec; scoop instal
 Or download a binary from the [releases page](https://github.com/ratomirjovanovic/pensec/releases) (Linux and macOS on amd64 and arm64, Windows on amd64). For example on Linux:
 
 ```sh
-v=v0.1.5
+v=v0.1.6
 curl -fLO https://github.com/ratomirjovanovic/pensec/releases/download/$v/pensec-linux-amd64
 curl -fLO https://github.com/ratomirjovanovic/pensec/releases/download/$v/SHA256SUMS
 sha256sum --ignore-missing -c SHA256SUMS
@@ -126,7 +126,7 @@ chmod +x pensec-linux-amd64 && sudo mv pensec-linux-amd64 /usr/local/bin/pensec
 On Windows (PowerShell), save `pensec-windows-amd64.exe` as `pensec.exe` in a folder on your `PATH`:
 
 ```powershell
-Invoke-WebRequest https://github.com/ratomirjovanovic/pensec/releases/download/v0.1.5/pensec-windows-amd64.exe -OutFile pensec.exe
+Invoke-WebRequest https://github.com/ratomirjovanovic/pensec/releases/download/v0.1.6/pensec-windows-amd64.exe -OutFile pensec.exe
 (Get-FileHash pensec.exe).Hash   # compare with the line in SHA256SUMS
 ```
 
@@ -166,7 +166,7 @@ flowchart LR
 
 1. **Inventory** walks the repository read-only and records files, routes, manifests, workflows, IaC, mobile manifests and AI/MCP usage.
 2. **Plan** maps the control catalog (domains A to R) onto what was found. Controls without matching assets become `NOT_APPLICABLE` with a reason you can review.
-3. **Adapters** run. Built-in checks are offline and always available; gitleaks, semgrep, osv-scanner and trivy are used only if you installed them. When semgrep is installed it runs PenSec's bundled offline rules (see [`rules/README.md`](rules/README.md)) plus any rules you configure. SARIF 2.1.0 files from analyzers you ran yourself (CodeQL or other SAST tools) are imported from `.pensec/sarif/*.sarif` and any paths listed in `scan.sarif_files`; PenSec never runs those tools. Imported results are hypotheses under control R-002, with snippets read and redacted from your files rather than taken from the SARIF.
+3. **Adapters** run. Built-in checks are offline and always available; gitleaks, semgrep, osv-scanner, trivy and apktool are used only if you installed them. apktool decodes `.apk` files found in the project (resources only, never the app's code) so the manifest checks also run on what you ship (K-005). When semgrep is installed it runs PenSec's bundled offline rules (see [`rules/README.md`](rules/README.md)) plus any rules you configure. SARIF 2.1.0 files from analyzers you ran yourself (CodeQL or other SAST tools) are imported from `.pensec/sarif/*.sarif` and any paths listed in `scan.sarif_files`; PenSec never runs those tools. Imported results are hypotheses under control R-002, with snippets read and redacted from your files rather than taken from the SARIF.
 4. **Findings** are redacted, fingerprinted and linked to evidence. Repeated runs update their lifecycle: `OPEN`, `REMEDIATED`, `REOPENED`, `FALSE_POSITIVE`, `RISK_ACCEPTED`.
 5. **Edges** between domains are created only from shared assets and get their status from the linked controls.
 6. **Reports** show confirmed findings, suspected signals, coverage by domain, every undecided control and the evidence index.
@@ -187,7 +187,7 @@ In Claude Code, hooks keep the ledger current without any command. Edited files 
 | H Web | raw HTML sinks, CORS wildcard with credentials | security headers (`production-observe`) |
 | I Supply chain | missing lockfiles, npm install scripts, unpinned Python requirements | advisories via osv-scanner |
 | J Infrastructure | Dockerfile root and unpinned base, privileged containers, public storage and admin ports in Terraform | trivy |
-| K, L Mobile | Android manifest flags and exported components, iOS ATS | device runtime |
+| K, L Mobile | Android manifest flags and exported components, credentials in SharedPreferences, world-readable storage; iOS ATS, `get-task-allow` in release entitlements, Keychain accessibility and credentials in UserDefaults | built APKs via apktool; plain credentials in app storage on an emulator or simulator (`local-runtime`) |
 | N CI/CD | unpinned actions, script injection, `pull_request_target` checkout, token permissions | |
 | O Observability | credentials in log calls | alerting review |
 | P AI and MCP | model output reaching exec sinks, MCP server pinning and inline credentials | prompt-injection tests |
@@ -218,11 +218,12 @@ In Claude Code, hooks keep the ledger current without any command. Edited files 
 | `pensec verify-bundle out.zip` | Recompute every hash in a bundle; compare the printed manifest hash with the sender's |
 | `pensec scope init \| validate \| approve \| revoke` | Authorization for network tests |
 | `pensec test --profile production-observe` | Header and cookie review of approved origins |
+| `pensec test --profile local-runtime` | Storage of the configured Android test build on a running emulator and the iOS test build in a booted simulator; real devices are refused |
 | `pensec test --profile staging-active` | Authorization checks with test identities, then a ZAP spider and passive scan of approved staging origins, active scan when the manifest allows it |
 | `pensec feedback false-positive ID \| false-negative \| summary` | Prepare a report about a wrong or missed finding; prints a prefilled issue link, sends nothing |
 | `pensec doctor` | Optional scanners and their network needs |
 | `pensec benchmark` | TP, FP, FN and TN per built-in rule on the bundled corpus |
-| `pensec selftest` | Runs a hostile fixture repository through scan, reports, MCP and hooks and checks PenSec was not steered by it |
+| `pensec selftest` | Runs a hostile fixture repository (instructions in comments, README, OpenAPI, MCP descriptions and scanner output) through scan, reports, MCP and hooks and checks PenSec was not steered by it; CI and every release run it and fail on any case |
 | `pensec mcp` | Local stdio MCP server used by the plugin |
 
 Human decisions are explicit and recorded:
@@ -266,6 +267,19 @@ authorization_checks:
 
 Each check is sent once as every identity and once without credentials. The allowed identities must get a 2xx answer, otherwise the check cannot be judged and is `INCONCLUSIVE`. Any other identity that also gets a 2xx is a finding: `CONFIRMED` when its body matches what the allowed identities got, `STRONGLY_SUPPORTED` when it differs. Object checks decide C-001 (BOLA), function checks C-002, and identities marked `revoked` decide B-004 on every check. Only GET and HEAD are allowed, so no data changes and nothing needs cleaning up. Evidence keeps the status, size, content type and a body hash per identity, never headers, bodies or credentials. A missing credential variable stops the run before the first request.
 
+## Emulator and simulator checks
+
+`pensec test --profile local-runtime` looks at what a test build actually stored. It sends no network traffic, so it needs no scope manifest:
+
+```yaml
+# .pensec/config.yaml
+runtime:
+  android_package: com.acme.shop      # debuggable test build on a running emulator
+  ios_bundle_id: com.acme.shop        # test build in a booted simulator (macOS)
+```
+
+On Android it uses `adb` with an `emulator-*` serial that also reports `ro.kernel.qemu=1`, and reads the app's `shared_prefs` through `run-as`, which only works for debuggable builds. On iOS it uses `xcrun simctl get_app_container booted` and only accepts a container inside CoreSimulator, then reads the app's preferences plist. A non-empty value under a credential-like key (token, password, session and similar) is a finding for K-003 or L-002; PenSec records the key name and never the value. Real devices are refused, and a missing emulator, simulator, tool or setting makes the control `BLOCKED` with the reason. Transport security and Keychain accessibility are not tested at runtime.
+
 ## In CI
 
 ```yaml
@@ -294,7 +308,7 @@ With [pre-commit](https://pre-commit.com), add this to `.pre-commit-config.yaml`
 ```yaml
 repos:
   - repo: https://github.com/ratomirjovanovic/pensec
-    rev: v0.1.5
+    rev: v0.1.6
     hooks:
       - id: pensec-system   # uses the pensec on your PATH; use id: pensec to build it with Go 1.23+
 ```
@@ -305,7 +319,7 @@ The hook runs `pensec scan --quiet --fail-on high` and blocks the commit when op
 
 - That your application is secure. No tool can prove the absence of vulnerabilities.
 - Anything about controls it reports as `BLOCKED`, `UNSUPPORTED`, `SUSPECTED`, `INCONCLUSIVE`, `ERROR` or `STALE`.
-- Results from runtime tests that are not implemented yet: login, reset and MFA flows (B-003), API contract versus runtime (G-002) and emulator tests are reported as `UNSUPPORTED` today.
+- Results from runtime tests that are not implemented yet: login, reset and MFA flows (B-003), API contract versus runtime (G-002) and prompt-injection tests against an LLM endpoint (P-003) are reported as `UNSUPPORTED` today.
 
 A PenSec report is an automated technical assessment. It is not a certification, an attestation, a legal opinion or an independently signed penetration test.
 
@@ -317,7 +331,7 @@ A PenSec report is an automated technical assessment. It is not a certification,
 | M1 Public alpha | built-in adapters, optional tool adapters, bundled Semgrep rules, edges, HTML/JSON/SARIF, plugin, signed reproducible releases | done (v0.1.1) |
 | M2 Context-safe beta | per-domain invalidation, targeted retest, evidence bundles, delta reports, hostile-repository suite | done |
 | M3 Runtime beta | staging profile with role and tenant fixtures, ZAP adapter | done |
-| M4 Mobile and AI | MobSF and emulator adapters, prompt-injection suite | planned |
+| M4 Mobile and AI | apktool and emulator or simulator storage checks, release-blocking hostile-repository suite; MobSF and LLM endpoint tests | in progress |
 | 1.0 | frozen schemas ([done](docs/SCHEMAS.md)), benchmark corpus with at least 3 vulnerable and 3 safe cases per rule, external review | in progress |
 
 See the [issues](https://github.com/ratomirjovanovic/pensec/issues) for details.
