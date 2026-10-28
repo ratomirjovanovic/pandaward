@@ -77,13 +77,17 @@
   <section id="install">
     <h2>Install</h2>
     <p class="sub">Prebuilt, checksum-verified binaries for Linux, macOS and Windows. Nothing else to install.</p>
+    <div class="steps os-pick" role="group" aria-label="Operating system" hidden>
+      <button type="button" data-pick="unix">macOS, Linux</button>
+      <button type="button" data-pick="win">Windows</button>
+    </div>
     <div class="two">
       <div>
         <h3>Claude Code plugin</h3>
 <pre class="code">/plugin marketplace add ratomirjovanovic/pensec
-/plugin install pensec@pensec          # macOS, Linux
-/plugin install pensec-windows@pensec  # Windows
-
+<span data-os="unix">/plugin install pensec@pensec          # macOS, Linux
+</span><span data-os="win">/plugin install pensec-windows@pensec  # Windows
+</span>
 # restart Claude Code, then in your project
 # ask Claude to check its security, or:
 /pensec:start</pre>
@@ -91,21 +95,39 @@
       </div>
       <div>
         <h3>CLI</h3>
-<pre class="code"># macOS, Linux
+<pre class="code"><span data-os="unix"># macOS, Linux
 brew tap ratomirjovanovic/pensec https://github.com/ratomirjovanovic/pensec
 brew install ratomirjovanovic/pensec/pensec
 
-# Windows
+</span><span data-os="win"># Windows
 scoop bucket add pensec https://github.com/ratomirjovanovic/pensec
 scoop install pensec/pensec
 
-# or a release binary, or go install (Go 1.23+)
+</span># or a release binary, or go install (Go 1.23+)
 
 cd your-project
 pensec assess</pre>
       </div>
     </div>
     <p class="sub">Step-by-step instructions, updating and troubleshooting are in the <a href="https://github.com/ratomirjovanovic/pensec/wiki/Installation">installation guide</a>. Releases can be <a href="https://github.com/ratomirjovanovic/pensec/blob/main/docs/VERIFYING.md">verified</a> with checksums, an SBOM and signed build provenance.</p>
+    <script>
+    (function () {
+      // Show the commands for the visitor's platform; without this script
+      // every command stays visible.
+      var pick = document.querySelector('.os-pick');
+      var ua = navigator.userAgent || '';
+      function show(os) {
+        document.querySelectorAll('[data-os]').forEach(function (el) { el.hidden = el.getAttribute('data-os') !== os; });
+        pick.querySelectorAll('button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.getAttribute('data-pick') === os)); });
+      }
+      pick.addEventListener('click', function (ev) {
+        var b = ev.target.closest('button');
+        if (b) show(b.getAttribute('data-pick'));
+      });
+      pick.hidden = false;
+      show(/win/i.test(ua) ? 'win' : 'unix');
+    })();
+    </script>
   </section>
 
   <section>
