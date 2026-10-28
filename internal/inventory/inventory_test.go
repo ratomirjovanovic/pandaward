@@ -154,3 +154,15 @@ func TestDomainsForPath(t *testing.T) {
 		}
 	}
 }
+
+func TestMinimalEnvKeepsSystemDrive(t *testing.T) {
+	t.Setenv("SystemDrive", "C:")
+	t.Setenv("AWS_SECRET_ACCESS_KEY", "x")
+	env := strings.Join(inventory.MinimalEnv(), "\n")
+	if !strings.Contains(env, "SystemDrive=C:") {
+		t.Error("SystemDrive must be kept so Windows tools do not create a %SystemDrive% directory in the project")
+	}
+	if strings.Contains(env, "AWS_SECRET_ACCESS_KEY") {
+		t.Error("cloud credentials must be scrubbed")
+	}
+}

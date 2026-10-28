@@ -306,8 +306,10 @@ func gitInfo(root string) (map[string]bool, string, bool) {
 }
 
 // minimalEnv returns a scrubbed environment with no cloud or VCS tokens.
+// Windows tools that miss SystemDrive create a literal "%SystemDrive%"
+// cache directory in their working directory, inside the scanned project.
 func minimalEnv() []string {
-	keep := []string{"PATH", "SYSTEMROOT", "SystemRoot", "WINDIR", "COMSPEC", "PATHEXT", "TEMP", "TMP", "HOME", "USERPROFILE", "LANG", "LC_ALL"}
+	keep := []string{"PATH", "SYSTEMROOT", "SystemRoot", "SystemDrive", "WINDIR", "COMSPEC", "PATHEXT", "TEMP", "TMP", "HOME", "USERPROFILE", "LANG", "LC_ALL"}
 	var env []string
 	for _, k := range keep {
 		if v, ok := os.LookupEnv(k); ok {
