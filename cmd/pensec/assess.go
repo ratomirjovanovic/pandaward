@@ -119,7 +119,7 @@ func cmdAssess(ctx context.Context, args []string, w io.Writer) error {
 	}
 	defer e.Close()
 
-	view := &progressView{w: w, tty: isTerminal(w), ascii: *ascii, total: len(e.Cfg.Scan.Adapters) + 4}
+	view := &progressView{w: w, tty: isTerminal(w), ascii: *ascii, total: len(e.Adapters()) + 4}
 	if *asJSON {
 		view.w = io.Discard
 	}
