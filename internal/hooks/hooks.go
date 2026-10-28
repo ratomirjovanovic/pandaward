@@ -87,7 +87,7 @@ func sessionStart(in Input, w io.Writer) int {
 	var b strings.Builder
 	fmt.Fprintf(&b, "PenSec ledger for %q (source of truth is .pensec/private/state.db, not this summary).\n", redact.Line(s.Project))
 	if s.Assessment == nil {
-		b.WriteString("No assessment yet. Next: /pensec:scan\n")
+		b.WriteString("No assessment yet. When the user asks about security, run the guided assessment yourself (skill pensec:start).\n")
 	} else {
 		fmt.Fprintf(&b, "Latest: %s (%s). Decisive coverage %d/%d controls. Open findings: %d confirmed, %d suspected.\n",
 			s.Assessment.ID, s.Assessment.Status, s.Coverage.Decisive, s.Coverage.Applicable, s.Confirmed, s.Suspected)
@@ -98,9 +98,10 @@ func sessionStart(in Input, w io.Writer) int {
 			b.WriteString(redact.Line(s.ChangeCheck) + "\n")
 		}
 		if len(s.Blockers) > 0 {
-			fmt.Fprintf(&b, "%d blocker(s); see /pensec:status.\n", len(s.Blockers))
+			fmt.Fprintf(&b, "%d blocker(s); details in pensec_get_status.\n", len(s.Blockers))
 		}
-		fmt.Fprintf(&b, "Next: %s\n", s.NextAction)
+		fmt.Fprintf(&b, "Suggested next step: %s.\n", s.NextAction)
+		b.WriteString("Do not ask the user to type PenSec commands: offer the next step in one sentence and run it yourself after a yes. After you edit code in this project, run pensec_retest yourself and report the delta.\n")
 	}
 	fmt.Fprint(w, b.String())
 	return 0

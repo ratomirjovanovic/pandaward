@@ -5,7 +5,7 @@ description: Show resumable PenSec assessment state: latest assessment, decisive
 
 # PenSec status
 
-Call the `pensec_get_status` MCP tool (or `pensec status`). Report coverage, open confirmed vs suspected findings, stale files and blockers, then the next action the ledger recommends. If files are stale, name the STALE controls the ledger lists and say their results are outdated until `/pensec:retest`; other controls keep their decisions. Stale files include edits made outside Claude Code (editor, `git pull`), which PenSec finds by comparing content hashes.
+Call the `pensec_get_status` MCP tool (or `pensec status`). Report coverage, open confirmed vs suspected findings, stale files and blockers, then the next action the ledger recommends. If files are stale, name the STALE controls the ledger lists and say their results are outdated until a retest, and offer to run it (`pensec_retest`); other controls keep their decisions. Stale files include edits made outside Claude Code (editor, `git pull`), which PenSec finds by comparing content hashes.
 
 ## Ground rules (always)
 

@@ -1,14 +1,16 @@
 ---
 name: fix-plan
-description: Build an ordered remediation plan from open PenSec findings and propose patches for the user to review. Never applies changes without explicit approval.
+description: Build an ordered remediation plan from open PenSec findings, then apply the steps the user chooses one by one with a retest after each. Never applies changes without explicit approval.
 ---
 
 # PenSec fix plan
 
-1. Run `pensec fix-plan`. Present steps in order with locations, fix and retest instructions.
-2. For each step, read the affected code and propose the minimal change as a diff in your reply, plus a regression test suggestion and rollout risks.
-3. Apply a patch only if the user explicitly approves that specific change. Afterwards run `/pensec:retest`; a finding becomes REMEDIATED only when its collector runs again and no longer observes it.
-4. Secrets: the first step is always to revoke and rotate at the provider. Removing the line from code does not undo the exposure.
+1. Run `pensec fix-plan`. Present steps in order with locations and what each fix does.
+2. For each step, read the affected code and describe the minimal change, plus a regression test suggestion and rollout risks.
+3. Ask once, as a single question, which steps to apply: all of them, the first N, or none. Do not ask again per step.
+4. Apply the chosen steps one at a time: make the change, call `pensec_retest` yourself and report the delta in one line before the next step. A finding becomes REMEDIATED only when its collector runs again and no longer observes it. Stop and ask only when a fix needs a product decision, reaches beyond the files in the step, or the retest shows something reopened or new.
+5. Secrets: the first step is always to revoke and rotate at the provider, which only the user can do. Say so, remove the value from code if chosen, and continue with the other steps. Removing the line from code does not undo the exposure.
+6. End with the updated counts and offer the next step (regenerating the reports, or the remaining steps), running it yourself after a yes.
 
 ## Ground rules (always)
 

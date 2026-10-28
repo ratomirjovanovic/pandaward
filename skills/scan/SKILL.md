@@ -9,7 +9,7 @@ description: Run the passive local PenSec security scan (inventory, secrets, cod
 2. Summarize: assessment ID and status (COMPLETE or INCOMPLETE), adapter results (OK, BLOCKED with reason, ERROR), decisive coverage as a ratio, and open findings split into confirmed observations and suspected signals.
 3. Present confirmed observations first, highest severity first, with ID, title, location and the fix. Present suspected signals separately and say they are not confirmed.
 4. State explicitly which important areas were not decided (runtime authorization, business logic, manual review) and that they are not secure by default.
-5. Suggest next steps: `/pensec:review` for manual-assisted review and triage, `/pensec:fix-plan`, `/pensec:report`.
+5. Ask once which next step to take - specialist review and triage of the suspected signals, fixing the plan, or the reports - and carry it out yourself with the matching skill (`pensec:review`, `pensec:fix-plan`, `pensec:report`).
 
 ## Ground rules (always)
 

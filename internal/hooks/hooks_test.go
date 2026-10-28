@@ -1,9 +1,32 @@
 package hooks
 
 import (
+	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
+
+	"github.com/ratomirjovanovic/pensec/internal/engine"
 )
+
+func TestSessionStartIsHandsFree(t *testing.T) {
+	root := t.TempDir()
+	e, _, err := engine.Init(root, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Close()
+	t.Setenv("CLAUDE_PROJECT_DIR", root)
+	var out bytes.Buffer
+	Run("session-start", strings.NewReader(`{}`), &out)
+	got := out.String()
+	if !strings.Contains(got, "pensec:start") {
+		t.Errorf("expected the guided assessment to be offered, got %q", got)
+	}
+	if strings.Contains(got, "Next: /pensec") {
+		t.Errorf("hook must not ask the user to type a command, got %q", got)
+	}
+}
 
 func TestGuardDecision(t *testing.T) {
 	cmd := func(c string) json.RawMessage { b, _ := json.Marshal(map[string]string{"command": c}); return b }
