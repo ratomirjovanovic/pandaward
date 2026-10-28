@@ -11,3 +11,11 @@
 
    This rewrites `Formula/pandaward.rb` (Homebrew), `bucket/pandaward.json` (Scoop) and `packaging/winget/X.Y.Z/` from the release's `SHA256SUMS`. The `packages` workflow installs through Homebrew and Scoop and checks that the manifests match the release.
 5. winget: submit the three files in `packaging/winget/X.Y.Z/` to [microsoft/winget-pkgs](https://github.com/microsoft/winget-pkgs) under `manifests/r/RatomirJovanovic/Pandaward/X.Y.Z/` (for example with `wingetcreate submit`).
+6. MCP Registry: the release carries `pandaward-mcp.mcpb`, and step 4 writes `server.json` with its URL and SHA-256. After the packages pull request is merged, publish the metadata from `main` with the [`mcp-publisher`](https://github.com/modelcontextprotocol/registry) CLI:
+
+   ```sh
+   mcp-publisher login github     # device flow in the browser, as ratomirjovanovic
+   mcp-publisher publish
+   ```
+
+   The registry only stores metadata; clients download the bundle from the release and check its hash.

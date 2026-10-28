@@ -156,3 +156,15 @@ jobs:
           sh packaging/build-release.sh 0.0.0-ci b >/dev/null
           diff a/SHA256SUMS b/SHA256SUMS
           jq -e '[.components[] | select((.licenses // []) | length == 0)] | length == 0' a/pandaward.cdx.json
+      - name: MCPB bundle builds and validates
+        run: |
+          set -eu
+          sh packaging/build-mcpb.sh 0.0.0-ci a
+          (cd a && sha256sum -c SHA256SUMS)
+          mkdir mcpb && cd mcpb && unzip -q ../a/pandaward-mcp.mcpb
+          test -f manifest.json && test -f icon.png
+          for f in pandaward pandaward-linux-amd64 pandaward-linux-arm64 pandaward-darwin-amd64 pandaward-darwin-arm64 pandaward.exe; do test -f "bin/$f"; done
+          (cd bin && sha256sum -c SHA256SUMS)
+          jq -e '.version == "0.0.0-ci"' manifest.json
+          npx -y @anthropic-ai/mcpb@2.1.2 validate manifest.json
+          sh bin/pandaward version

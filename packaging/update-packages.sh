@@ -145,4 +145,36 @@ ManifestType: defaultLocale
 ManifestVersion: 1.12.0
 EOF
 
-echo "Wrote Formula/pandaward.rb, bucket/pandaward.json and packaging/winget/$version for $version."
+written="Formula/pandaward.rb, bucket/pandaward.json and packaging/winget/$version"
+
+# MCP Registry metadata, for releases that ship the MCPB bundle.
+if mcpb=$(awk -v n="pandaward-mcp.mcpb" '{ sub(/\r$/, "") } $2 == n || $2 == "*" n { print $1 }' "$sums") && [ -n "$mcpb" ]; then
+	cat > "$repo/server.json" <<EOF
+{
+  "\$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.ratomirjovanovic/pandaward",
+  "title": "Pandaward",
+  "description": "Local, evidence-based application security assessment with an evidence ledger and retests.",
+  "repository": {
+    "url": "https://github.com/ratomirjovanovic/pandaward",
+    "source": "github"
+  },
+  "websiteUrl": "https://ratomirjovanovic.github.io/pandaward/",
+  "version": "$version",
+  "packages": [
+    {
+      "registryType": "mcpb",
+      "identifier": "$base/pandaward-mcp.mcpb",
+      "version": "$version",
+      "fileSha256": "$mcpb",
+      "transport": {
+        "type": "stdio"
+      }
+    }
+  ]
+}
+EOF
+	written="$written, server.json"
+fi
+
+echo "Wrote $written for $version."
