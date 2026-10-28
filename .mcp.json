@@ -1,9 +1,0 @@
-{
-  "mcpServers": {
-    "pensec": {
-      "command": "${CLAUDE_PLUGIN_ROOT}/bin/pensec",
-      "args": ["mcp"],
-      "env": { "PENSEC_PROJECT_DIR": "${CLAUDE_PROJECT_DIR}" }
-    }
-  }
-}

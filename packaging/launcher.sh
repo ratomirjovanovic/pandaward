@@ -27,7 +27,7 @@ bin="$dir/$name"
 [ -f "$bin" ] || die "missing $name in $dir"
 [ -f "$dir/SHA256SUMS" ] || die "missing SHA256SUMS in $dir"
 
-want=$(awk -v n="$name" '$2 == n || $2 == "*" n { print $1 }' "$dir/SHA256SUMS")
+want=$(awk -v n="$name" '{ sub(/\r$/, "") } $2 == n || $2 == "*" n { print $1 }' "$dir/SHA256SUMS")
 [ -n "$want" ] || die "no checksum recorded for $name"
 
 if command -v sha256sum >/dev/null 2>&1; then

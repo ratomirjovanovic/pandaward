@@ -19,6 +19,11 @@ chmod +x "$work/bin/pensec"
 "$work/bin/pensec" version | grep -q '^pensec ' || { echo "FAIL: verified binary did not run"; exit 1; }
 echo "ok: verified binary runs"
 
+# A checkout with core.autocrlf rewrites SHA256SUMS with CRLF line endings.
+awk '{ printf "%s\r\n", $0 }' "$work/bin/SHA256SUMS" > "$work/sums.crlf" && cp "$work/sums.crlf" "$work/bin/SHA256SUMS"
+"$work/bin/pensec" version | grep -q '^pensec ' || { echo "FAIL: CRLF SHA256SUMS was not accepted"; exit 1; }
+echo "ok: CRLF SHA256SUMS accepted"
+
 printf 'x' >> "$work/bin/pensec-$os-$arch"
 if "$work/bin/pensec" version >/dev/null 2>&1; then echo "FAIL: modified binary ran"; exit 1; fi
 echo "ok: modified binary refused"
