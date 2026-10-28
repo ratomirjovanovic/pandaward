@@ -49,6 +49,11 @@ type Config struct {
 	Policy struct {
 		AIAnalysis string `yaml:"ai_analysis"`
 	} `yaml:"policy"`
+	Hooks struct {
+		// AutoRetest lets the Claude Code Stop hook run a changed-only
+		// retest after a turn that edited files.
+		AutoRetest bool `yaml:"auto_retest"`
+	} `yaml:"hooks"`
 }
 
 // Default returns the default configuration.
@@ -67,6 +72,7 @@ func Default(name string) *Config {
 	c.Report.Formats = []string{"html", "markdown", "json", "sarif"}
 	c.Report.IncludeUntested = true
 	c.Policy.AIAnalysis = "opt_in"
+	c.Hooks.AutoRetest = true
 	return c
 }
 

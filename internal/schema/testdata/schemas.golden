@@ -189,6 +189,7 @@ pensec_retest {"annotations":{"destructiveHint":false,"openWorldHint":false,"rea
 pensec_scan_passive {"annotations":{"destructiveHint":false,"openWorldHint":false,"readOnlyHint":false},"input":{"additionalProperties":false,"properties":{},"type":"object"}}
 
 ## config-yaml version 1
+hooks.auto_retest bool
 inventory.exclude[] string
 inventory.max_file_bytes int64
 inventory.max_files int

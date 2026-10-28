@@ -1,6 +1,8 @@
 // Package hooks implements the Claude Code lifecycle hooks. Every hook is
-// silent and exits 0 when PenSec is not initialized, and none of them runs a
-// scan or sends network traffic.
+// silent and exits 0 when PenSec is not initialized, and none of them sends
+// network traffic. Only the Stop hook scans: a changed-only passive retest
+// after a turn that edited files, bounded by RetestBudget and turned off with
+// hooks.auto_retest: false.
 package hooks
 
 import (
@@ -24,6 +26,8 @@ type Input struct {
 	HookEvent string          `json:"hook_event_name"`
 	ToolName  string          `json:"tool_name"`
 	ToolInput json.RawMessage `json:"tool_input"`
+	// StopHookActive is set when Claude continues because of a Stop hook.
+	StopHookActive bool `json:"stop_hook_active"`
 }
 
 func readInput(r io.Reader) Input {
@@ -68,6 +72,8 @@ func Run(name string, stdin io.Reader, stdout io.Writer) int {
 		return preTool(in, stdout)
 	case "pre-compact":
 		return preCompact(in)
+	case "stop":
+		return stop(in, stdout)
 	}
 	return 0
 }

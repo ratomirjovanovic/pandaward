@@ -158,6 +158,8 @@ flowchart LR
 5. **Edges** between domains are created only from shared assets and get their status from the linked controls.
 6. **Reports** show confirmed findings, suspected signals, coverage by domain, every undecided control and the evidence index.
 
+In Claude Code, hooks keep the ledger current without any command. Edited files are marked stale as they change, and when Claude finishes a turn that edited files, PenSec runs a changed-only passive retest (bounded at 40 seconds) and hands any new or reopened findings back to Claude, which explains them and offers a fix. A clean retest stays silent; one that runs out of time or fails says so instead of claiming anything is fixed. Set `hooks.auto_retest: false` in `.pensec/config.yaml` to turn it off.
+
 ## What it checks
 
 | Domain | Automated today (offline) | Needs review or runtime |
