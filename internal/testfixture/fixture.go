@@ -104,6 +104,11 @@ func Build(root string, logf func(string, ...any)) error {
 <receiver android:name=".Sync" android:exported="true"/></application></manifest>`)
 	w("openapi.yaml", "openapi: 3.0.0\npaths:\n  /api/login:\n    post: {}\n")
 	w(".env", "SECRET_VALUE_NOT_READ="+FakeStripe+"\n")
+	// A lockfile pinning a release with published advisories, so that
+	// osv-scanner has something to report in the real-tool CI job.
+	w("legacy/package-lock.json", `{"name":"legacy","version":"1.0.0","lockfileVersion":3,"requires":true,"packages":{`+
+		`"":{"name":"legacy","version":"1.0.0","dependencies":{"lodash":"4.17.15"}},`+
+		`"node_modules/lodash":{"version":"4.17.15","resolved":"https://registry.npmjs.org/lodash/-/lodash-4.17.15.tgz"}}}`+"\n")
 	if git, err := exec.LookPath("git"); err == nil {
 		for _, args := range [][]string{{"init", "-q"}, {"add", "-A", "-f"}, {"-c", "user.email=t@example.org", "-c", "user.name=t", "-c", "commit.gpgsign=false", "commit", "-qm", "fixture"}} {
 			cmd := exec.Command(git, args...)
