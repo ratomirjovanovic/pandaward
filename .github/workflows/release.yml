@@ -61,6 +61,9 @@ jobs:
           jq -e '[.components[] | select((.licenses // []) | length == 0)] | length == 0' dist/pandaward.cdx.json
           rm -rf dist-check
 
+      - name: MCPB bundle for the MCP Registry
+        run: sh packaging/build-mcpb.sh "${GITHUB_REF_NAME#v}" dist
+
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: dist/pandaward-*

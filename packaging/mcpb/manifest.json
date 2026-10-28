@@ -1,0 +1,50 @@
+{
+  "manifest_version": "0.3",
+  "name": "pandaward",
+  "display_name": "Pandaward",
+  "version": "VERSION",
+  "description": "Local, evidence-based application security assessment: scan state, findings, evidence and retests for one project.",
+  "long_description": "Pandaward scans your own repository locally, keeps an evidence ledger across sessions and reports undecided controls as plainly as failed ones. The MCP server reads that ledger and can run passive scans and retests. It sends nothing to any target; network tests need a scope manifest approved by a person in a terminal.",
+  "author": {
+    "name": "Ratomir Jovanovic",
+    "url": "https://github.com/ratomirjovanovic"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ratomirjovanovic/pandaward"
+  },
+  "homepage": "https://ratomirjovanovic.github.io/pandaward/",
+  "documentation": "https://github.com/ratomirjovanovic/pandaward/wiki",
+  "support": "https://github.com/ratomirjovanovic/pandaward/issues",
+  "icon": "icon.png",
+  "license": "AGPL-3.0-only",
+  "keywords": ["security", "sast", "appsec", "evidence", "sarif"],
+  "server": {
+    "type": "binary",
+    "entry_point": "bin/pandaward",
+    "mcp_config": {
+      "command": "sh",
+      "args": ["${__dirname}/bin/pandaward", "mcp"],
+      "env": {
+        "PANDAWARD_PROJECT_DIR": "${user_config.project_dir}"
+      },
+      "platform_overrides": {
+        "win32": {
+          "command": "${__dirname}/bin/pandaward.exe",
+          "args": ["mcp"]
+        }
+      }
+    }
+  },
+  "user_config": {
+    "project_dir": {
+      "type": "directory",
+      "title": "Project",
+      "description": "The project to assess. Run `pandaward init` in it once.",
+      "required": true
+    }
+  },
+  "compatibility": {
+    "platforms": ["darwin", "linux", "win32"]
+  }
+}
