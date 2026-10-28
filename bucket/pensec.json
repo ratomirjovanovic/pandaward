@@ -1,0 +1,13 @@
+{
+    "version": "0.1.2",
+    "description": "Local, evidence-based application security assessment.",
+    "homepage": "https://github.com/ratomirjovanovic/pensec",
+    "license": "AGPL-3.0-only",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/ratomirjovanovic/pensec/releases/download/v0.1.2/pensec-windows-amd64.exe#/pensec.exe",
+            "hash": "391b2ce26f34fd0fcd8b44f053e9f70aafc1da70d0dc89849de9f2fba4f7e5ed"
+        }
+    },
+    "bin": "pensec.exe"
+}

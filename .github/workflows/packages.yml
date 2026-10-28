@@ -1,0 +1,68 @@
+name: packages
+
+on:
+  push:
+    branches: [main]
+    paths: [Formula/**, bucket/**, packaging/update-packages.sh, .github/workflows/packages.yml]
+  pull_request:
+    paths: [Formula/**, bucket/**, packaging/update-packages.sh, .github/workflows/packages.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  homebrew:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Install from the tap
+        run: |
+          [ -x /home/linuxbrew/.linuxbrew/bin/brew ] && eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+          export HOMEBREW_NO_AUTO_UPDATE=1
+          brew tap ratomirjovanovic/pensec "$GITHUB_WORKSPACE"
+          brew install ratomirjovanovic/pensec/pensec
+          brew test ratomirjovanovic/pensec/pensec
+          pensec version
+
+  scoop:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Install from the bucket
+        shell: pwsh
+        run: |
+          Invoke-Expression "& {$(Invoke-RestMethod https://get.scoop.sh)} -RunAsAdmin"
+          $env:PATH = "$env:USERPROFILE\scoop\shims;$env:PATH"
+          # Scoop needs a git URL, not a plain path.
+          $repo = "file:///" + ($env:GITHUB_WORKSPACE -replace "\\", "/")
+          scoop bucket add pensec $repo
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          scoop install pensec/pensec
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $out = pensec version
+          $out
+          $want = (Get-Content bucket/pensec.json | ConvertFrom-Json).version
+          if ($out -notmatch "pensec $([regex]::Escape($want)) ") { throw "unexpected version: $out" }
+
+  in-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Manifests match the release checksums
+        run: |
+          v=$(sed -n 's/^  version "\(.*\)"/\1/p' Formula/pensec.rb)
+          sh packaging/update-packages.sh "$v"
+          git diff --exit-code
