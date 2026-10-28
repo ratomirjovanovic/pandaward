@@ -32,7 +32,10 @@ type externalTool struct {
 	verArgs  []string
 	args     func(c *Context, out string) ([]string, error)
 	// okExit lists exit codes that mean "ran successfully".
-	okExit    map[int]bool
+	okExit map[int]bool
+	// noInput maps exit codes that mean "nothing this tool can read" to
+	// the reason reported; the run is UNSUPPORTED rather than an error.
+	noInput   map[int]string
 	normalize func(c *Context, raw []byte) ([]model.Signal, error)
 }
 
@@ -53,14 +56,18 @@ func (t *externalTool) Version(ctx context.Context) string {
 	cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	cmd := exec.CommandContext(cctx, bin, t.verArgs...)
-	cmd.Env = inventory.MinimalEnv()
+	// Without quietEnv semgrep checks for updates over the network and
+	// prints the notice, after a blank line, before its version.
+	cmd.Env = append(inventory.MinimalEnv(), quietEnv...)
 	out, err := cmd.CombinedOutput()
 	if err != nil && len(out) == 0 {
 		return ""
 	}
-	v := strings.TrimSpace(strings.SplitN(string(out), "\n", 2)[0])
-	return redact.Line(v)
+	return firstLine(string(out))
 }
+
+// quietEnv turns off update checks, telemetry, progress bars and colors.
+var quietEnv = []string{"SEMGREP_SEND_METRICS=off", "SEMGREP_ENABLE_VERSION_CHECK=0", "TRIVY_NO_PROGRESS=true", "DO_NOT_TRACK=1", "NO_COLOR=1"}
 
 // toolEnv builds the scrubbed tool environment. tmp is a short per-run temp
 // directory: semgrep-core on Windows fails when TEMP is a long path, so the
@@ -76,8 +83,8 @@ func toolEnv(c *Context, tmp string) []string {
 		}
 		out = append(out, kv)
 	}
-	return append(out, "HOME="+c.ToolHome, "USERPROFILE="+c.ToolHome, "TEMP="+tmp, "TMP="+tmp, "TMPDIR="+tmp,
-		"SEMGREP_SEND_METRICS=off", "SEMGREP_ENABLE_VERSION_CHECK=0", "TRIVY_NO_PROGRESS=true", "DO_NOT_TRACK=1", "NO_COLOR=1")
+	out = append(out, "HOME="+c.ToolHome, "USERPROFILE="+c.ToolHome, "TEMP="+tmp, "TMP="+tmp, "TMPDIR="+tmp)
+	return append(out, quietEnv...)
 }
 
 func (t *externalTool) Run(ctx context.Context, c *Context) (Result, model.Run) {
@@ -126,6 +133,9 @@ func (t *externalTool) Run(ctx context.Context, c *Context) (Result, model.Run) 
 		}
 	}
 	_ = os.WriteFile(filepath.Join(c.RunDir, t.name+".stderr.txt"), []byte(redact.Text(stderr.String())), 0o600)
+	if why, ok := t.noInput[code]; ok {
+		return res, finish(run, model.ExitUnsupported, why, 0)
+	}
 	if !t.okExit[code] {
 		why := firstLine(stderr.String())
 		if why == "" {
@@ -167,7 +177,7 @@ func (l *limitedBuffer) Write(p []byte) (int, error) {
 func firstLine(s string) string {
 	s = strings.TrimSpace(s)
 	if i := strings.IndexByte(s, '\n'); i >= 0 {
-		s = s[:i]
+		s = strings.TrimSpace(s[:i])
 	}
 	return redact.Line(s)
 }
@@ -302,10 +312,16 @@ func semgrep() Adapter {
 				if ctl := catalog.ControlByID(r.Extra.Metadata.Control); ctl != nil && ctl.Domain != "R" {
 					cid = ctl.ID
 				}
+				// Semgrep without a login replaces the matched source with this
+				// placeholder; it is not a snippet.
+				snippet := r.Extra.Lines
+				if strings.TrimSpace(snippet) == "requires login" {
+					snippet = ""
+				}
 				// check_id is prefixed with the rule file's directory, which
 				// differs per machine; keep only the rule id for stable fingerprints.
 				out = append(out, model.Signal{RuleID: "semgrep." + lastSegment(r.CheckID), ControlID: cid, Title: lastSegment(r.CheckID), Severity: sevFrom(r.Extra.Severity), Confidence: model.Hypothesis, CWE: cwe,
-					File: r.Path, StartLine: r.Start.Line, EndLine: r.End.Line, Snippet: r.Extra.Lines, Message: r.Extra.Message, Fix: "See rule " + lastSegment(r.CheckID) + " guidance."})
+					File: r.Path, StartLine: r.Start.Line, EndLine: r.End.Line, Snippet: snippet, Message: r.Extra.Message, Fix: "See rule " + lastSegment(r.CheckID) + " guidance."})
 			}
 			return out, nil
 		},
@@ -325,7 +341,8 @@ func lastSegment(s string) string {
 func osvScanner() Adapter {
 	return &externalTool{
 		name: "osv-scanner", binary: "osv-scanner", controls: []string{"I-003"}, network: true, verArgs: []string{"--version"},
-		okExit: map[int]bool{0: true, 1: true},
+		okExit:  map[int]bool{0: true, 1: true},
+		noInput: map[int]string{128: "osv-scanner found no lockfile or SBOM it can read (exit 128); commit a lockfile to check dependencies against advisories"},
 		args: func(c *Context, out string) ([]string, error) {
 			return []string{"--format", "json", "--output", out, "-r", c.Root}, nil
 		},

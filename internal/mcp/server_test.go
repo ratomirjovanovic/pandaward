@@ -174,3 +174,44 @@ func TestListEntrypoints(t *testing.T) {
 		}
 	}
 }
+
+func TestPrepareFeedbackTool(t *testing.T) {
+	root := testfixture.VulnerableRepo(t)
+	e, _, err := engine.Init(root, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Scan(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	fs, _ := e.St.Findings(e.ProjectID)
+	e.Close()
+	var id string
+	for _, f := range fs {
+		if f.File != "" && f.StartLine > 0 {
+			id = f.ID
+			break
+		}
+	}
+	s := &Server{Root: root}
+	call := func(n int, args string) map[string]any {
+		t.Helper()
+		res := rpc(t, s, `{"jsonrpc":"2.0","id":`+fmt.Sprint(n)+`,"method":"tools/call","params":{"name":"pensec_prepare_feedback","arguments":`+args+`}}`)
+		return res[0]["result"].(map[string]any)
+	}
+	for i, bad := range []string{`{}`, `{"kind":"other"}`, `{"kind":"false-positive","finding_id":"PSEC-9999"}`, `{"kind":"false-negative"}`, `{"kind":"false-positive","finding_id":"` + id + `","send":true}`} {
+		if r := call(i+1, bad); r["isError"] != true {
+			t.Errorf("%s must be rejected: %v", bad, r)
+		}
+	}
+	r := call(10, `{"kind":"false-positive","finding_id":"`+id+`","note":"constant value"}`)
+	txt := r["content"].([]any)[0].(map[string]any)["text"].(string)
+	if r["isError"] == true || !strings.Contains(txt, `"sent":false`) || !strings.Contains(txt, "issues/new?") || !strings.Contains(txt, "existing_reports_url") {
+		t.Fatalf("unexpected result: %s", txt)
+	}
+	for _, f := range fs {
+		if f.ID == id && strings.Contains(txt, f.File) {
+			t.Fatalf("default report must not contain the path %s", f.File)
+		}
+	}
+}
