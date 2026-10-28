@@ -80,7 +80,7 @@ section p.sub { color: var(--muted); margin: 0 0 28px; max-width: 46em; }
 .status b { display: block; font-family: var(--mono); font-size: 13px; }
 
 pre.code { background: var(--term-bg); color: var(--term-fg); padding: 16px 18px; border-radius: var(--radius); overflow-x: auto; margin: 0; line-height: 1.5; }
-.two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
 .two h3 { font-size: 16px; margin: 0 0 8px; }
 
 table { width: 100%; border-collapse: collapse; font-size: 15px; background: var(--surface); border-radius: var(--radius); overflow: hidden; }
@@ -128,7 +128,7 @@ footer { padding: 40px 0 60px; color: var(--muted); font-size: 14px; border-top:
 @media (max-width: 760px) {
   .hero { grid-template-columns: 1fr; padding-top: 40px; }
   .hero .logo { max-width: 220px; order: -1; }
-  .two { grid-template-columns: 1fr; }
+  .two { grid-template-columns: minmax(0, 1fr); }
   header.top nav { gap: 12px; font-size: 14px; }
   .term pre { height: 380px; }
   .finding dl { grid-template-columns: 1fr; }
