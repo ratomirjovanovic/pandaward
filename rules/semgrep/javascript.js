@@ -60,6 +60,24 @@ app.get('/proxy', async (req, res) => {
   res.json(r.data);
 });
 
+app.get('/fetch-stored', async (req, res) => {
+  const u = req.query.target;
+  await db.query('insert into log (url) values ($1)', [u]);
+  // ruleid: pandaward-js-ssrf
+  await fetch(u);
+  res.end();
+});
+
+async function migrate(sql) {
+  const rows = await sql.query('select id, storage_key from files');
+  for (const row of rows) {
+    // ok: pandaward-js-ssrf
+    await fetch(row.storage_key);
+    // ok: pandaward-js-path-traversal
+    fs.readFileSync(row.storage_key);
+  }
+}
+
 app.get('/files/:name', (req, res) => {
   // ruleid: pandaward-js-path-traversal
   fs.readFile(path.join('/srv/files', req.params.name), (e, d) => res.send(d));

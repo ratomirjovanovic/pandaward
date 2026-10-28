@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -38,6 +39,34 @@ func TestSemgrepNormalizeMapsControlsAndStableIDs(t *testing.T) {
 		if s.RuleID != w.rule || s.ControlID != w.control || s.CWE != w.cwe || s.Confidence != model.Hypothesis {
 			t.Errorf("signal %d: got %s %s %s %s", i, s.RuleID, s.ControlID, s.CWE, s.Confidence)
 		}
+	}
+}
+
+// Bundled rules skip test code like the built-in checks; user rules do not.
+// The check uses the project-relative path, so a project that lives under a
+// directory named fixture is still scanned.
+func TestSemgrepBundledRulesSkipTestPaths(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "fixture", "app")
+	abs := func(p string) string {
+		b, _ := json.Marshal(filepath.Join(root, filepath.FromSlash(p)))
+		return string(b)
+	}
+	raw := []byte(`{"results":[
+	 {"check_id":"h.pandaward-semgrep-rules.pandaward-js-sql-string","path":` + abs("test/unit/a.test.ts") + `,"start":{"line":1},"end":{"line":1},"extra":{"severity":"ERROR","metadata":{"pandaward-control":"D-003"}}},
+	 {"check_id":"h.pandaward-semgrep-rules.pandaward-js-sql-string","path":` + abs("src/db.ts") + `,"start":{"line":2},"end":{"line":2},"extra":{"severity":"ERROR","metadata":{"pandaward-control":"D-003"}}},
+	 {"check_id":"local.no-raw-sql","path":` + abs("test/unit/a.test.ts") + `,"start":{"line":3},"end":{"line":3},"extra":{"severity":"WARNING","metadata":{}}}
+	],"errors":[]}`)
+	sigs, err := semgrep().(*externalTool).normalize(&Context{Root: root}, raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, s := range sigs {
+		got = append(got, fmt.Sprintf("%s@%d", s.RuleID, s.StartLine))
+	}
+	want := []string{"semgrep.pandaward-js-sql-string@2", "semgrep.no-raw-sql@3"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("signals %v, want %v", got, want)
 	}
 }
 
