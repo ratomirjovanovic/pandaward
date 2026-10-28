@@ -122,7 +122,13 @@ var commentRe = regexp.MustCompile(`^\s*(//|#|\*|/\*|<!--|--|;)`)
 // IsTestPath reports whether a path looks like test or fixture code.
 func IsTestPath(p string) bool {
 	l := strings.ToLower(p)
+	// Inside a main source set "example" is a package name (com.example is
+	// the default for new Android projects), not a directory of samples.
+	main := strings.Contains("/"+l, "/src/main/")
 	for _, s := range []string{"/test/", "/tests/", "/__tests__/", "/spec/", "/fixtures/", "/testdata/", "/__mocks__/", "/e2e/", "/examples/", "/example/"} {
+		if main && (s == "/examples/" || s == "/example/") {
+			continue
+		}
 		if strings.Contains("/"+l, s) {
 			return true
 		}

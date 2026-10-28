@@ -14,7 +14,7 @@ import (
 )
 
 // CorpusVersion changes whenever cases are added, removed or edited.
-const CorpusVersion = "2026.10.2"
+const CorpusVersion = "2026.10.3"
 
 // Case is one repository that a rule must fire on (Vulnerable) or must not
 // fire on (Safe).
@@ -198,6 +198,9 @@ func Corpus() []Case {
 	add(pair("mobile.android-prefs-credential", "builtin-mobile",
 		map[string]string{kt: "prefs.edit().putString(\"auth_token\", token).apply()\n"},
 		map[string]string{kt: "encryptedPrefs.edit().putString(\"auth_token\", token).apply()\n"}))
+	// New Android projects use the com.example package; it is not sample code.
+	add([]Case{{Rule: "mobile.android-prefs-credential", Adapter: "builtin-mobile", Vulnerable: true,
+		Files: map[string]string{"app/src/main/java/com/example/app/Session.kt": "prefs.edit().putString(\"auth_token\", token).apply()\n"}}})
 	sw := "ios/App/Session.swift"
 	add(pair("mobile.ios-keychain-always", "builtin-mobile",
 		map[string]string{sw: "let q: [String: Any] = [kSecAttrAccessible as String: kSecAttrAccessibleAlways]\n"},

@@ -134,3 +134,17 @@ func TestMobileSourceRules(t *testing.T) {
 		t.Errorf("unexpected signals: %v", got)
 	}
 }
+
+func TestIsTestPathKeepsMainSourcePackages(t *testing.T) {
+	for p, want := range map[string]bool{
+		"app/src/main/java/com/example/app/Session.kt": false,
+		"src/main/kotlin/com/example/Api.kt":           false,
+		"examples/demo.js":                             true,
+		"docs/example/app.js":                          true,
+		"app/src/test/java/com/example/AppTest.kt":     true,
+	} {
+		if got := IsTestPath(p); got != want {
+			t.Errorf("IsTestPath(%q) = %v, want %v", p, got, want)
+		}
+	}
+}
