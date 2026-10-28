@@ -11,6 +11,7 @@
 
 <p align="center">
   <a href="https://github.com/ratomirjovanovic/pensec/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ratomirjovanovic/pensec/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/ratomirjovanovic/pensec"><img alt="OpenSSF Scorecard" src="https://api.scorecard.dev/projects/github.com/ratomirjovanovic/pensec/badge"></a>
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a>
   <img alt="Go 1.23+" src="https://img.shields.io/badge/go-1.23%2B-00ADD8">
   <img alt="Status: alpha" src="https://img.shields.io/badge/status-alpha-orange">
