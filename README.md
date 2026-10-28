@@ -105,7 +105,7 @@ scoop bucket add pensec https://github.com/ratomirjovanovic/pensec; scoop instal
 Or download a binary from the [releases page](https://github.com/ratomirjovanovic/pensec/releases) (Linux and macOS on amd64 and arm64, Windows on amd64). For example on Linux:
 
 ```sh
-v=v0.1.3
+v=v0.1.4
 curl -fLO https://github.com/ratomirjovanovic/pensec/releases/download/$v/pensec-linux-amd64
 curl -fLO https://github.com/ratomirjovanovic/pensec/releases/download/$v/SHA256SUMS
 sha256sum --ignore-missing -c SHA256SUMS
@@ -115,7 +115,7 @@ chmod +x pensec-linux-amd64 && sudo mv pensec-linux-amd64 /usr/local/bin/pensec
 On Windows (PowerShell), save `pensec-windows-amd64.exe` as `pensec.exe` in a folder on your `PATH`:
 
 ```powershell
-Invoke-WebRequest https://github.com/ratomirjovanovic/pensec/releases/download/v0.1.3/pensec-windows-amd64.exe -OutFile pensec.exe
+Invoke-WebRequest https://github.com/ratomirjovanovic/pensec/releases/download/v0.1.4/pensec-windows-amd64.exe -OutFile pensec.exe
 (Get-FileHash pensec.exe).Hash   # compare with the line in SHA256SUMS
 ```
 
@@ -262,7 +262,7 @@ With [pre-commit](https://pre-commit.com), add this to `.pre-commit-config.yaml`
 ```yaml
 repos:
   - repo: https://github.com/ratomirjovanovic/pensec
-    rev: v0.1.3
+    rev: v0.1.4
     hooks:
       - id: pensec-system   # uses the pensec on your PATH; use id: pensec to build it with Go 1.23+
 ```
