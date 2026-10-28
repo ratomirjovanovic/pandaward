@@ -76,13 +76,15 @@
 
   <section id="install">
     <h2>Install</h2>
-    <p class="sub">Build from source with Go 1.23 or later. Prebuilt binaries are on the way.</p>
+    <p class="sub">Prebuilt, checksum-verified binaries for Linux, macOS and Windows. Nothing else to install.</p>
     <div class="two">
       <div>
         <h3>Claude Code plugin</h3>
 <pre class="code">/plugin marketplace add ratomirjovanovic/pensec
-/plugin install pensec@pensec
+/plugin install pensec@pensec          # macOS, Linux
+/plugin install pensec-windows@pensec  # Windows
 
+# restart Claude Code, then in your project:
 /pensec:init
 /pensec:scan
 /pensec:review
@@ -90,7 +92,10 @@
       </div>
       <div>
         <h3>CLI</h3>
-<pre class="code">go install github.com/ratomirjovanovic/pensec/cmd/pensec@latest
+<pre class="code"># download pensec-&lt;os&gt;-&lt;arch&gt; and SHA256SUMS from
+# github.com/ratomirjovanovic/pensec/releases
+# or, with Go 1.23+:
+go install github.com/ratomirjovanovic/pensec/cmd/pensec@latest
 
 cd your-project
 pensec init
@@ -98,6 +103,7 @@ pensec scan --fail-on high
 pensec report --format html,sarif</pre>
       </div>
     </div>
+    <p class="sub">Step-by-step instructions, updating and troubleshooting are in the <a href="https://github.com/ratomirjovanovic/pensec/wiki/Installation">installation guide</a>. Releases can be <a href="https://github.com/ratomirjovanovic/pensec/blob/main/docs/VERIFYING.md">verified</a> with checksums, an SBOM and signed build provenance.</p>
   </section>
 
   <section>
