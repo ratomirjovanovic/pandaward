@@ -31,3 +31,30 @@ echo "ok: modified binary refused"
 rm "$work/bin/pandaward-$os-$arch"
 if "$work/bin/pandaward" version >/dev/null 2>&1; then echo "FAIL: missing binary did not fail"; exit 1; fi
 echo "ok: missing binary refused"
+
+# The plugin-directory branch ships no binaries: the launcher fetches the one
+# for this platform from bin/RELEASE and checks it against SHA256SUMS.
+mkdir -p "$work/release" "$work/dir"
+(cd "$repo" && CGO_ENABLED=0 go build -o "$work/release/pandaward.tmp" ./cmd/pandaward)
+mv "$work/release/pandaward.tmp" "$work/release/pandaward-$os-$arch"
+cp "$repo/packaging/launcher.sh" "$work/dir/pandaward"
+chmod +x "$work/dir/pandaward"
+(cd "$work/release" && if command -v sha256sum >/dev/null; then sha256sum "pandaward-$os-$arch"; else shasum -a 256 "pandaward-$os-$arch"; fi > "$work/dir/SHA256SUMS")
+rel=$work/release
+command -v cygpath >/dev/null 2>&1 && rel=$(cygpath -m "$rel")
+printf 'file://%s\n' "$rel" > "$work/dir/RELEASE"
+
+cp "$work/release/pandaward-$os-$arch" "$work/good"
+printf 'x' >> "$work/release/pandaward-$os-$arch"
+if "$work/dir/pandaward" version > /dev/null 2> "$work/err"; then echo "FAIL: tampered download ran"; exit 1; fi
+grep -q 'checksum mismatch for downloaded' "$work/err" || { echo "FAIL: tampered download not refused by checksum: $(cat "$work/err")"; exit 1; }
+[ ! -e "$work/dir/pandaward-$os-$arch" ] || { echo "FAIL: tampered download was kept"; exit 1; }
+[ -z "$(find "$work/dir" -name '.pandaward-*')" ] || { echo "FAIL: partial download left behind"; exit 1; }
+echo "ok: tampered download refused"
+
+cp "$work/good" "$work/release/pandaward-$os-$arch"
+"$work/dir/pandaward" version 2>/dev/null | grep -q '^pandaward ' || { echo "FAIL: fetched binary did not run"; exit 1; }
+[ -x "$work/dir/pandaward-$os-$arch" ] || { echo "FAIL: fetched binary was not cached"; exit 1; }
+rm "$work/release/pandaward-$os-$arch"
+"$work/dir/pandaward" version 2>/dev/null | grep -q '^pandaward ' || { echo "FAIL: cached binary did not run"; exit 1; }
+echo "ok: fetched binary verified, cached and reused"

@@ -4,8 +4,11 @@ name: release
 # GitHub release with checksums, a CycloneDX SBOM, build provenance and SBOM
 # attestations (see docs/VERIFYING.md), and update the two plugin
 # branches that the marketplace installs from:
-#   plugin          macOS and Linux (launcher + binaries)
-#   plugin-windows  Windows (pandaward.exe)
+#   plugin            macOS and Linux (launcher + binaries)
+#   plugin-windows    Windows (pandaward.exe)
+#   plugin-directory  macOS and Linux for the Claude plugin directory, which
+#                     refuses files over 5 MiB: launcher, SHA256SUMS and
+#                     RELEASE; the launcher fetches the verified binary
 on:
   push:
     tags: ["v*"]
@@ -99,6 +102,13 @@ jobs:
             if [ "$branch" = plugin-windows ]; then
               cp dist/pandaward-windows-amd64.exe "$stage/bin/pandaward.exe"
               (cd "$stage/bin" && sha256sum pandaward.exe > SHA256SUMS)
+            elif [ "$branch" = plugin-directory ]; then
+              cp packaging/launcher.sh "$stage/bin/pandaward"
+              chmod 0755 "$stage/bin/pandaward"
+              (cd dist && sha256sum pandaward-linux-amd64 pandaward-linux-arm64 pandaward-darwin-amd64 pandaward-darwin-arm64) > "$stage/bin/SHA256SUMS"
+              echo "https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME" > "$stage/bin/RELEASE"
+              big=$(find "$stage" -type f -size +5M)
+              [ -z "$big" ] || { echo "files over 5 MiB in $branch: $big" >&2; exit 1; }
             else
               cp dist/pandaward-linux-amd64 dist/pandaward-linux-arm64 dist/pandaward-darwin-amd64 dist/pandaward-darwin-arm64 "$stage/bin/"
               cp packaging/launcher.sh "$stage/bin/pandaward"
@@ -117,7 +127,9 @@ jobs:
             git -C "$wt" rm -rq --ignore-unmatch .
             cp -R "$stage"/. "$wt"/
             git -C "$wt" add -A
-            if [ "$branch" = plugin ]; then
+            if [ "$branch" = plugin-directory ]; then
+              git -C "$wt" update-index --chmod=+x bin/pandaward
+            elif [ "$branch" = plugin ]; then
               git -C "$wt" update-index --chmod=+x bin/pandaward bin/pandaward-linux-amd64 bin/pandaward-linux-arm64 bin/pandaward-darwin-amd64 bin/pandaward-darwin-arm64
             fi
             git -C "$wt" commit -q -m "Pandaward $GITHUB_REF_NAME for $branch" -m "Built from $(git rev-parse HEAD) by the release workflow."
@@ -126,3 +138,4 @@ jobs:
           }
           publish plugin
           publish plugin-windows
+          publish plugin-directory
