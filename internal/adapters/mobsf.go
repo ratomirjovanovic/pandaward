@@ -201,10 +201,10 @@ func (m *mobsfClient) analyze(ctx context.Context, path string) (*mobsfScorecard
 		return nil, nil, errors.New("upload returned no hash")
 	}
 	form := url.Values{"hash": {up.Hash}}
-	if _, err := m.post(ctx, "scan", "application/x-www-form-urlencoded", strings.NewReader(form.Encode())); err != nil {
+	if _, err := m.post(ctx, "scan", "application/x-www-form-urlencoded", strings.NewReader(form.Encode()), 0); err != nil {
 		return nil, nil, err
 	}
-	raw, err := m.post(ctx, "scorecard", "application/x-www-form-urlencoded", strings.NewReader(form.Encode()))
+	raw, err := m.post(ctx, "scorecard", "application/x-www-form-urlencoded", strings.NewReader(form.Encode()), 0)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -212,25 +212,35 @@ func (m *mobsfClient) analyze(ctx context.Context, path string) (*mobsfScorecard
 	return card, raw, err
 }
 
+// upload sends one package as multipart form data. MobSF runs Django under
+// gunicorn, which reads no body without a Content-Length, so the length is
+// computed up front and the file is streamed rather than chunked.
 func (m *mobsfClient) upload(ctx context.Context, path string, out any) error {
 	f, err := os.Open(path)
 	if err != nil {
 		return err
 	}
 	defer f.Close()
-	pr, pw := io.Pipe()
-	mw := multipart.NewWriter(pw)
-	go func() {
-		part, err := mw.CreateFormFile("file", filepath.Base(path))
-		if err == nil {
-			_, err = io.Copy(part, f)
-		}
-		if err == nil {
-			err = mw.Close()
-		}
-		pw.CloseWithError(err)
-	}()
-	b, err := m.post(ctx, "upload", mw.FormDataContentType(), pr)
+	fi, err := f.Stat()
+	if err != nil {
+		return err
+	}
+	var head, tail bytes.Buffer
+	mw := multipart.NewWriter(&head)
+	if _, err := mw.CreateFormFile("file", filepath.Base(path)); err != nil {
+		return err
+	}
+	tw := multipart.NewWriter(&tail)
+	if err := tw.SetBoundary(mw.Boundary()); err != nil {
+		return err
+	}
+	if err := tw.Close(); err != nil {
+		return err
+	}
+	// The closing delimiter starts with CRLF, which ends the file part.
+	size := int64(head.Len()) + fi.Size() + int64(tail.Len())
+	body := io.MultiReader(&head, io.LimitReader(f, fi.Size()), &tail)
+	b, err := m.post(ctx, "upload", mw.FormDataContentType(), body, size)
 	if err != nil {
 		return err
 	}
@@ -240,12 +250,17 @@ func (m *mobsfClient) upload(ctx context.Context, path string, out any) error {
 	return nil
 }
 
-func (m *mobsfClient) post(ctx context.Context, endpoint, contentType string, body io.Reader) ([]byte, error) {
+// post sends one API request. size sets the Content-Length when the body
+// cannot report it; 0 leaves it to net/http.
+func (m *mobsfClient) post(ctx context.Context, endpoint, contentType string, body io.Reader, size int64) ([]byte, error) {
 	u := *m.base
 	u.Path += "/api/v1/" + endpoint
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), body)
 	if err != nil {
 		return nil, err
+	}
+	if size > 0 {
+		req.ContentLength = size
 	}
 	req.Header.Set("Content-Type", contentType)
 	req.Header.Set("X-Mobsf-Api-Key", m.key)

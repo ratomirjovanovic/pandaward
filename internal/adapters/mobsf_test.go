@@ -97,12 +97,23 @@ func fakeMobSF(t *testing.T, card string) (*httptest.Server, *[]string) {
 		}
 		switch r.URL.Path {
 		case "/api/v1/upload":
+			// Django under gunicorn sees no body without a Content-Length.
+			if r.ContentLength <= 0 || len(r.TransferEncoding) > 0 {
+				w.WriteHeader(http.StatusBadRequest)
+				io.WriteString(w, `{"error": {"file": "This field is required."}}`)
+				return
+			}
 			f, h, err := r.FormFile("file")
 			if err != nil {
 				http.Error(w, `{"error": "no file"}`, http.StatusUnprocessableEntity)
 				return
 			}
+			b, _ := io.ReadAll(f)
 			f.Close()
+			if string(b) != "PK\x03\x04\x00binary" {
+				http.Error(w, `{"error": "file content changed in transit"}`, http.StatusBadRequest)
+				return
+			}
 			json.NewEncoder(w).Encode(map[string]string{"file_name": h.Filename, "hash": "3a2f8f0f1b5c4d6e7f8091a2b3c4d5e6", "scan_type": strings.TrimPrefix(filepath.Ext(h.Filename), ".")})
 		case "/api/v1/scan":
 			if r.FormValue("hash") != "3a2f8f0f1b5c4d6e7f8091a2b3c4d5e6" {
