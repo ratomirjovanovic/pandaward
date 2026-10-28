@@ -111,7 +111,28 @@ func (e *Engine) Private() string { return config.PrivateDir(e.Root) }
 
 // Inventory walks the repository.
 func (e *Engine) Inventory() (*inventory.Inventory, error) {
-	return inventory.Walk(e.Root, inventory.Options{Exclude: e.Cfg.Inventory.Exclude, MaxFileBytes: e.Cfg.Inventory.MaxFileBytes, MaxFiles: e.Cfg.Inventory.MaxFiles})
+	inv, err := inventory.Walk(e.Root, inventory.Options{Exclude: e.Cfg.Inventory.Exclude, MaxFileBytes: e.Cfg.Inventory.MaxFileBytes, MaxFiles: e.Cfg.Inventory.MaxFiles})
+	if err != nil {
+		return nil, err
+	}
+	// SARIF files usually live in .pensec, which the walk skips; recording
+	// them makes the import control applicable.
+	if in := adapters.SARIFInputs(e.Root, e.Cfg); len(in) > 0 {
+		inv.Features["sarif"] = in
+	}
+	return inv, nil
+}
+
+// Adapters returns the enabled adapter names: scan.adapters plus
+// sarif-import, which is opted into by providing SARIF files instead.
+func (e *Engine) Adapters() []string {
+	out := append([]string{}, e.Cfg.Scan.Adapters...)
+	for _, a := range out {
+		if a == adapters.SARIFImport {
+			return out
+		}
+	}
+	return append(out, adapters.SARIFImport)
 }
 
 // PlanItem is one control decision before execution.
@@ -126,7 +147,7 @@ type PlanItem struct {
 // Plan maps the catalog onto the inventory.
 func (e *Engine) Plan(inv *inventory.Inventory) []PlanItem {
 	enabled := map[string]bool{}
-	for _, a := range e.Cfg.Scan.Adapters {
+	for _, a := range e.Adapters() {
 		enabled[a] = true
 	}
 	var out []PlanItem
@@ -286,8 +307,13 @@ func (e *Engine) Retest(ctx context.Context, progress func(string), changed []st
 	for _, r := range runs {
 		cy.runs[r.Adapter] = r
 	}
-	affected := AffectedAdapters(e.Cfg.Scan.Adapters, changed)
-	for _, a := range e.Cfg.Scan.Adapters {
+	affected := AffectedAdapters(e.Adapters(), changed)
+	for _, a := range e.Adapters() {
+		// SARIF inputs are outside the inventory, so their changes are not
+		// in changed; the import is cheap and always re-runs.
+		if a == adapters.SARIFImport {
+			continue
+		}
 		if r, ok := cy.runs[a]; ok && r.ExitClass == model.ExitOK && !affected[a] {
 			cy.adapters[a] = true
 		}
@@ -389,7 +415,7 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 	actx := &adapters.Context{Root: e.Root, Inv: inv, Cfg: e.Cfg, RunDir: runDir, ToolHome: filepath.Join(e.Private(), "tool-home"),
 		Timeout: time.Duration(e.Cfg.Scan.AdapterTimeoutSec) * time.Second}
 	enabled := map[string]bool{}
-	for _, a := range e.Cfg.Scan.Adapters {
+	for _, a := range e.Adapters() {
 		enabled[a] = true
 	}
 	res := &ScanResult{AssessmentID: asmt.ID, Controls: map[string]int{}}

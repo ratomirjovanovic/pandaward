@@ -38,6 +38,9 @@ type Config struct {
 		AllowToolNetwork bool     `yaml:"allow_tool_network"`
 		SemgrepConfig    string   `yaml:"semgrep_config"`
 		Adapters         []string `yaml:"adapters"`
+		// SARIFFiles lists SARIF results to import, relative to the project
+		// root, in addition to .pensec/sarif/*.sarif.
+		SARIFFiles []string `yaml:"sarif_files"`
 	} `yaml:"scan"`
 	Report struct {
 		Formats         []string `yaml:"formats"`

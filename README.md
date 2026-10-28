@@ -134,7 +134,7 @@ flowchart LR
 
 1. **Inventory** walks the repository read-only and records files, routes, manifests, workflows, IaC, mobile manifests and AI/MCP usage.
 2. **Plan** maps the control catalog (domains A to R) onto what was found. Controls without matching assets become `NOT_APPLICABLE` with a reason you can review.
-3. **Adapters** run. Built-in checks are offline and always available; gitleaks, semgrep, osv-scanner and trivy are used only if you installed them. When semgrep is installed it runs PenSec's bundled offline rules (see [`rules/README.md`](rules/README.md)) plus any rules you configure.
+3. **Adapters** run. Built-in checks are offline and always available; gitleaks, semgrep, osv-scanner and trivy are used only if you installed them. When semgrep is installed it runs PenSec's bundled offline rules (see [`rules/README.md`](rules/README.md)) plus any rules you configure. SARIF 2.1.0 files from analyzers you ran yourself (CodeQL or other SAST tools) are imported from `.pensec/sarif/*.sarif` and any paths listed in `scan.sarif_files`; PenSec never runs those tools. Imported results are hypotheses under control R-002, with snippets read and redacted from your files rather than taken from the SARIF.
 4. **Findings** are redacted, fingerprinted and linked to evidence. Repeated runs update their lifecycle: `OPEN`, `REMEDIATED`, `REOPENED`, `FALSE_POSITIVE`, `RISK_ACCEPTED`.
 5. **Edges** between domains are created only from shared assets and get their status from the linked controls.
 6. **Reports** show confirmed findings, suspected signals, coverage by domain, every undecided control and the evidence index.
@@ -157,7 +157,7 @@ flowchart LR
 | N CI/CD | unpinned actions, script injection, `pull_request_target` checkout, token permissions | |
 | O Observability | credentials in log calls | alerting review |
 | P AI and MCP | model output reaching exec sinks, MCP server pinning and inline credentials | prompt-injection tests |
-| R Assurance | evidence integrity | |
+| R Assurance | evidence integrity, imported SARIF results | |
 
 `pensec capabilities` prints the full catalog with each adapter's maturity. All adapters are currently `implemented_unvalidated`. The optional tool adapters are exercised in CI on every pull request against gitleaks 8.30.1, semgrep 1.182.0, osv-scanner 2.7.0 and trivy 0.76.1: the job scans the bundled vulnerable fixture and fails when an adapter does not complete or its parser misses the expected findings. Other versions may work but are not checked.
 
@@ -169,7 +169,7 @@ flowchart LR
 |---|---|
 | `pensec init` | Create `.pensec/` with config and a private ledger |
 | `pensec plan` | Applicable controls, gates, candidate edges, inventory gaps |
-| `pensec scan [--fail-on high]` | Passive scan; exit code 4 when the gate is reached |
+| `pensec scan [--fail-on high]` | Passive scan, including SARIF import from `.pensec/sarif/`; exit code 4 when the gate is reached |
 | `pensec retest [--changed]` | Files changed since the last scan, re-scan, delta; `--changed` re-runs only the adapters whose controls the changes affect |
 | `pensec status` | Coverage, open findings, stale files, blockers, next action |
 | `pensec findings [show ID]` | List or inspect findings |

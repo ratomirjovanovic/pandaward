@@ -70,3 +70,56 @@ func TestReportsAreRedactedAndValid(t *testing.T) {
 		return nil
 	})
 }
+
+// Imported SARIF results reach every report format as unconfirmed findings,
+// and PenSec's own SARIF report is never imported back.
+func TestImportedSARIFInReports(t *testing.T) {
+	root := t.TempDir()
+	testfixture.Write(t, root, "src/db.js", "const id = req.query.id;\ndb.query('SELECT * FROM t WHERE id=' + id);\n")
+	testfixture.Write(t, root, ".pensec/sarif/codeql.sarif", `{"version":"2.1.0","runs":[{"tool":{"driver":{"name":"CodeQL","semanticVersion":"2.19.0"}},
+	 "results":[{"ruleId":"js/sql-injection","level":"error","message":{"text":"Query built from user input"},
+	  "locations":[{"physicalLocation":{"artifactLocation":{"uri":"src/db.js"},"region":{"startLine":2}}}]}]}]}`)
+	e, _, err := engine.Init(root, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+	e.Cfg.Scan.Adapters = []string{"builtin-inventory", "builtin-secrets", "builtin-code"}
+	if _, err := e.Scan(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	r, err := Build(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, f := range r.Suspected() {
+		found = found || f.RuleID == "sarif.codeql.js-sql-injection"
+	}
+	if !found {
+		t.Fatal("imported result missing from suspected findings")
+	}
+	paths, err := Write(r, DefaultDir(root), []string{"html", "markdown", "json", "sarif"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range paths {
+		b, _ := os.ReadFile(p)
+		want := "sarif.codeql.js-sql-injection"
+		if ext := filepath.Ext(p); ext == ".html" || ext == ".md" {
+			want = "CodeQL: js/sql-injection"
+		}
+		if !strings.Contains(string(b), want) {
+			t.Errorf("%s does not list the imported result", filepath.Base(p))
+		}
+	}
+	own, _ := os.ReadFile(paths[3])
+	testfixture.Write(t, root, ".pensec/sarif/pensec.sarif", string(own))
+	res, err := e.Scan(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.New != 0 || res.Status != "COMPLETE" {
+		t.Errorf("re-importing PenSec's own report: %d new, %s %v", res.New, res.Status, res.Errors)
+	}
+}
