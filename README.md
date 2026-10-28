@@ -78,6 +78,13 @@ If `/plugin install` says `Marketplace "pensec" not found`, the first line was s
 Then, in your project:
 
 ```text
+/pensec:start       # the whole assessment in one go: scan with progress, specialist
+                    # reviews, triage, fix plan and reports, with a live checklist
+```
+
+Or step by step:
+
+```text
 /pensec:init        # create .pensec/ and show what was detected
 /pensec:scan        # passive scan with an honest summary
 /pensec:review      # read-only specialist agents look at what automation could not decide
@@ -95,10 +102,9 @@ cd pensec
 go build -o bin/pensec ./cmd/pensec        # bin/pensec.exe on Windows
 
 cd /path/to/your/project
-pensec init
-pensec scan
-pensec findings
-pensec report --format html,sarif
+pensec assess          # init, scan with progress, reports and a summary
+pensec findings        # then dig in
+pensec fix-plan
 ```
 
 Requires Go 1.23 or later to build. The binary has no runtime dependencies.
@@ -160,6 +166,7 @@ flowchart LR
 
 | Command | What it does |
 |---|---|
+| `pensec assess` | The whole local assessment in one step: init if needed, scan with progress bars, reports and a summary |
 | `pensec init` | Create `.pensec/` with config and a private ledger |
 | `pensec plan` | Applicable controls, gates, candidate edges, inventory gaps |
 | `pensec scan [--fail-on high]` | Passive scan; exit code 4 when the gate is reached |
