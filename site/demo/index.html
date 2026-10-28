@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PenSec demo</title>
-<meta name="description" content="A real PenSec scan of a synthetic vulnerable shop application: terminal replay, findings explorer and the full HTML report.">
+<meta name="description" content="PenSec in Claude Code on a synthetic vulnerable shop application: one request, the assessment, one question, a fix with a retest, and an automatic retest after a later edit. Real output, findings explorer and the full HTML report.">
 <link rel="icon" href="../icon.png">
 <link rel="stylesheet" href="../style.css">
 </head>
@@ -20,18 +20,18 @@
 
 <main class="wrap">
   <div style="padding:40px 0 8px">
-    <h1 style="font-size:clamp(28px,4vw,40px);margin:0 0 10px;letter-spacing:-0.01em">A real scan of a deliberately vulnerable app</h1>
+    <h1 style="font-size:clamp(28px,4vw,40px);margin:0 0 10px;letter-spacing:-0.01em">One request, the whole assessment</h1>
     <p class="sub" style="color:var(--muted);max-width:46em;margin:0">
       <b>acme-shop</b> is a small synthetic project bundled with PenSec: an Express API with Stripe webhooks, a Python helper that calls an LLM, a GitHub Actions workflow, a Dockerfile, Terraform and an Android manifest.
-      Everything below was produced by the CLI in CI on every change to <code>main</code>. The secret-shaped values in it are fake and masked.
+      In Claude Code you ask once. Claude runs the assessment, asks one question, applies the fix you choose with a retest, and later retests its own edits without being asked.
     </p>
   </div>
 
   <section id="replay" style="border-top:0">
-    <h2>Terminal replay</h2>
-    <p class="sub">Each step is the actual output of the command. Pick a step or let it play.</p>
-    <div class="term" role="region" aria-label="Terminal replay">
-      <div class="bar"><i></i><i></i><i></i><span>~/acme-shop</span>
+    <h2>Replay in Claude Code</h2>
+    <p class="sub">Every command output and the hook message are produced by the real PenSec build on this fixture in CI. The short user and Claude messages are written for the demo. Pick a step or let it play.</p>
+    <div class="term" role="region" aria-label="Claude Code session replay">
+      <div class="bar"><i></i><i></i><i></i><span>claude · ~/acme-shop</span>
         <div class="ctl"><button id="play" type="button">Pause</button><button id="skip" type="button">Show all</button></div>
       </div>
       <pre id="screen" aria-live="polite"></pre>
@@ -41,7 +41,7 @@
 
   <section id="findings">
     <h2>Findings explorer</h2>
-    <p class="sub">Confirmed observations and suspected signals from the same run, read from the JSON report.</p>
+    <p class="sub">Confirmed observations and suspected signals from the assessment in the replay, read from its JSON report.</p>
     <div class="kpis" id="kpis"></div>
     <div class="filters" id="filters"></div>
     <div id="list"></div>
@@ -50,13 +50,28 @@
 
   <section>
     <h2>Try it on your code</h2>
-<pre class="code">go install github.com/ratomirjovanovic/pensec/cmd/pensec@latest
-cd your-project && pensec init && pensec scan</pre>
+    <div class="two">
+      <div>
+        <h3>In Claude Code</h3>
+<pre class="code">/plugin marketplace add ratomirjovanovic/pensec
+/plugin install pensec@pensec          # macOS, Linux
+/plugin install pensec-windows@pensec  # Windows
+
+# restart Claude Code, then in your project:
+Check the security of this project.</pre>
+      </div>
+      <div>
+        <h3>CLI</h3>
+<pre class="code">cd your-project
+pensec assess</pre>
+        <p>Install with Homebrew, Scoop, a release binary or <code>go install</code>; see the <a href="https://github.com/ratomirjovanovic/pensec/wiki/Installation">installation guide</a>.</p>
+      </div>
+    </div>
   </section>
 </main>
 
 <footer><div class="wrap">
-  Demo data is generated from <code>internal/testfixture</code> by <code>site/build.sh</code>. Not a real application.
+  Demo data is generated from <code>internal/testfixture</code> by <code>site/build.sh</code> on every change to <code>main</code>. Not a real application; the secret-shaped values are fake and masked.
 </div></footer>
 <script src="demo.js"></script>
 </body>
