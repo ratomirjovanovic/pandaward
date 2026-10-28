@@ -7,7 +7,7 @@
 package catalog
 
 // Version of the built-in catalog. Bump on any semantic change.
-const Version = "2026.10-m2"
+const Version = "2026.10-m3"
 
 // Domain is one of the A-R work partitions.
 type Domain struct {
@@ -143,6 +143,7 @@ var Controls = []Control{
 	{ID: "Q-002", Domain: "Q", Title: "Concurrency and duplicate-action tests on stateful flows", Method: MethodRuntime, Requires: "payments", Profile: "staging-active", Refs: []string{"CWE-362"}},
 
 	{ID: "R-001", Domain: "R", Title: "All evidence artifacts of this assessment verify against recorded SHA-256", Method: MethodStatic, Adapter: "builtin-evidence", Requires: "any"},
+	{ID: "R-002", Domain: "R", Title: "Imported third-party analyzer results (SARIF) report no findings", Method: MethodExternal, Adapter: "sarif-import", Requires: "sarif"},
 }
 
 // ControlByID returns a control or nil.

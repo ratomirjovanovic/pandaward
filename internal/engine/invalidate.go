@@ -229,5 +229,5 @@ func (e *Engine) affected(asmt string, files []string) (map[string]bool, error) 
 			newFiles = append(newFiles, p)
 		}
 	}
-	return AffectedControls(e.Cfg.Scan.Adapters, files, domains, newFiles), nil
+	return AffectedControls(e.Adapters(), files, domains, newFiles), nil
 }
