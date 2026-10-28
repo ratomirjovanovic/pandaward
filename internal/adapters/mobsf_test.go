@@ -120,7 +120,7 @@ func fakeMobSF(t *testing.T, card string) (*httptest.Server, *[]string) {
 				http.Error(w, `{"error": "The file is not uploaded/available"}`, http.StatusInternalServerError)
 				return
 			}
-			io.WriteString(w, `{"app_name": "ClipDump"}`)
+			io.WriteString(w, `{"app_name": "ClipDump", "package_name": "com.example.clip"}`)
 		case "/api/v1/scorecard":
 			io.WriteString(w, card)
 		default:
@@ -294,6 +294,14 @@ func TestRealMobSF(t *testing.T) {
 		}
 	}
 	key := os.Getenv(MobSFKeyEnv)
+	base, err := MobSFURL(c.Cfg.Scan.MobSFURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	card, _, err := newMobSFClient(base, key).analyze(context.Background(), filepath.Join(c.Root, "app.apk"))
+	if err != nil || card.Package != "opensecurity.clipdump" {
+		t.Errorf("package from the scan report: %v, %v", card, err)
+	}
 	out, _ := json.Marshal(res)
 	if strings.Contains(string(out), key) || strings.Contains(run.Detail, key) {
 		t.Error("API key appears in the result")
@@ -345,6 +353,34 @@ func TestMobSFRealScorecard(t *testing.T) {
 	for k, sev := range want {
 		if got[k] != sev {
 			t.Errorf("%s: severity %q, want %q", k, got[k], sev)
+		}
+	}
+}
+
+func TestMobSFLibraryCodeIsListedNotSuspected(t *testing.T) {
+	item := func(files string) mobsfItem {
+		return mobsfItem{Title: "MD5 is a weak hash known to have hash collisions.", Section: "code",
+			Description: "MD5 is a weak hash known to have hash collisions.\nhttps://example.org/ref\n\nFiles:\n" + files}
+	}
+	for name, tc := range map[string]struct {
+		pkg, files string
+		want       model.Severity
+	}{
+		"library only":       {"com.example.app", "com/google/android/gms/internal/Ab.java, line(s) 12\nokhttp3/internal/C.java, line(s) 4", model.SevInfo},
+		"app code":           {"com.example.app", "com/example/app/Login.java, line(s) 30", model.SevMedium},
+		"sibling package":    {"com.example.app", "com/example/core/Hash.java, line(s) 8", model.SevMedium},
+		"app and library":    {"com.example.app", "okhttp3/A.java, line(s) 1\ncom/example/app/B.java, line(s) 2", model.SevMedium},
+		"unknown package":    {"", "okhttp3/A.java, line(s) 1", model.SevMedium},
+		"no file list":       {"com.example.app", "", model.SevMedium},
+		"short package name": {"opensecurity.clipdump", "opensecurity/clipdump/ClipDumper.java, line(s) 23", model.SevMedium},
+	} {
+		it := item(tc.files)
+		if tc.files == "" {
+			it.Description = "MD5 is a weak hash."
+		}
+		sigs := mobsfSignals(&mobsfScorecard{Warning: []mobsfItem{it}, Package: tc.pkg}, "app.apk", "K-006", "mobsf")
+		if len(sigs) != 1 || sigs[0].Severity != tc.want {
+			t.Errorf("%s: got %+v, want severity %s", name, sigs, tc.want)
 		}
 	}
 }

@@ -119,6 +119,9 @@ type mobsfScorecard struct {
 	Hotspot []mobsfItem `json:"hotspot"`
 	Hash    string      `json:"hash"`
 	Version string      `json:"version"`
+	// Package is the Android package name from the scan report; the
+	// scorecard does not carry it.
+	Package string `json:"-"`
 }
 
 type mobsfItem struct {
@@ -167,7 +170,9 @@ var htmlTagRe = regexp.MustCompile(`<[^>]{1,40}>`)
 // mobsfSignals maps a scorecard to signals. MobSF reports a severity but no
 // confidence, so every finding is a hypothesis: high and warning make the
 // control SUSPECTED, info and hotspot items are listed for review, secure
-// items are dropped.
+// items are dropped. A code finding whose files all lie outside the app's
+// own package namespace is listed for review too: it is in bundled library
+// code the app's developers do not write.
 func mobsfSignals(card *mobsfScorecard, file, control, collector string) []model.Signal {
 	var out []model.Signal
 	for _, g := range []struct {
@@ -190,11 +195,48 @@ func mobsfSignals(card *mobsfScorecard, file, control, collector string) []model
 			} else {
 				msg += redact.Line(strings.Join(strings.Fields(htmlTagRe.ReplaceAllString(it.Description, " ")), " "))
 			}
-			out = append(out, model.Signal{RuleID: "mobsf." + section, ControlID: control, Title: title, Severity: g.sev, Confidence: model.Hypothesis,
+			sev := g.sev
+			if section == "code" && sev != model.SevInfo && onlyLibraryCode(it.Description, card.Package) {
+				sev = model.SevInfo
+				msg = "Only in bundled library code, outside " + redact.Line(card.Package) + ". " + msg
+			}
+			out = append(out, model.Signal{RuleID: "mobsf." + section, ControlID: control, Title: title, Severity: sev, Confidence: model.Hypothesis,
 				File: file, Message: msg, Fix: "Review the finding in the MobSF report for this package and fix it in the source or build configuration.", Collector: collector, Key: title})
 		}
 	}
 	return out
+}
+
+// onlyLibraryCode reports whether every file a MobSF code finding lists is
+// outside the app's namespace, taken as the first two segments of its
+// package (com.example.app -> com/example/), so code in sibling packages of
+// the same vendor still counts as the app's. Without a package or a file
+// list it reports false and the finding keeps its severity.
+func onlyLibraryCode(desc, pkg string) bool {
+	segs := strings.Split(pkg, ".")
+	if pkg == "" || len(segs) == 0 {
+		return false
+	}
+	if len(segs) > 2 {
+		segs = segs[:2]
+	}
+	ns := strings.Join(segs, "/") + "/"
+	_, files, ok := strings.Cut(desc, "\nFiles:\n")
+	if !ok {
+		return false
+	}
+	n := 0
+	for _, l := range strings.Split(files, "\n") {
+		path, _, _ := strings.Cut(strings.TrimSpace(l), ", line(s)")
+		if path == "" {
+			continue
+		}
+		n++
+		if strings.HasPrefix(path, ns) {
+			return false
+		}
+	}
+	return n > 0
 }
 
 // mobsfClient talks to one MobSF server. It ignores proxy settings and does
@@ -225,14 +267,22 @@ func (m *mobsfClient) analyze(ctx context.Context, path string) (*mobsfScorecard
 		return nil, nil, errors.New("upload returned no hash")
 	}
 	form := url.Values{"hash": {up.Hash}}
-	if _, err := m.post(ctx, "scan", "application/x-www-form-urlencoded", strings.NewReader(form.Encode()), 0); err != nil {
+	scan, err := m.post(ctx, "scan", "application/x-www-form-urlencoded", strings.NewReader(form.Encode()), 0)
+	if err != nil {
 		return nil, nil, err
 	}
+	var rep struct {
+		Package string `json:"package_name"`
+	}
+	_ = json.Unmarshal(scan, &rep) // an IPA report has no package_name
 	raw, err := m.post(ctx, "scorecard", "application/x-www-form-urlencoded", strings.NewReader(form.Encode()), 0)
 	if err != nil {
 		return nil, nil, err
 	}
 	card, err := parseMobSFScorecard(raw)
+	if card != nil {
+		card.Package = rep.Package
+	}
 	return card, raw, err
 }
 
