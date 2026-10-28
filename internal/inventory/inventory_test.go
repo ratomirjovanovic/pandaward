@@ -168,23 +168,26 @@ func TestMinimalEnvKeepsSystemDrive(t *testing.T) {
 	}
 }
 
-// Pandaward's own state is never project input, even when a config from
-// before the rename excludes only .pensec.
+// Pandaward's own state at the root is never project input, even when a
+// config from before the rename excludes only .pensec. A nested directory
+// with the same name is scanned, so it cannot be used to hide code.
 func TestWalkAlwaysSkipsStateDirectories(t *testing.T) {
 	files := map[string]string{
 		"src/a.js":                            "console.log(1);\n",
 		".pandaward/private/evidence/e1.json": `{"snippet": "eval(x)"}`,
 		".pandaward/config.yaml":              "schema_version: 1\n",
 		".pensec/private/evidence/e2.json":    `{"snippet": "eval(x)"}`,
-		"apps/web/.pandaward/reports/r.json":  "{}\n",
+		"lib/.pandaward/hidden.js":            "eval(x);\n",
 	}
+	want := []string{"lib/.pandaward/hidden.js", "src/a.js"}
 	inv := walk(t, files, inventory.Options{Exclude: []string{".pensec"}})
 	var paths []string
 	for _, f := range inv.Files {
 		paths = append(paths, f.Path)
 	}
-	if !slices.Equal(paths, []string{"src/a.js"}) {
-		t.Fatalf("analyzed files = %v, want only src/a.js", paths)
+	slices.Sort(paths)
+	if !slices.Equal(paths, want) {
+		t.Fatalf("analyzed files = %v, want %v", paths, want)
 	}
 	root := t.TempDir()
 	for rel, content := range files {
@@ -196,7 +199,7 @@ func TestWalkAlwaysSkipsStateDirectories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(hs) != 1 || hs["src/a.js"] == "" {
-		t.Errorf("Hashes saw %v, want only src/a.js", hs)
+	if len(hs) != len(want) || hs[want[0]] == "" || hs[want[1]] == "" {
+		t.Errorf("Hashes saw %v, want %v", hs, want)
 	}
 }
