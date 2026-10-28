@@ -66,7 +66,18 @@ Most scanners print a list of alerts and stop. PenSec keeps a **ledger**: every 
 /plugin install pensec-windows@pensec    # Windows
 ```
 
-You can also run the same steps from a terminal with `claude plugin marketplace add ratomirjovanovic/pensec` and `claude plugin install pensec-windows@pensec` (`pensec@pensec` on macOS and Linux). Restart Claude Code afterwards; `/mcp` should list `plugin:pensec:pensec` as connected. To update later, run `/plugin marketplace update pensec`. If something goes wrong, see [Troubleshooting](https://github.com/ratomirjovanovic/pensec/wiki/Troubleshooting).
+You can also run the same steps from a terminal with `claude plugin marketplace add ratomirjovanovic/pensec` and `claude plugin install pensec-windows@pensec` (`pensec@pensec` on macOS and Linux). Restart Claude Code afterwards; `/mcp` should list `plugin:pensec:pensec` as connected. Install only one of the two plugins. If something goes wrong, see [Troubleshooting](https://github.com/ratomirjovanovic/pensec/wiki/Troubleshooting).
+
+**Updating.** Claude Code does not update third-party marketplaces on its own unless you turn it on. Either turn on auto-update once (`/plugin`, then Marketplaces, `pensec`, Enable auto-update), or update by hand:
+
+```sh
+claude plugin marketplace update pensec
+claude plugin update pensec-windows@pensec   # or pensec@pensec on macOS and Linux
+```
+
+Then restart Claude Code. `/plugin` shows the installed version.
+
+**Uninstalling.** `claude plugin uninstall pensec-windows@pensec` (or `pensec@pensec`), then `claude plugin marketplace remove pensec`. Results stay in each project's `.pensec/` directory until you delete it. The [uninstall guide](https://github.com/ratomirjovanovic/pensec/wiki/Installation#uninstalling) covers the CLI packages and every file PenSec creates.
 
 Then, in your project, ask Claude to check its security, or run:
 
@@ -120,6 +131,8 @@ Invoke-WebRequest https://github.com/ratomirjovanovic/pensec/releases/download/v
 ```
 
 Or install with Go 1.23 or later: `go install github.com/ratomirjovanovic/pensec/cmd/pensec@latest`. The binary has no runtime dependencies.
+
+Update with `brew upgrade pensec` or `scoop update pensec`; for a downloaded binary, replace the file with the new release. Remove with `brew uninstall pensec` or `scoop uninstall pensec`, or delete the binary. `pensec version` shows what you have.
 
 Then, in your project:
 
