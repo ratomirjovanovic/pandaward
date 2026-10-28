@@ -29,6 +29,21 @@ jobs:
         with:
           go-version-file: go.mod
 
+      - name: Pick the release to test
+        id: ver
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # A release pull request sets the default to a version that is not
+          # published yet; test the latest published release until it is.
+          v=$(sed -n '/^  version:/,/default:/s/.*default: "\(.*\)"/\1/p' action.yml)
+          if ! curl -fsIL -o /dev/null "https://github.com/$GITHUB_REPOSITORY/releases/download/v$v/SHA256SUMS"; then
+            v=$(gh release list -R "$GITHUB_REPOSITORY" --limit 1 --json tagName --jq '.[0].tagName')
+            v=${v#v}
+            echo "::notice::v$v is used because the default version is not released yet"
+          fi
+          echo "v=$v" >> "$GITHUB_OUTPUT"
+
       - name: Create the fixture repository
         id: fx
         run: |
@@ -43,6 +58,7 @@ jobs:
         id: plain
         uses: ./
         with:
+          version: ${{ steps.ver.outputs.v }}
           working-directory: ${{ steps.fx.outputs.dir }}
           fail-on: ""
           output-dir: report-plain
@@ -62,6 +78,7 @@ jobs:
         continue-on-error: true
         uses: ./
         with:
+          version: ${{ steps.ver.outputs.v }}
           working-directory: ${{ steps.fx.outputs.dir }}
           fail-on: critical
           output-dir: report-gate
@@ -83,6 +100,7 @@ jobs:
         id: new
         uses: ./
         with:
+          version: ${{ steps.ver.outputs.v }}
           working-directory: ${{ steps.fx.outputs.dir }}
           new-only: "true"
           base-ref: ${{ steps.fx.outputs.base }}
