@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -52,9 +53,38 @@ type Manifest struct {
 		ActiveScan         bool `yaml:"active_scan"`
 		MaxDurationMinutes int  `yaml:"max_duration_minutes"`
 	} `yaml:"zap"`
+	Identities          []Identity  `yaml:"identities"`
+	AuthorizationChecks []AuthCheck `yaml:"authorization_checks"`
 
 	hash string
 }
+
+// Identity is a test account used by authorization checks. The credential
+// itself is never written to the manifest: ValueEnv names the environment
+// variable that holds the full header value when the test runs.
+type Identity struct {
+	Name     string `yaml:"name"`
+	Tenant   string `yaml:"tenant"`
+	Header   string `yaml:"header"`
+	ValueEnv string `yaml:"value_env"`
+	// Revoked marks a credential that was logged out, expired or revoked;
+	// every check must refuse it (control B-004).
+	Revoked bool `yaml:"revoked"`
+}
+
+// AuthCheck is one read-only request that only the Allowed identities may
+// make successfully. Kind object decides C-001, function decides C-002.
+type AuthCheck struct {
+	Name    string   `yaml:"name"`
+	Kind    string   `yaml:"kind"`
+	Target  string   `yaml:"target"`
+	Method  string   `yaml:"method"`
+	Path    string   `yaml:"path"`
+	Allowed []string `yaml:"allowed"`
+}
+
+// Anonymous is the implicit identity without credentials.
+const Anonymous = "anonymous"
 
 // Template is written by `pensec scope init`. All targets are empty and
 // acknowledged is false, so nothing can run until a human fills it in.
@@ -85,6 +115,21 @@ limits:
 zap:                 # ZAP baseline, run by: pensec test --profile staging-active
   active_scan: false   # true sends ZAP attack payloads; never on production
   max_duration_minutes: 10
+# Authorization checks (staging-active). Each check is one read-only request
+# to an object or function that exists for the test; it is sent as every
+# identity and without credentials, and only "allowed" may succeed.
+identities: []
+#  - name: alice
+#    tenant: acme
+#    header: Authorization           # header that carries the credential
+#    value_env: PENSEC_ID_ALICE      # environment variable with the full header value
+#    revoked: false                  # true for a logged-out token that must be refused
+authorization_checks: []
+#  - name: acme invoice
+#    kind: object                    # object (C-001) or function (C-002)
+#    method: GET
+#    path: /api/invoices/inv_acme_1
+#    allowed: [alice]                # every other identity and anonymous must be denied
 `
 
 // Path returns the manifest path.
@@ -164,6 +209,7 @@ func (m *Manifest) Validate(now time.Time) []string {
 	if m.ZAP.ActiveScan && m.Environment == "production" {
 		p = append(p, "zap.active_scan is not allowed when environment is production")
 	}
+	p = append(p, m.validateAuthz()...)
 	if m.Window.Start != "" {
 		st, err := time.Parse(time.RFC3339, m.Window.Start)
 		if err != nil {
@@ -306,4 +352,102 @@ func (m *Manifest) DialContext(timeout time.Duration) func(ctx context.Context, 
 		}
 		return d.DialContext(ctx, network, net.JoinHostPort(ips[0].String(), port))
 	}
+}
+
+var (
+	identityNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
+	headerNameRe   = regexp.MustCompile(`^[A-Za-z0-9-]{1,64}$`)
+	envNameRe      = regexp.MustCompile(`^[A-Z_][A-Z0-9_]{0,63}$`)
+)
+
+// reservedHeaders cannot carry a credential.
+var reservedHeaders = map[string]bool{"host": true, "content-length": true, "transfer-encoding": true, "connection": true, "upgrade": true, "te": true, "trailer": true, "proxy-authorization": true}
+
+func (m *Manifest) validateAuthz() []string {
+	var p []string
+	ids := map[string]*Identity{}
+	for i := range m.Identities {
+		id := &m.Identities[i]
+		switch {
+		case !identityNameRe.MatchString(id.Name) || id.Name == Anonymous:
+			p = append(p, fmt.Sprintf("identities[%d].name %q must be lowercase letters, digits, - or _ (and not %q)", i, id.Name, Anonymous))
+		case ids[id.Name] != nil:
+			p = append(p, fmt.Sprintf("identity %q is listed twice", id.Name))
+		}
+		ids[id.Name] = id
+		if !headerNameRe.MatchString(id.Header) || reservedHeaders[strings.ToLower(id.Header)] {
+			p = append(p, fmt.Sprintf("identity %q: header %q is not usable for a credential", id.Name, id.Header))
+		}
+		if !envNameRe.MatchString(id.ValueEnv) {
+			p = append(p, fmt.Sprintf("identity %q: value_env must name an environment variable (A-Z, 0-9, _); the credential itself never goes in this file", id.Name))
+		}
+	}
+	names := map[string]bool{}
+	requests := 0
+	for i, c := range m.AuthorizationChecks {
+		where := fmt.Sprintf("authorization_checks[%d] %q", i, c.Name)
+		if strings.TrimSpace(c.Name) == "" {
+			p = append(p, fmt.Sprintf("authorization_checks[%d].name is empty", i))
+		} else if names[c.Name] {
+			p = append(p, where+" is listed twice")
+		}
+		names[c.Name] = true
+		if c.Kind != "object" && c.Kind != "function" {
+			p = append(p, where+": kind must be object or function")
+		}
+		if c.Method != "GET" && c.Method != "HEAD" {
+			p = append(p, where+": method must be GET or HEAD; authorization checks only read")
+		} else if !m.MethodAllowed(c.Method) {
+			p = append(p, where+": method "+c.Method+" is not in allowed_methods")
+		}
+		if u, err := m.CheckURL(c); err != nil {
+			p = append(p, where+": "+err.Error())
+		} else if err := m.InScope(u); err != nil {
+			p = append(p, where+": "+err.Error())
+		}
+		if len(c.Allowed) == 0 {
+			p = append(p, where+": allowed is empty")
+		}
+		for _, a := range c.Allowed {
+			switch id := ids[a]; {
+			case a == Anonymous:
+			case id == nil:
+				p = append(p, where+": allowed names unknown identity "+a)
+			case id.Revoked:
+				p = append(p, where+": revoked identity "+a+" cannot be allowed")
+			}
+		}
+		requests += len(m.Identities) + 1
+	}
+	if len(m.AuthorizationChecks) > 0 && len(m.Identities) == 0 {
+		p = append(p, "authorization_checks need at least one identity")
+	}
+	if requests > m.Limits.MaxRequestsTotal && m.Limits.MaxRequestsTotal > 0 {
+		p = append(p, fmt.Sprintf("authorization checks need %d requests (each check once per identity and once anonymous); raise limits.max_requests_total", requests))
+	}
+	return p
+}
+
+// CheckURL is the request URL of an authorization check: its target (or
+// the first target) with the check path.
+func (m *Manifest) CheckURL(c AuthCheck) (*url.URL, error) {
+	base := c.Target
+	if base == "" {
+		if len(m.Targets) == 0 {
+			return nil, errors.New("no target")
+		}
+		base = m.Targets[0].URL
+	}
+	bu, err := ParseTarget(base)
+	if err != nil {
+		return nil, fmt.Errorf("target: %w", err)
+	}
+	if !strings.HasPrefix(c.Path, "/") || strings.Contains(c.Path, "..") || strings.ContainsAny(c.Path, "#\\ ") {
+		return nil, errors.New("path must start with / and contain no .., #, backslash or space")
+	}
+	u, err := url.Parse(bu.Scheme + "://" + bu.Host + c.Path)
+	if err != nil {
+		return nil, err
+	}
+	return u, nil
 }

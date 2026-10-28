@@ -64,7 +64,7 @@ func TestEditInvalidatesOnlyDependentControls(t *testing.T) {
 		"D-001": model.StatusStale, "G-001": model.StatusStale, "H-001": model.StatusStale,
 		"N-001": model.StatusFail, "J-001": model.StatusFail, "K-001": model.StatusFail,
 		// Undecided controls stay undecided rather than STALE.
-		"C-001": model.StatusUnsupported, "F-001": model.StatusBlocked,
+		"C-001": model.StatusBlocked, "F-001": model.StatusBlocked,
 	})
 	if em["DG1"].Status != model.StatusStale {
 		t.Errorf("edge DG1 depends on G-001 and must be STALE, got %s", em["DG1"].Status)

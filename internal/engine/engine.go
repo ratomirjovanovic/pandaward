@@ -179,6 +179,10 @@ func (e *Engine) Plan(inv *inventory.Inventory) []PlanItem {
 				it.Status, it.Reason = model.StatusBlocked, "needs `pensec test --profile production-observe` with an approved scope manifest"
 			case c.Adapter == "zap" && c.ID == "D-005":
 				it.Status, it.Reason = model.StatusBlocked, "needs zap.active_scan: true in an approved scope manifest, ZAP installed and `pensec test --profile staging-active`"
+			case c.Adapter == "authz" && c.ID == "B-004":
+				it.Status, it.Reason = model.StatusBlocked, "needs an identity with revoked: true and authorization_checks in an approved scope manifest, then `pensec test --profile staging-active`"
+			case c.Adapter == "authz":
+				it.Status, it.Reason = model.StatusBlocked, "needs identities and authorization_checks in an approved scope manifest, then `pensec test --profile staging-active`"
 			case c.Adapter == "zap":
 				it.Status, it.Reason = model.StatusBlocked, "needs `pensec test --profile staging-active` with an approved scope manifest and ZAP installed"
 			default:
