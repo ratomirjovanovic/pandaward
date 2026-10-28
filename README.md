@@ -73,7 +73,7 @@ BLOCKED/UNSUPPORTED/SUSPECTED controls are not secure; see `pensec status` and `
 /plugin install pensec-windows@pensec    # Windows
 ```
 
-If `/plugin install` says `Marketplace "pensec" not found`, the first line was skipped: add the marketplace, then install.
+You can also run the same steps from a terminal with `claude plugin marketplace add ratomirjovanovic/pensec` and `claude plugin install pensec-windows@pensec` (`pensec@pensec` on macOS and Linux). Restart Claude Code afterwards; `/mcp` should list `plugin:pensec:pensec` as connected. To update later, run `/plugin marketplace update pensec`. If something goes wrong, see [Troubleshooting](https://github.com/ratomirjovanovic/pensec/wiki/Troubleshooting).
 
 Then, in your project:
 
@@ -85,23 +85,37 @@ Then, in your project:
 /pensec:report      # HTML, Markdown, JSON, SARIF, CSV
 ```
 
-> The plugin installs prebuilt, checksum-verified binaries from the `plugin` and `plugin-windows` branches, which the release workflow publishes on every version tag ([how to verify them](docs/VERIFYING.md)). To build from source instead, see below.
+> The plugin installs prebuilt, checksum-verified binaries from the `plugin` and `plugin-windows` branches, which the release workflow publishes on every version tag ([how to verify them](docs/VERIFYING.md)). To use PenSec without Claude Code, see below.
 
 ### As a CLI
 
-```sh
-git clone https://github.com/ratomirjovanovic/pensec
-cd pensec
-go build -o bin/pensec ./cmd/pensec        # bin/pensec.exe on Windows
+Download a binary from the [releases page](https://github.com/ratomirjovanovic/pensec/releases) (Linux and macOS on amd64 and arm64, Windows on amd64). For example on Linux:
 
-cd /path/to/your/project
+```sh
+v=v0.1.2
+curl -fLO https://github.com/ratomirjovanovic/pensec/releases/download/$v/pensec-linux-amd64
+curl -fLO https://github.com/ratomirjovanovic/pensec/releases/download/$v/SHA256SUMS
+sha256sum --ignore-missing -c SHA256SUMS
+chmod +x pensec-linux-amd64 && sudo mv pensec-linux-amd64 /usr/local/bin/pensec
+```
+
+On Windows (PowerShell), save `pensec-windows-amd64.exe` as `pensec.exe` in a folder on your `PATH`:
+
+```powershell
+Invoke-WebRequest https://github.com/ratomirjovanovic/pensec/releases/download/v0.1.2/pensec-windows-amd64.exe -OutFile pensec.exe
+(Get-FileHash pensec.exe).Hash   # compare with the line in SHA256SUMS
+```
+
+Or install with Go 1.23 or later: `go install github.com/ratomirjovanovic/pensec/cmd/pensec@latest`. The binary has no runtime dependencies.
+
+Then, in your project:
+
+```sh
 pensec init
 pensec scan
 pensec findings
 pensec report --format html,sarif
 ```
-
-Requires Go 1.23 or later to build. The binary has no runtime dependencies.
 
 Release binaries are reproducible and come with checksums, a CycloneDX SBOM and signed build provenance; [docs/VERIFYING.md](docs/VERIFYING.md) shows how to check them.
 
@@ -163,10 +177,11 @@ flowchart LR
 | `pensec init` | Create `.pensec/` with config and a private ledger |
 | `pensec plan` | Applicable controls, gates, candidate edges, inventory gaps |
 | `pensec scan [--fail-on high]` | Passive scan; exit code 4 when the gate is reached |
-| `pensec retest` | Files changed since the last scan, re-scan, delta |
+| `pensec retest [--changed]` | Files changed since the last scan, re-scan, delta; `--changed` re-runs only the adapters whose controls the changes affect |
 | `pensec status` | Coverage, open findings, stale files, blockers, next action |
 | `pensec findings [show ID]` | List or inspect findings |
 | `pensec graph [--format mermaid]` | Domains and cross-domain edges |
+| `pensec routes` | Discovered entrypoints (HTTP, GraphQL, gRPC, workers, cron) with file and line |
 | `pensec fix-plan` | Ordered remediation steps |
 | `pensec report [--format ...]` | HTML, Markdown, JSON, SARIF 2.1.0, CSV |
 | `pensec evidence show ID \| verify` | Read or verify redacted evidence |
@@ -176,6 +191,7 @@ flowchart LR
 | `pensec scope init \| validate \| approve \| revoke` | Authorization for network tests |
 | `pensec test --profile production-observe` | Header and cookie review of approved origins |
 | `pensec doctor` | Optional scanners and their network needs |
+| `pensec benchmark` | TP, FP, FN and TN per built-in rule on the bundled corpus |
 | `pensec selftest` | Runs a hostile fixture repository through scan, reports, MCP and hooks and checks PenSec was not steered by it |
 | `pensec mcp` | Local stdio MCP server used by the plugin |
 
