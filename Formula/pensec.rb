@@ -2,28 +2,28 @@
 class Pensec < Formula
   desc "Local, evidence-based application security assessment"
   homepage "https://github.com/ratomirjovanovic/pensec"
-  version "0.1.2"
+  version "0.1.3"
   license "AGPL-3.0-only"
 
   on_macos do
     on_arm do
-      url "https://github.com/ratomirjovanovic/pensec/releases/download/v0.1.2/pensec-darwin-arm64"
-      sha256 "41a65b2b068eef137980a2a5079eddca988c1fd0da0321f53a8ceefc0d43aff6"
+      url "https://github.com/ratomirjovanovic/pensec/releases/download/v0.1.3/pensec-darwin-arm64"
+      sha256 "b60a27bb13ff9d311c70bcb9fdb17375da52b7656550cb846f2b1d20783343ab"
     end
     on_intel do
-      url "https://github.com/ratomirjovanovic/pensec/releases/download/v0.1.2/pensec-darwin-amd64"
-      sha256 "08b74a064de5b521ec29cb7a1853b8f2fb167114cb87d6dae960b2da9a9c8bb6"
+      url "https://github.com/ratomirjovanovic/pensec/releases/download/v0.1.3/pensec-darwin-amd64"
+      sha256 "3f4a07cc4b4255d5983dc16b3477c4360460935e8986a620e028ff99b00efdf8"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/ratomirjovanovic/pensec/releases/download/v0.1.2/pensec-linux-arm64"
-      sha256 "96e20c02ce278c9a99cc5612ff91e5ebed59193326709789e96e900d4c3350cf"
+      url "https://github.com/ratomirjovanovic/pensec/releases/download/v0.1.3/pensec-linux-arm64"
+      sha256 "4592e492f25384223aa5de5c1df1509e82f124dce6c3bbcaa3972ee085f4af05"
     end
     on_intel do
-      url "https://github.com/ratomirjovanovic/pensec/releases/download/v0.1.2/pensec-linux-amd64"
-      sha256 "d72d585f98c1344e336717d21780d52261a69d2003b478c0b68c21c34a5441a7"
+      url "https://github.com/ratomirjovanovic/pensec/releases/download/v0.1.3/pensec-linux-amd64"
+      sha256 "e27a9c7cb344f82a7c73b9dd3015eb447c9549dddb6d296c16055dc605fde7a7"
     end
   end
 
