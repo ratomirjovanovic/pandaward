@@ -45,6 +45,8 @@ const usage = `pensec - local, evidence-based application security assessment
 Usage: pensec <command> [flags]
 
 Assessment (local, no target network traffic):
+  assess          Run the whole local assessment in one step: init if needed, scan with progress,
+                  reports and a summary (start here)
   init            Create .pensec/ (config, private ledger) in the project root
   plan            Show applicable controls, gates and missing prerequisites
   scan            Run the passive local scan (inventory, static checks, adapters)
@@ -111,6 +113,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return hooks.Run(rest[0], stdin, stdout)
 	case "mcp":
 		err = cmdMCP(ctx, rest, stdin, stdout)
+	case "assess":
+		err = cmdAssess(ctx, rest, stdout)
 	case "init":
 		err = cmdInit(rest, stdout)
 	case "plan":
@@ -1096,7 +1100,7 @@ func cmdDoctor(ctx context.Context, args []string, w io.Writer) error {
 	} else {
 		fmt.Fprintln(w, "Project: not initialized here (run `pensec init`)")
 	}
-	fmt.Fprintln(w, "\nBuilt-in adapters (always available, offline): inventory, secrets, code, cicd, infra, supply, mobile")
+	fmt.Fprintln(w, "\nBuilt-in adapters (always available, offline): inventory, secrets, code, cicd, infra, supply, mobile, sarif-import (for files in .pensec/sarif or scan.sarif_files)")
 	fmt.Fprintln(w, "Optional scanners (never installed or downloaded by PenSec):")
 	for _, t := range tools {
 		state := "not installed"

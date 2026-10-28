@@ -67,6 +67,7 @@ func Registry() []Adapter {
 		semgrep(),
 		osvScanner(),
 		trivy(),
+		sarifAdapter{},
 	}
 }
 
