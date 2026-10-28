@@ -189,8 +189,44 @@ func (s *Store) LatestAssessment(projectID string) (*Assessment, error) {
 
 // Event appends an audit event.
 func (s *Store) Event(projectID, entity, oldState, newState, reason string) error {
-	_, err := s.DB.Exec(`INSERT INTO events(project_id,entity_id,old_state,new_state,ts,reason) VALUES(?,?,?,?,?,?)`, projectID, entity, oldState, newState, Now(), reason)
+	return event(s.DB, projectID, entity, oldState, newState, reason)
+}
+
+// execer is what *sql.DB and *sql.Tx have in common for writes.
+type execer interface {
+	Exec(query string, args ...any) (sql.Result, error)
+}
+
+func event(x execer, projectID, entity, oldState, newState, reason string) error {
+	_, err := x.Exec(`INSERT INTO events(project_id,entity_id,old_state,new_state,ts,reason) VALUES(?,?,?,?,?,?)`, projectID, entity, oldState, newState, Now(), reason)
 	return err
+}
+
+// TriageUpdate is one changed finding with the audit event that records it.
+type TriageUpdate struct {
+	Finding   model.Finding
+	OldStatus string
+	Reason    string
+}
+
+// ApplyTriage writes finding changes and their events in one transaction,
+// so a batch is recorded completely or not at all.
+func (s *Store) ApplyTriage(projectID string, us []TriageUpdate) error {
+	tx, err := s.DB.Begin()
+	if err != nil {
+		return err
+	}
+	for _, u := range us {
+		if err := upsertFinding(tx, projectID, u.Finding); err != nil {
+			tx.Rollback()
+			return err
+		}
+		if err := event(tx, projectID, u.Finding.ID, u.OldStatus, string(u.Finding.Status), u.Reason); err != nil {
+			tx.Rollback()
+			return err
+		}
+	}
+	return tx.Commit()
 }
 
 // PutAssets stores inventory assets in one transaction.
@@ -532,7 +568,11 @@ func (s *Store) NextFindingID(projectID string) (string, error) {
 
 // UpsertFinding inserts or updates a finding.
 func (s *Store) UpsertFinding(projectID string, f model.Finding) error {
-	_, err := s.DB.Exec(`INSERT INTO findings(id,project_id,fingerprint,rule_id,control_id,title,severity,confidence,status,cwe,file,start_line,end_line,message,fix,retest,collector,
+	return upsertFinding(s.DB, projectID, f)
+}
+
+func upsertFinding(x execer, projectID string, f model.Finding) error {
+	_, err := x.Exec(`INSERT INTO findings(id,project_id,fingerprint,rule_id,control_id,title,severity,confidence,status,cwe,file,start_line,end_line,message,fix,retest,collector,
 		first_seen,last_seen,last_assessment,evidence_json,reviewer,note,expires_at,stale) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(project_id,fingerprint) DO UPDATE SET rule_id=excluded.rule_id, control_id=excluded.control_id, title=excluded.title, severity=excluded.severity,
 		confidence=excluded.confidence, status=excluded.status, cwe=excluded.cwe, file=excluded.file, start_line=excluded.start_line, end_line=excluded.end_line,

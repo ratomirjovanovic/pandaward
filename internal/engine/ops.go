@@ -1,8 +1,10 @@
 package engine
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -242,19 +244,103 @@ func (e *Engine) RecordHypothesis(in HypothesisInput) (*model.Finding, error) {
 // Triage changes the disposition of a finding. Only humans should call this;
 // the plugin hooks require interactive confirmation for these commands.
 func (e *Engine) Triage(id, action, reviewer, note string, expires time.Time) (*model.Finding, error) {
-	f, err := e.St.Finding(e.ProjectID, id)
+	u, err := e.triage(id, action, reviewer, note, expires)
 	if err != nil {
 		return nil, err
 	}
+	if err := e.St.ApplyTriage(e.ProjectID, []store.TriageUpdate{u}); err != nil {
+		return nil, err
+	}
+	return &u.Finding, nil
+}
+
+// TriageDecision is one entry of a batch applied with TriageBatch.
+type TriageDecision struct {
+	FindingID string `json:"finding_id"`
+	Action    string `json:"action"`
+	Note      string `json:"note"`
+	// Expires is YYYY-MM-DD and only used by accept-risk.
+	Expires string `json:"expires,omitempty"`
+}
+
+// MaxTriageDecisions caps one batch so a confirmation prompt stays readable.
+const MaxTriageDecisions = 200
+
+// ReadTriageDecisions reads a JSON array of decisions, rejecting unknown
+// fields, oversized files and batches over MaxTriageDecisions.
+func ReadTriageDecisions(path string) ([]TriageDecision, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	if len(b) > 1<<20 {
+		return nil, fmt.Errorf("%s is larger than 1 MiB", path)
+	}
+	var ds []TriageDecision
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&ds); err != nil {
+		return nil, fmt.Errorf("%s: expected a JSON array of {finding_id, action, note, expires}: %w", path, err)
+	}
+	if len(ds) > MaxTriageDecisions {
+		return nil, fmt.Errorf("%s has %d decisions; apply at most %d at a time", path, len(ds), MaxTriageDecisions)
+	}
+	return ds, nil
+}
+
+// TriageBatch validates every decision first and then records all of them
+// in one transaction, so an invalid entry rejects the whole batch.
+func (e *Engine) TriageBatch(ds []TriageDecision, reviewer string) ([]model.Finding, error) {
+	if len(ds) == 0 {
+		return nil, errors.New("no decisions to apply")
+	}
+	seen := map[string]bool{}
+	us := make([]store.TriageUpdate, 0, len(ds))
+	for i, d := range ds {
+		if seen[d.FindingID] {
+			return nil, fmt.Errorf("decision %d: %s appears more than once", i+1, d.FindingID)
+		}
+		seen[d.FindingID] = true
+		var exp time.Time
+		if d.Expires != "" {
+			var err error
+			if exp, err = time.Parse("2006-01-02", d.Expires); err != nil {
+				return nil, fmt.Errorf("decision %d (%s): expires must be YYYY-MM-DD", i+1, d.FindingID)
+			}
+		}
+		u, err := e.triage(d.FindingID, d.Action, reviewer, d.Note, exp)
+		if err != nil {
+			return nil, fmt.Errorf("decision %d (%s): %w", i+1, d.FindingID, err)
+		}
+		us = append(us, u)
+	}
+	if err := e.St.ApplyTriage(e.ProjectID, us); err != nil {
+		return nil, err
+	}
+	out := make([]model.Finding, len(us))
+	for i, u := range us {
+		out[i] = u.Finding
+	}
+	return out, nil
+}
+
+// triage validates one decision and returns the changed finding without
+// writing it.
+func (e *Engine) triage(id, action, reviewer, note string, expires time.Time) (store.TriageUpdate, error) {
+	var u store.TriageUpdate
+	f, err := e.St.Finding(e.ProjectID, id)
+	if err != nil {
+		return u, err
+	}
 	if f == nil {
-		return nil, fmt.Errorf("finding %s not found", id)
+		return u, fmt.Errorf("finding %s not found", id)
 	}
 	reviewer = strings.TrimSpace(redact.Line(reviewer))
 	if reviewer == "" {
-		return nil, errors.New("--by <reviewer name> is required")
+		return u, errors.New("--by <reviewer name> is required")
 	}
 	if strings.TrimSpace(note) == "" {
-		return nil, errors.New("--note <justification> is required")
+		return u, errors.New("--note <justification> is required")
 	}
 	old := f.Status
 	switch action {
@@ -262,7 +348,7 @@ func (e *Engine) Triage(id, action, reviewer, note string, expires time.Time) (*
 		f.Status = model.FindingFalsePositive
 	case "accept-risk":
 		if expires.IsZero() || expires.Before(time.Now()) || expires.After(time.Now().AddDate(1, 0, 1)) {
-			return nil, errors.New("--expires must be a future date within one year (YYYY-MM-DD)")
+			return u, errors.New("--expires must be a future date within one year (YYYY-MM-DD)")
 		}
 		f.Status = model.FindingRiskAccepted
 		f.ExpiresAt = expires.UTC().Format(time.RFC3339)
@@ -274,14 +360,11 @@ func (e *Engine) Triage(id, action, reviewer, note string, expires time.Time) (*
 			f.Confidence = model.StronglySupported
 		}
 	default:
-		return nil, fmt.Errorf("unknown triage action %q", action)
+		return u, fmt.Errorf("unknown triage action %q", action)
 	}
 	f.Reviewer = reviewer
 	f.Note = strings.TrimSpace(f.Note + " [" + store.Now() + " " + reviewer + ": " + action + "] " + redact.Line(note))
-	if err := e.St.UpsertFinding(e.ProjectID, *f); err != nil {
-		return nil, err
-	}
-	return f, e.St.Event(e.ProjectID, f.ID, string(old), string(f.Status), action+" by "+reviewer)
+	return store.TriageUpdate{Finding: *f, OldStatus: string(old), Reason: action + " by " + reviewer}, nil
 }
 
 // ChangedSinceLast compares the working tree to the last assessment hashes.

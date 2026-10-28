@@ -540,7 +540,7 @@ func cmdFindings(args []string, w io.Writer) error {
 	by := fs.String("by", "", "reviewer name (triage)")
 	note := fs.String("note", "", "justification (triage)")
 	expires := fs.String("expires", "", "risk acceptance expiry YYYY-MM-DD")
-	file := fs.String("file", "", "JSON file with a hypothesis (add)")
+	file := fs.String("file", "", "JSON file with a hypothesis (add) or a list of decisions (apply)")
 	pos, err := parse(fs, args)
 	if err != nil {
 		return err
@@ -631,8 +631,25 @@ func cmdFindings(args []string, w io.Writer) error {
 		}
 		fmt.Fprintf(w, "%s is now %s / %s (reviewer %s)\n", f.ID, f.Status, f.Confidence, f.Reviewer)
 		return nil
+	case "apply":
+		if *file == "" || len(pos) != 0 {
+			return exitErr{2, "usage: pensec findings apply --file decisions.json --by <name>"}
+		}
+		ds, err := engine.ReadTriageDecisions(*file)
+		if err != nil {
+			return err
+		}
+		out, err := e.TriageBatch(ds, *by)
+		if err != nil {
+			return err
+		}
+		for _, f := range out {
+			fmt.Fprintf(w, "%s is now %s / %s (reviewer %s)\n", f.ID, f.Status, f.Confidence, f.Reviewer)
+		}
+		fmt.Fprintf(w, "Applied %d decision(s).\n", len(out))
+		return nil
 	}
-	return exitErr{2, "findings subcommands: list, show, add, false-positive, accept-risk, reopen, confirm"}
+	return exitErr{2, "findings subcommands: list, show, add, apply, false-positive, accept-risk, reopen, confirm"}
 }
 
 func cmdRoutes(args []string, w io.Writer) error {

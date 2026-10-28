@@ -3,6 +3,8 @@ package hooks
 import (
 	"bytes"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -44,6 +46,8 @@ func TestGuardDecision(t *testing.T) {
 		{"Bash", cmd(`cat .pensec/scope.yaml`), ""},
 		{"Bash", cmd(`pensec scan --json`), ""},
 		{"Bash", cmd(`pensec findings list`), ""},
+		{"Bash", cmd(`pensec findings apply --file /tmp/d.json --by me`), "ask"},
+		{"PowerShell", cmd(`& "C:\pensec\bin\pensec.exe" findings apply --file d.json --by me`), "ask"},
 		{"Write", file(`D:\proj\.pensec\private\state.db`), "deny"},
 		{"Edit", file(`/proj/.pensec/scope.yaml`), "ask"},
 		{"Edit", file(`/proj/src/app.ts`), ""},
@@ -53,5 +57,24 @@ func TestGuardDecision(t *testing.T) {
 		if got != c.want {
 			t.Errorf("%s %s: got %q want %q", c.tool, c.input, got, c.want)
 		}
+	}
+}
+
+func TestApplyPromptListsDecisions(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "d.json"), []byte(`[
+		{"finding_id":"PSEC-0003","action":"confirm","note":"reachable"},
+		{"finding_id":"PSEC-0007","action":"accept-risk","note":"internal only","expires":"2027-01-31"}]`), 0o644)
+	b, _ := json.Marshal(map[string]any{"cwd": dir, "tool_name": "Bash", "tool_input": map[string]string{"command": `pensec findings apply --file "d.json" --by me`}})
+	t.Setenv("CLAUDE_PROJECT_DIR", dir)
+	var out bytes.Buffer
+	Run("pre-tool", bytes.NewReader(b), &out)
+	var d decision
+	if err := json.Unmarshal(out.Bytes(), &d); err != nil {
+		t.Fatal(err)
+	}
+	r := d.HookSpecificOutput.PermissionDecisionReason
+	if d.HookSpecificOutput.PermissionDecision != "ask" || !strings.Contains(r, "PSEC-0003 confirm: reachable") || !strings.Contains(r, "PSEC-0007 accept-risk: internal only (until 2027-01-31)") {
+		t.Fatalf("the prompt must list every decision, got %+v", d)
 	}
 }
