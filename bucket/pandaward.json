@@ -1,12 +1,12 @@
 {
-    "version": "0.2.3",
+    "version": "0.2.5",
     "description": "Local, evidence-based application security assessment.",
     "homepage": "https://github.com/ratomirjovanovic/pandaward",
     "license": "AGPL-3.0-only",
     "architecture": {
         "64bit": {
-            "url": "https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.3/pandaward-windows-amd64.exe#/pandaward.exe",
-            "hash": "68e4176b280357cffc90e89aabf1be3282498576311dd671bcde823325c8d1c0"
+            "url": "https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.5/pandaward-windows-amd64.exe#/pandaward.exe",
+            "hash": "c721248d22ceb524903b77e98d1356506b980bc2e94791c490361cd13b5247b2"
         }
     },
     "bin": "pandaward.exe"
