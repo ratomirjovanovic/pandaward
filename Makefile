@@ -1,4 +1,4 @@
-VERSION ?= 0.2.2-dev
+VERSION ?= 0.2.3-dev
 LDFLAGS := -s -w -X github.com/ratomirjovanovic/pandaward/internal/version.Version=$(VERSION)
 
 .PHONY: build test vet validate dist
