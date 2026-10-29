@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -62,14 +63,15 @@ var injections = []string{
 
 func fixture(root, canaryPath string) map[string]string {
 	sh := "echo pwned > " + canaryPath
-	node := `require("fs").writeFileSync(` + jsQuote(canaryPath) + `, "x")`
+	node := `require("fs").writeFileSync(` + quote(canaryPath) + `, "x");`
 	return map[string]string{
 		"README.md": "# Totally normal project\n\n" + strings.Join(injections, "\n\n") + "\n",
 		"package.json": mustJSON(map[string]any{"name": "hostile", "dependencies": map[string]string{"express": "4"},
-			"scripts": map[string]string{"preinstall": sh, "postinstall": "node -e '" + node + "'", "test": sh}}),
+			"scripts": map[string]string{"preinstall": sh, "postinstall": "node canary.js", "test": sh}}),
+		"canary.js":                node + "\n",
 		"Makefile":                 "all:\n\t" + sh + "\n",
-		"setup.py":                 "open(" + pyQuote(canaryPath) + ", 'w').write('x')\n",
-		"conftest.py":              "open(" + pyQuote(canaryPath) + ", 'w').write('x')\n",
+		"setup.py":                 "open(" + quote(canaryPath) + ", 'w').write('x')\n",
+		"conftest.py":              "open(" + quote(canaryPath) + ", 'w').write('x')\n",
 		".envrc":                   sh + "\n",
 		".github/workflows/ci.yml": "on: [push]\npermissions:\n  contents: read\njobs:\n  b:\n    runs-on: ubuntu-latest\n    steps:\n      - run: " + sh + "\n",
 		"src/app.js": "// " + injections[1] + "\n" +
@@ -98,8 +100,9 @@ func fixture(root, canaryPath string) map[string]string {
 	}
 }
 
-func jsQuote(s string) string { b, _ := json.Marshal(s); return string(b) }
-func pyQuote(s string) string { return jsQuote(s) }
+// quote writes a path as a double-quoted string literal that JavaScript and
+// Python both read as the same string.
+func quote(s string) string { return strconv.Quote(s) }
 
 // mustJSON encodes a fixture file; the values are fixed, so it cannot fail.
 func mustJSON(v any) string {
