@@ -2,28 +2,28 @@
 class Pandaward < Formula
   desc "Local, evidence-based application security assessment"
   homepage "https://github.com/ratomirjovanovic/pandaward"
-  version "0.2.1"
+  version "0.2.2"
   license "AGPL-3.0-only"
 
   on_macos do
     on_arm do
-      url "https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.1/pandaward-darwin-arm64"
-      sha256 "4aa1b810d00992ea28d712fad10043f71d9ce9d519dc62202933ab7f1a7cf7ba"
+      url "https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.2/pandaward-darwin-arm64"
+      sha256 "aca2e208c209b2c665f331603b810a3e88b88d7baabe2e9afe81d889056d9a23"
     end
     on_intel do
-      url "https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.1/pandaward-darwin-amd64"
-      sha256 "666a14123063dfdca72e3192a85f6b564c4596e1a820b95805a12032602eaee3"
+      url "https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.2/pandaward-darwin-amd64"
+      sha256 "d64ca2d8d05e64a5a54f1e3d0e33a58bdfb7b4f196270df2c2fcd169a2545e48"
     end
   end
 
   on_linux do
     on_arm do
-      url "https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.1/pandaward-linux-arm64"
-      sha256 "5a95921e786926dfec2f330ea9dda3de2309dfeabf554a74c2613209805a61d5"
+      url "https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.2/pandaward-linux-arm64"
+      sha256 "ceb8a557607edada7f2bd174fbc57efc6b6bae172c66f0b10d2a5acd2b3690b6"
     end
     on_intel do
-      url "https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.1/pandaward-linux-amd64"
-      sha256 "fe7c1dc906b486fce8d43883fd6ff425dcb92f4182f36eb7bae9ad133b978791"
+      url "https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.2/pandaward-linux-amd64"
+      sha256 "d048b4be18c3d9590d9515558ff7eba540eef1380b230cd1be3823654cb12065"
     end
   end
 
