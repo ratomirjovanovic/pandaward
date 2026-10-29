@@ -8,9 +8,15 @@ Pandaward is a security tool, so weaknesses in Pandaward itself are taken seriou
 - a crashed or missing adapter producing a PASS
 - evidence that can be modified without failing integrity verification
 
+## Supported versions
+
+Only the latest release gets security fixes. Upgrade with `brew upgrade pandaward`, `scoop update pandaward` or a new binary from the [releases page](https://github.com/ratomirjovanovic/pandaward/releases).
+
 ## Reporting
 
-Please report privately through GitHub's private vulnerability reporting on this repository. Do not open a public issue for a vulnerability. Include the Pandaward version (`pandaward version`), operating system and a minimal reproduction using synthetic data only.
+Please report privately through [GitHub's private vulnerability reporting](https://github.com/ratomirjovanovic/pandaward/security/advisories/new). Do not open a public issue for a vulnerability. Include the Pandaward version (`pandaward version`), operating system and a minimal reproduction using synthetic data only.
+
+You get a first answer within 7 days. A confirmed vulnerability is fixed in a new release and published as a [security advisory](https://github.com/ratomirjovanovic/pandaward/security/advisories) with credit to the reporter, unless they ask not to be named.
 
 ## Not independently audited
 

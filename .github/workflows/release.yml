@@ -54,6 +54,15 @@ jobs:
           GOTOOLCHAIN: local
         run: sh packaging/build-release.sh "${GITHUB_REF_NAME#v}" dist
 
+      # The release binaries themselves, with the toolchain that built them.
+      - name: govulncheck on the release binaries
+        run: |
+          for b in dist/pandaward-*; do
+            case "$b" in *.sha256|*.sig|*.pem|*.json|*.txt|*.zip|*.mcpb) continue ;; esac
+            echo "== $b"
+            go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 -mode binary "$b"
+          done
+
       - name: Check the build is reproducible
         env:
           GOTOOLCHAIN: local

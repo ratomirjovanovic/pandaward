@@ -1,7 +1,7 @@
 # pre-commit hooks for Pandaward. Run `pandaward init` once in the project first.
 # The scan reads the working tree, not only the staged files.
 
-# Builds Pandaward from this repository at the pinned rev (needs Go 1.23+).
+# Builds Pandaward from this repository at the pinned rev (needs Go 1.26+).
 - id: pandaward
   name: Pandaward passive scan
   description: Fail the commit when open high or critical findings exist.
