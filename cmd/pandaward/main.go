@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
 	"sort"
@@ -94,6 +95,7 @@ type exitErr struct {
 func (e exitErr) Error() string { return e.msg }
 
 func main() {
+	telemetry.Spawn = spawnTelemetrySend
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	code := run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr)
@@ -172,7 +174,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	if cmd != "mcp" && cmd != "telemetry" {
 		root, _ := engine.FindRoot(rootArg(rest))
 		telemetry.Record("cli", cmd, root)
-		telemetry.Flush(ctx)
+		telemetry.FlushInBackground()
 	}
 	if err != nil {
 		var ee exitErr
@@ -1523,6 +1525,21 @@ func cmdFeedback(args []string, w io.Writer) error {
 	return nil
 }
 
+// spawnTelemetrySend runs `pandaward telemetry send` as a separate process
+// that outlives this one, with no input or output, so the command that
+// triggered it finishes without waiting for the collector.
+func spawnTelemetrySend() {
+	exe, err := os.Executable()
+	if err != nil {
+		return
+	}
+	cmd := exec.Command(exe, "telemetry", "send")
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
+	if cmd.Start() == nil {
+		_ = cmd.Process.Release()
+	}
+}
+
 // rootArg returns the --root value of a command line, or "." when there is
 // none, so telemetry can tell which project a command ran on.
 func rootArg(args []string) string {
@@ -1557,6 +1574,8 @@ func cmdTelemetry(args []string, w io.Writer) error {
 		}
 		if telemetry.Endpoint == "" {
 			fmt.Fprintln(w, "This build has no collector address, so nothing is ever sent.")
+		} else {
+			fmt.Fprintln(w, "Collector: "+telemetry.Endpoint)
 		}
 		fmt.Fprintln(w, "`pandaward telemetry show` prints exactly what would be sent; docs/TELEMETRY.md lists every field.")
 	case "on":
@@ -1582,6 +1601,9 @@ func cmdTelemetry(args []string, w io.Writer) error {
 			return err
 		}
 		fmt.Fprintln(w, "Telemetry off. Unsent counters and the install ID were deleted.")
+	case "send":
+		// Started by FlushInBackground in its own process; not for people.
+		telemetry.Flush(context.Background())
 	case "show":
 		s := telemetry.Load()
 		p, _ := telemetry.Pending(s)

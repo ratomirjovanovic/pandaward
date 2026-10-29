@@ -161,3 +161,11 @@ func TestNoEndpointSendsNothing(t *testing.T) {
 		t.Error("Flush did something without a collector address")
 	}
 }
+
+// The built-in collector address must stay HTTPS on the project's domain,
+// so a typo or a downgrade fails here rather than sending data elsewhere.
+func TestEndpointIsTheProjectCollector(t *testing.T) {
+	if Endpoint != "https://telemetry.pandaward.dev/api/v1/usage" {
+		t.Fatalf("Endpoint = %q", Endpoint)
+	}
+}
