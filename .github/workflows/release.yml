@@ -93,7 +93,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release create "$GITHUB_REF_NAME" dist/* --title "PandaWard $GITHUB_REF_NAME" --generate-notes --verify-tag \
-            $(case "$GITHUB_REF_NAME" in *-*|v0.*) echo --prerelease ;; esac)
+            $(case "$GITHUB_REF_NAME" in *-*) echo --prerelease ;; *) echo --latest ;; esac)
 
       - name: Update plugin branches
         run: |
