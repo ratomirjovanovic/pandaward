@@ -41,7 +41,7 @@
       <div class="card"><h3>Secrets stay masked</h3><p>Values are redacted before they are stored, printed, reported or returned to a model. <code>.env</code> and key files are recorded by name only.</p></div>
       <div class="card"><h3>No AI-confirmed findings</h3><p>Agents are read-only and can only record hypotheses. PandaWard reads the cited lines itself, so a model cannot supply evidence.</p></div>
       <div class="card"><h3>State that survives</h3><p>A local SQLite ledger keeps assessments, findings and evidence across sessions, compaction and restarts.</p></div>
-      <div class="card"><h3>Private</h3><p>No account, no telemetry, no cloud backend. AGPL-3.0 open source.</p></div>
+      <div class="card"><h3>Private</h3><p>No account and no cloud backend. Usage telemetry is off unless you turn it on yourself, and <code>pandaward telemetry show</code> prints every byte it would send (<a href="https://github.com/ratomirjovanovic/pandaward/blob/main/docs/TELEMETRY.md">details</a>). AGPL-3.0 open source.</p></div>
     </div>
   </section>
 
@@ -103,7 +103,7 @@ brew install ratomirjovanovic/pandaward/pandaward
 scoop bucket add pandaward https://github.com/ratomirjovanovic/pandaward
 scoop install pandaward/pandaward
 
-</span># or a release binary, or go install (Go 1.23+)
+</span># or a release binary, or go install (Go 1.26+)
 
 cd your-project
 pandaward assess</pre>
