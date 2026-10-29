@@ -28,6 +28,13 @@ jobs:
       - run: go vet ./...
       - run: go test ./...
       - run: go build ./cmd/pandaward
+      # Known vulnerabilities that the code reaches, in dependencies and in
+      # the standard library of the Go version from go.mod. Fails the build.
+      - name: govulncheck
+        if: runner.os == 'Linux'
+        run: |
+          go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+          go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 -mode binary pandaward
       # Release-blocking: the hostile-repository suite must pass on every OS.
       - name: Self-test against a hostile repository
         run: go run ./cmd/pandaward selftest

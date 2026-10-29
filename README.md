@@ -13,7 +13,7 @@
   <a href="https://github.com/ratomirjovanovic/pandaward/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ratomirjovanovic/pandaward/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/ratomirjovanovic/pandaward"><img alt="OpenSSF Scorecard" src="https://api.scorecard.dev/projects/github.com/ratomirjovanovic/pandaward/badge"></a>
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a>
-  <img alt="Go 1.23+" src="https://img.shields.io/badge/go-1.23%2B-00ADD8">
+  <img alt="Go 1.26+" src="https://img.shields.io/badge/go-1.26%2B-00ADD8">
   <img alt="Status: alpha" src="https://img.shields.io/badge/status-alpha-orange">
 </p>
 
@@ -132,7 +132,7 @@ Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/downloa
 (Get-FileHash pandaward.exe).Hash   # compare with the line in SHA256SUMS
 ```
 
-Or install with Go 1.23 or later: `go install github.com/ratomirjovanovic/pandaward/cmd/pandaward@latest`. The binary has no runtime dependencies.
+Or install with Go 1.26 or later: `go install github.com/ratomirjovanovic/pandaward/cmd/pandaward@latest`. The binary has no runtime dependencies.
 
 Update with `brew upgrade pandaward` or `scoop update pandaward`; for a downloaded binary, replace the file with the new release. Remove with `brew uninstall pandaward` or `scoop uninstall pandaward`, or delete the binary. `pandaward version` shows what you have.
 
@@ -312,7 +312,7 @@ repos:
   - repo: https://github.com/ratomirjovanovic/pandaward
     rev: v0.2.1
     hooks:
-      - id: pandaward-system   # uses the pandaward on your PATH; use id: pandaward to build it with Go 1.23+
+      - id: pandaward-system   # uses the pandaward on your PATH; use id: pandaward to build it with Go 1.26+
 ```
 
 The hook runs `pandaward scan --quiet --fail-on high` and blocks the commit when open high or critical findings exist. It scans the working tree, not only the staged files.
