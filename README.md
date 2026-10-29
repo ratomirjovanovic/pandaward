@@ -1,8 +1,8 @@
 <p align="center">
-  <img src=".claude-plugin/icon.png" alt="Pandaward" width="120" height="120">
+  <img src=".claude-plugin/icon.png" alt="PandaWard" width="120" height="120">
 </p>
 
-<h1 align="center">Pandaward</h1>
+<h1 align="center">PandaWard</h1>
 
 <p align="center">
   <b>Local, evidence-based application security assessment for your own code.</b><br>
@@ -13,7 +13,7 @@
   <a href="https://github.com/ratomirjovanovic/pandaward/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/ratomirjovanovic/pandaward/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://scorecard.dev/viewer/?uri=github.com/ratomirjovanovic/pandaward"><img alt="OpenSSF Scorecard" src="https://api.scorecard.dev/projects/github.com/ratomirjovanovic/pandaward/badge"></a>
   <a href="LICENSE"><img alt="License: AGPL-3.0" src="https://img.shields.io/badge/license-AGPL--3.0-blue"></a>
-  <img alt="Go 1.23+" src="https://img.shields.io/badge/go-1.23%2B-00ADD8">
+  <img alt="Go 1.26+" src="https://img.shields.io/badge/go-1.26%2B-00ADD8">
   <img alt="Status: alpha" src="https://img.shields.io/badge/status-alpha-orange">
 </p>
 
@@ -26,7 +26,7 @@
 
 ---
 
-Most scanners print a list of alerts and stop. Pandaward keeps a **ledger**: every control it could check, how it checked it, the redacted evidence, and every control it could *not* decide. Findings are fingerprinted across runs, so a fix becomes `REMEDIATED` only when the check runs again and no longer sees the problem.
+Most scanners print a list of alerts and stop. PandaWard keeps a **ledger**: every control it could check, how it checked it, the redacted evidence, and every control it could *not* decide. Findings are fingerprinted across runs, so a fix becomes `REMEDIATED` only when the check runs again and no longer sees the problem.
 
 <p align="center">
   <img src="docs/media/demo.svg" width="860" alt="Terminal session on the bundled demo project: pandaward init detects the stack, pandaward scan reports which adapters ran and which are BLOCKED, 38% decisive coverage and 33 open findings, then findings, the cross-domain graph and an ordered fix plan">
@@ -37,13 +37,13 @@ Most scanners print a list of alerts and stop. Pandaward keeps a **ledger**: eve
   <a href="https://ratomirjovanovic.github.io/pandaward/demo/">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="docs/media/findings-dark.png">
-      <img src="docs/media/findings-light.png" width="860" alt="Pandaward findings explorer for the bundled acme-shop fixture: 20 confirmed findings, 11 suspected, 38% decisive coverage, with a critical pull_request_target finding and hardcoded secrets at the top">
+      <img src="docs/media/findings-light.png" width="860" alt="PandaWard findings explorer for the bundled acme-shop fixture: 20 confirmed findings, 11 suspected, 38% decisive coverage, with a critical pull_request_target finding and hardcoded secrets at the top">
     </picture>
   </a>
   <br><sub>Findings from a real scan of the bundled vulnerable fixture. <a href="https://ratomirjovanovic.github.io/pandaward/demo/">Open the live demo</a> for the terminal replay and the full report.</sub>
 </p>
 
-## Why Pandaward
+## Why PandaWard
 
 | | |
 |---|---|
@@ -54,9 +54,9 @@ Most scanners print a list of alerts and stop. Pandaward keeps a **ledger**: eve
 | **Secrets never leak** | Values are masked before they are stored, printed, reported or returned to a model. `.env` and key files are recorded by name only. |
 | **Remembers across sessions** | State lives in a local SQLite ledger, so context compaction or a restart does not lose results. |
 | **Cross-domain thinking** | Links such as *identity -> authorization* (`BC1`) or *webhook -> payment state* (`FG1`) are created from shared assets in your code and tracked separately. |
-| **Private** | No account, no telemetry, no cloud backend. |
+| **Private** | No account and no cloud backend. Usage telemetry is off unless you turn it on yourself, and `pandaward telemetry show` prints every byte it would send ([details](docs/TELEMETRY.md)). |
 
-> **Formerly PenSec.** The project was renamed to Pandaward in 0.2.0. If you used PenSec, see [Moving from PenSec](#moving-from-pensec).
+> **Formerly PenSec.** The project was renamed to PandaWard in 0.2.0. If you used PenSec, see [Moving from PenSec](#moving-from-pensec).
 
 ## Quick start
 
@@ -79,7 +79,7 @@ claude plugin update pandaward-windows@pandaward   # or pandaward@pandaward on m
 
 Then restart Claude Code. `/plugin` shows the installed version.
 
-**Uninstalling.** `claude plugin uninstall pandaward-windows@pandaward` (or `pandaward@pandaward`), then `claude plugin marketplace remove pandaward`. Results stay in each project's `.pandaward/` directory until you delete it. The [uninstall guide](https://github.com/ratomirjovanovic/pandaward/wiki/Installation#uninstalling) covers the CLI packages and every file Pandaward creates.
+**Uninstalling.** `claude plugin uninstall pandaward-windows@pandaward` (or `pandaward@pandaward`), then `claude plugin marketplace remove pandaward`. Results stay in each project's `.pandaward/` directory until you delete it. The [uninstall guide](https://github.com/ratomirjovanovic/pandaward/wiki/Installation#uninstalling) covers the CLI packages and every file PandaWard creates.
 
 Then, in your project, ask Claude to check its security, or run:
 
@@ -104,7 +104,7 @@ That is the only command. Claude scans the project, has specialist reviewers loo
 
 </details>
 
-> The plugin installs prebuilt, checksum-verified binaries from the `plugin` and `plugin-windows` branches, which the release workflow publishes on every version tag ([how to verify them](docs/VERIFYING.md)). To use Pandaward without Claude Code, see below.
+> The plugin installs prebuilt, checksum-verified binaries from the `plugin` and `plugin-windows` branches, which the release workflow publishes on every version tag ([how to verify them](docs/VERIFYING.md)). To use PandaWard without Claude Code, see below.
 
 ### As a CLI
 
@@ -118,7 +118,7 @@ scoop bucket add pandaward https://github.com/ratomirjovanovic/pandaward; scoop 
 Or download a binary from the [releases page](https://github.com/ratomirjovanovic/pandaward/releases) (Linux and macOS on amd64 and arm64, Windows on amd64). For example on Linux:
 
 ```sh
-v=v0.2.1
+v=v0.2.2
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/pandaward-linux-amd64
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/SHA256SUMS
 sha256sum --ignore-missing -c SHA256SUMS
@@ -128,11 +128,11 @@ chmod +x pandaward-linux-amd64 && sudo mv pandaward-linux-amd64 /usr/local/bin/p
 On Windows (PowerShell), save `pandaward-windows-amd64.exe` as `pandaward.exe` in a folder on your `PATH`:
 
 ```powershell
-Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.1/pandaward-windows-amd64.exe -OutFile pandaward.exe
+Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.2/pandaward-windows-amd64.exe -OutFile pandaward.exe
 (Get-FileHash pandaward.exe).Hash   # compare with the line in SHA256SUMS
 ```
 
-Or install with Go 1.23 or later: `go install github.com/ratomirjovanovic/pandaward/cmd/pandaward@latest`. The binary has no runtime dependencies.
+Or install with Go 1.26 or later: `go install github.com/ratomirjovanovic/pandaward/cmd/pandaward@latest`. The binary has no runtime dependencies.
 
 Update with `brew upgrade pandaward` or `scoop update pandaward`; for a downloaded binary, replace the file with the new release. Remove with `brew uninstall pandaward` or `scoop uninstall pandaward`, or delete the binary. `pandaward version` shows what you have.
 
@@ -168,12 +168,12 @@ flowchart LR
 
 1. **Inventory** walks the repository read-only and records files, routes, manifests, workflows, IaC, mobile manifests and AI/MCP usage.
 2. **Plan** maps the control catalog (domains A to R) onto what was found. Controls without matching assets become `NOT_APPLICABLE` with a reason you can review.
-3. **Adapters** run. Built-in checks are offline and always available; gitleaks, semgrep, osv-scanner, trivy and apktool are used only if you installed them. apktool decodes `.apk` files found in the project (resources only, never the app's code) so the manifest checks also run on what you ship (K-005). When semgrep is installed it runs Pandaward's bundled offline rules (see [`rules/README.md`](rules/README.md)) plus any rules you configure. SARIF 2.1.0 files from analyzers you ran yourself (CodeQL or other SAST tools) are imported from `.pandaward/sarif/*.sarif` and any paths listed in `scan.sarif_files`; Pandaward never runs those tools. Imported results are hypotheses under control R-002, with snippets read and redacted from your files rather than taken from the SARIF.
+3. **Adapters** run. Built-in checks are offline and always available; gitleaks, semgrep, osv-scanner, trivy and apktool are used only if you installed them. apktool decodes `.apk` files found in the project (resources only, never the app's code) so the manifest checks also run on what you ship (K-005). If you run [MobSF](https://github.com/MobSF/Mobile-Security-Framework-MobSF) yourself on this machine, set `scan.mobsf_url` (for example `http://127.0.0.1:8000`) and export its REST API key as `MOBSF_API_KEY`; PandaWard uploads the `.apk` and `.ipa` files it finds to that server, runs the static scan and reports MobSF's high and warning items as hypotheses under K-006 (APK) and L-005 (IPA). Code findings that MobSF reports only in bundled library code, outside the app's own package namespace, are listed for review instead. Only loopback addresses are accepted, proxies and redirects are ignored, and the key never appears in evidence, logs or reports. The adapter is tested against MobSF 4.5.3. When semgrep is installed it runs PandaWard's bundled offline rules (see [`rules/README.md`](rules/README.md)) plus any rules you configure. SARIF 2.1.0 files from analyzers you ran yourself (CodeQL or other SAST tools) are imported from `.pandaward/sarif/*.sarif` and any paths listed in `scan.sarif_files`; PandaWard never runs those tools. Imported results are hypotheses under control R-002, with snippets read and redacted from your files rather than taken from the SARIF.
 4. **Findings** are redacted, fingerprinted and linked to evidence. Repeated runs update their lifecycle: `OPEN`, `REMEDIATED`, `REOPENED`, `FALSE_POSITIVE`, `RISK_ACCEPTED`.
 5. **Edges** between domains are created only from shared assets and get their status from the linked controls.
 6. **Reports** show confirmed findings, suspected signals, coverage by domain, every undecided control and the evidence index.
 
-In Claude Code, hooks keep the ledger current without any command. Edited files are marked stale as they change, and when Claude finishes a turn that edited files, Pandaward runs a changed-only passive retest (bounded at 40 seconds) and hands any new or reopened findings back to Claude, which explains them and offers a fix. A clean retest stays silent; one that runs out of time or fails says so instead of claiming anything is fixed. Set `hooks.auto_retest: false` in `.pandaward/config.yaml` to turn it off.
+In Claude Code, hooks keep the ledger current without any command. Edited files are marked stale as they change, and when Claude finishes a turn that edited files, PandaWard runs a changed-only passive retest (bounded at 40 seconds) and hands any new or reopened findings back to Claude, which explains them and offers a fix. A clean retest stays silent; one that runs out of time or fails says so instead of claiming anything is fixed. Set `hooks.auto_retest: false` in `.pandaward/config.yaml` to turn it off.
 
 ## What it checks
 
@@ -189,7 +189,7 @@ In Claude Code, hooks keep the ledger current without any command. Edited files 
 | H Web | raw HTML sinks, CORS wildcard with credentials | security headers (`production-observe`) |
 | I Supply chain | missing lockfiles, npm install scripts, unpinned Python requirements | advisories via osv-scanner |
 | J Infrastructure | Dockerfile root and unpinned base, privileged containers, public storage and admin ports in Terraform | trivy |
-| K, L Mobile | Android manifest flags and exported components, credentials in SharedPreferences, world-readable storage; iOS ATS, `get-task-allow` in release entitlements, Keychain accessibility and credentials in UserDefaults | built APKs via apktool; plain credentials in app storage on an emulator or simulator (`local-runtime`) |
+| K, L Mobile | Android manifest flags and exported components, credentials in SharedPreferences, world-readable storage; iOS ATS, `get-task-allow` in release entitlements, Keychain accessibility and credentials in UserDefaults | built APKs via apktool; built APKs and IPAs via a local MobSF server; plain credentials in app storage on an emulator or simulator (`local-runtime`) |
 | N CI/CD | unpinned actions, script injection, `pull_request_target` checkout, token permissions | |
 | O Observability | credentials in log calls | alerting review |
 | P AI and MCP | model output reaching exec sinks, MCP server pinning and inline credentials | prompt-injection tests |
@@ -197,7 +197,7 @@ In Claude Code, hooks keep the ledger current without any command. Edited files 
 
 `pandaward capabilities` prints the full catalog with each adapter's maturity. All adapters are currently `implemented_unvalidated`. The optional tool adapters are exercised in CI on every pull request against gitleaks 8.30.1, semgrep 1.182.0, osv-scanner 2.7.0 and trivy 0.76.1: the job scans the bundled vulnerable fixture and fails when an adapter does not complete or its parser misses the expected findings. Other versions may work but are not checked.
 
-`pandaward benchmark` runs every built-in rule against a versioned corpus of vulnerable and safe cases and prints TP, FP, FN, TN, precision and recall per rule. CI fails when a rule misses a vulnerable case or fires on a safe one, and each release attaches `benchmark.json`. A rule counts as `implemented_and_benchmarked` only with precision and recall of at least 0.95 on at least 3 vulnerable and 3 safe cases. Today every rule has one of each, so none qualifies yet. The corpus is Pandaward's own, so the numbers describe these cases, not real-world accuracy. On the public OWASP Benchmark for Java the built-in rules score 0.00: they match single lines and do not follow data flow, so they find none of its test cases (and raise no false alarms). Use Semgrep or another data flow aware analyzer through Pandaward for Java injection findings; [docs/BENCHMARKS.md](docs/BENCHMARKS.md) has the numbers and how to reproduce them.
+`pandaward benchmark` runs every built-in rule against a versioned corpus of vulnerable and safe cases and prints TP, FP, FN, TN, precision and recall per rule. CI fails when a rule misses a vulnerable case or fires on a safe one, and each release attaches `benchmark.json`. A rule counts as `implemented_and_benchmarked` only with precision and recall of at least 0.95 on at least 3 vulnerable and 3 safe cases. Today every rule has one of each, so none qualifies yet. The corpus is PandaWard's own, so the numbers describe these cases, not real-world accuracy. On the public OWASP Benchmark for Java the built-in rules score 0.00: they match single lines and do not follow data flow, so they find none of its test cases (and raise no false alarms). Use Semgrep or another data flow aware analyzer through PandaWard for Java injection findings; [docs/BENCHMARKS.md](docs/BENCHMARKS.md) has the numbers and how to reproduce them.
 
 ## Commands
 
@@ -225,8 +225,9 @@ In Claude Code, hooks keep the ledger current without any command. Edited files 
 | `pandaward feedback false-positive ID \| false-negative \| summary` | Prepare a report about a wrong or missed finding; prints a prefilled issue link, sends nothing |
 | `pandaward doctor` | Optional scanners and their network needs |
 | `pandaward benchmark` | TP, FP, FN and TN per built-in rule on the bundled corpus |
-| `pandaward selftest` | Runs a hostile fixture repository (instructions in comments, README, OpenAPI, MCP descriptions and scanner output) through scan, reports, MCP and hooks and checks Pandaward was not steered by it; CI and every release run it and fail on any case |
+| `pandaward selftest` | Runs a hostile fixture repository (instructions in comments, README, OpenAPI, MCP descriptions and scanner output) through scan, reports, MCP and hooks and checks PandaWard was not steered by it; CI and every release run it and fail on any case |
 | `pandaward mcp` | Local stdio MCP server used by the plugin |
+| `pandaward telemetry [on \| off \| show]` | Opt-in usage counters, off by default; `on` needs an interactive terminal ([what is sent](docs/TELEMETRY.md)) |
 
 Human decisions are explicit and recorded:
 
@@ -252,7 +253,7 @@ pandaward test --profile staging-active    # staging or local targets, needs ZAP
 
 The engine sends at most `max_requests_total` GET requests to the listed origins at the configured rate, never follows redirects, and checks every resolved address at connection time. Loopback, private and link-local addresses are refused unless the manifest explicitly allows a local fixture, and cloud metadata addresses are always refused. Editing `scope.yaml` invalidates the approval. Approvals are also bound to a per-user key kept outside the project (`approval.key` in your user config directory), so a scope file or ledger that arrives with a repository never counts as approved.
 
-`staging-active` runs your installed [ZAP](https://www.zaproxy.org/) (it needs Java 17+; Pandaward never installs it) through its automation framework: a spider and the passive scan decide M-001, and with `zap.active_scan: true` in the manifest the active scan also decides D-005 (injection). ZAP is chained to a Pandaward proxy on loopback that terminates TLS and sends each request through the same scope guard, so origins, excluded paths, allowed methods, the request budget, the rate limit and the address checks apply to every ZAP request. The guard also stops after three consecutive 429 or 5xx answers. A ZAP run that fails is `ERROR`, a run cut short by the budget or the guard is `INCONCLUSIVE`, and targets marked `environment: production` are refused. Set `runtime.zap_path` in `.pandaward/config.yaml` when ZAP is not on `PATH` or in its default install location.
+`staging-active` runs your installed [ZAP](https://www.zaproxy.org/) (it needs Java 17+; PandaWard never installs it) through its automation framework: a spider and the passive scan decide M-001, and with `zap.active_scan: true` in the manifest the active scan also decides D-005 (injection). ZAP is chained to a PandaWard proxy on loopback that terminates TLS and sends each request through the same scope guard, so origins, excluded paths, allowed methods, the request budget, the rate limit and the address checks apply to every ZAP request. The guard also stops after three consecutive 429 or 5xx answers. A ZAP run that fails is `ERROR`, a run cut short by the budget or the guard is `INCONCLUSIVE`, and targets marked `environment: production` are refused. Set `runtime.zap_path` in `.pandaward/config.yaml` when ZAP is not on `PATH` or in its default install location.
 
 `staging-active` also runs the manifest's `authorization_checks` before ZAP. You list test identities (name, tenant, the header that carries the credential and the environment variable that holds it; the credential itself never goes in the file) and read-only requests to objects or functions that exist for the test, each with the identities allowed to reach it:
 
@@ -280,7 +281,7 @@ runtime:
   ios_bundle_id: com.acme.shop        # test build in a booted simulator (macOS)
 ```
 
-On Android it uses `adb` with an `emulator-*` serial that also reports `ro.kernel.qemu=1`, and reads the app's `shared_prefs` through `run-as`, which only works for debuggable builds. On iOS it uses `xcrun simctl get_app_container booted` and only accepts a container inside CoreSimulator, then reads the app's preferences plist. A non-empty value under a credential-like key (token, password, session and similar) is a finding for K-003 or L-002; Pandaward records the key name and never the value. Real devices are refused, and a missing emulator, simulator, tool or setting makes the control `BLOCKED` with the reason. Transport security and Keychain accessibility are not tested at runtime.
+On Android it uses `adb` with an `emulator-*` serial that also reports `ro.kernel.qemu=1`, and reads the app's `shared_prefs` through `run-as`, which only works for debuggable builds. On iOS it uses `xcrun simctl get_app_container booted` and only accepts a container inside CoreSimulator, then reads the app's preferences plist. A non-empty value under a credential-like key (token, password, session and similar) is a finding for K-003 or L-002; PandaWard records the key name and never the value. Real devices are refused, and a missing emulator, simulator, tool or setting makes the control `BLOCKED` with the reason. Transport security and Keychain accessibility are not tested at runtime.
 
 ## In CI
 
@@ -310,20 +311,20 @@ With [pre-commit](https://pre-commit.com), add this to `.pre-commit-config.yaml`
 ```yaml
 repos:
   - repo: https://github.com/ratomirjovanovic/pandaward
-    rev: v0.2.1
+    rev: v0.2.2
     hooks:
-      - id: pandaward-system   # uses the pandaward on your PATH; use id: pandaward to build it with Go 1.23+
+      - id: pandaward-system   # uses the pandaward on your PATH; use id: pandaward to build it with Go 1.26+
 ```
 
 The hook runs `pandaward scan --quiet --fail-on high` and blocks the commit when open high or critical findings exist. It scans the working tree, not only the staged files.
 
-## What Pandaward will not tell you
+## What PandaWard will not tell you
 
 - That your application is secure. No tool can prove the absence of vulnerabilities.
 - Anything about controls it reports as `BLOCKED`, `UNSUPPORTED`, `SUSPECTED`, `INCONCLUSIVE`, `ERROR` or `STALE`.
 - Results from runtime tests that are not implemented yet: login, reset and MFA flows (B-003), API contract versus runtime (G-002) and prompt-injection tests against an LLM endpoint (P-003) are reported as `UNSUPPORTED` today.
 
-A Pandaward report is an automated technical assessment. It is not a certification, an attestation, a legal opinion or an independently signed penetration test.
+A PandaWard report is an automated technical assessment. It is not a certification, an attestation, a legal opinion or an independently signed penetration test.
 
 ## Roadmap
 
@@ -333,14 +334,14 @@ A Pandaward report is an automated technical assessment. It is not a certificati
 | M1 Public alpha | built-in adapters, optional tool adapters, bundled Semgrep rules, edges, HTML/JSON/SARIF, plugin, signed reproducible releases | done (v0.1.1) |
 | M2 Context-safe beta | per-domain invalidation, targeted retest, evidence bundles, delta reports, hostile-repository suite | done |
 | M3 Runtime beta | staging profile with role and tenant fixtures, ZAP adapter | done |
-| M4 Mobile and AI | apktool and emulator or simulator storage checks, release-blocking hostile-repository suite; MobSF and LLM endpoint tests | in progress |
+| M4 Mobile and AI | apktool and emulator or simulator storage checks, release-blocking hostile-repository suite, MobSF adapter; LLM endpoint tests | in progress |
 | 1.0 | frozen schemas ([done](docs/SCHEMAS.md)), benchmark corpus with at least 3 vulnerable and 3 safe cases per rule, external review | in progress |
 
 See the [issues](https://github.com/ratomirjovanovic/pandaward/issues) for details.
 
 ## Moving from PenSec
 
-Pandaward 0.2.0 is PenSec renamed. Your results carry over:
+PandaWard 0.2.0 is PenSec renamed. Your results carry over:
 
 - The first `pandaward` command in a project moves `.pensec/` to `.pandaward/` with its ledger, evidence, reports, config and scope manifest. Commit the renamed files if you had committed `.pensec/config.yaml` or `scope.yaml`.
 - Approvals stay valid: the approval key is taken over from the old `pensec` folder in your user config directory.
@@ -364,12 +365,12 @@ Tell us, and the rule gets fixed. `pandaward feedback false-positive <PW-ID>` or
 
 ## Contributing and security
 
-Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md). Please report vulnerabilities in Pandaward itself privately as described in [SECURITY.md](SECURITY.md).
+Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md). Please report vulnerabilities in PandaWard itself privately as described in [SECURITY.md](SECURITY.md).
 
 ## License
 
-Pandaward is free and open source software under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0-only).
+PandaWard is free and open source software under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0-only).
 
-You may use, study, modify and share it, including inside companies. If you distribute Pandaward or a modified version, or let others use a modified version over a network (for example as a hosted scanning service), you must publish the complete corresponding source code under the same license. Commercial licensing for uses that cannot meet these terms is available from the copyright holder.
+You may use, study, modify and share it, including inside companies. If you distribute PandaWard or a modified version, or let others use a modified version over a network (for example as a hosted scanning service), you must publish the complete corresponding source code under the same license. Commercial licensing for uses that cannot meet these terms is available from the copyright holder.
 
-Third-party scanners that Pandaward can call keep their own licenses. The license does not apply to the projects you assess or to the reports Pandaward produces about them.
+Third-party scanners that PandaWard can call keep their own licenses. The license does not apply to the projects you assess or to the reports PandaWard produces about them.

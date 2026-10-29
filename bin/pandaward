@@ -1,5 +1,5 @@
 #!/bin/sh
-# Pandaward launcher for macOS and Linux plugin installs. It selects the binary
+# PandaWard launcher for macOS and Linux plugin installs. It selects the binary
 # for this platform from the plugin's bin/ directory, verifies it against
 # SHA256SUMS, and refuses to run anything that does not match.
 #
