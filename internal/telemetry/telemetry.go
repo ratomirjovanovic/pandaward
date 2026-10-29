@@ -28,13 +28,18 @@ import (
 	"github.com/ratomirjovanovic/pandaward/internal/version"
 )
 
-// Endpoint is the collector URL. While it is empty nothing is ever sent;
-// counters are still kept for users who turned telemetry on, and `show`
-// prints them.
-var Endpoint = ""
+// Endpoint is the collector URL (github.com/ratomirjovanovic/pandaward-telemetry
+// is its source). Tests point it at a local server; an empty value sends
+// nothing.
+var Endpoint = "https://telemetry.pandaward.dev/api/v1/usage"
 
 // SchemaVersion of the payload. Bump on any change to its fields.
 const SchemaVersion = 1
+
+// SendTimeout bounds one send. A collector that has been idle needs a few
+// seconds to start, and the send runs off the command's path, so it can
+// afford to wait.
+const SendTimeout = 15 * time.Second
 
 // keepDays bounds how many unsent days are kept when the collector cannot
 // be reached.
@@ -239,18 +244,11 @@ func Pending(s State) (Payload, bool) {
 // the collector accepted them. It returns quickly: the request has a short
 // timeout and every failure is ignored.
 func Flush(ctx context.Context) {
-	if ForcedOff() || Endpoint == "" {
-		return
-	}
-	s := Load()
-	today := now().Format("2006-01-02")
-	if !s.Enabled || s.LastSent == today {
-		return
-	}
-	p, ok := Pending(s)
+	s, p, ok := due()
 	if !ok {
 		return
 	}
+	today := now().Format("2006-01-02")
 	b, err := json.Marshal(p)
 	if err != nil {
 		return
@@ -261,7 +259,7 @@ func Flush(ctx context.Context) {
 	if save(s) != nil {
 		return
 	}
-	cctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	cctx, cancel := context.WithTimeout(ctx, SendTimeout)
 	defer cancel()
 	req, err := http.NewRequestWithContext(cctx, http.MethodPost, Endpoint, bytes.NewReader(b))
 	if err != nil {
@@ -286,6 +284,33 @@ func Flush(ctx context.Context) {
 		delete(s.Days, d.Day)
 	}
 	_ = save(s)
+}
+
+// due reports whether a send should happen now, without touching the
+// network: telemetry on, a collector address, finished days, and no attempt
+// yet today.
+func due() (State, Payload, bool) {
+	if ForcedOff() || Endpoint == "" {
+		return State{}, Payload{}, false
+	}
+	s := Load()
+	if !s.Enabled || s.LastSent == now().Format("2006-01-02") {
+		return s, Payload{}, false
+	}
+	p, ok := Pending(s)
+	return s, p, ok
+}
+
+// Spawn starts the sender. The CLI sets it to run `pandaward telemetry
+// send` as a separate process, so a command never waits for the network.
+// Tests replace it.
+var Spawn = func() {}
+
+// FlushInBackground starts a send when one is due and returns at once.
+func FlushInBackground() {
+	if _, _, ok := due(); ok {
+		Spawn()
+	}
 }
 
 func prune(s *State) {
