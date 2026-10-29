@@ -119,6 +119,26 @@ rules:
           - pattern-not-inside: $REQ.query(...)
           - pattern-not-inside: $REQ.body(...)
           - pattern-not-inside: $REQ.params(...)
+    # A fixed origin: a literal scheme and host, or an UPPER_CASE base URL
+    # constant, followed by "/". Only the path or query varies, so the
+    # request cannot be sent to another host (#157).
+    pattern-sanitizers:
+      - patterns:
+          - pattern-either:
+              - pattern: $BASE + "$PATH"
+              - pattern: $BASE + "$PATH" + $REST
+          - metavariable-regex:
+              metavariable: $BASE
+              regex: ^[A-Z][A-Z0-9_]*$
+          - metavariable-regex:
+              metavariable: $PATH
+              regex: ^/
+      - pattern-regex: '`(https?://[^/`$]+|\$\{[A-Z][A-Z0-9_]*\})/[^`]*`'
+      - patterns:
+          - pattern: '"$ORIGIN" + $REST'
+          - metavariable-regex:
+              metavariable: $ORIGIN
+              regex: ^https?://[^/]+/
     pattern-sinks:
       - patterns:
           - pattern-either:
