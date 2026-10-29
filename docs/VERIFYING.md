@@ -1,4 +1,4 @@
-# Verifying a Pandaward release
+# Verifying a PandaWard release
 
 Every release on GitHub carries, next to the binaries:
 

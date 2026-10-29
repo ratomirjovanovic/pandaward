@@ -1,4 +1,4 @@
-// Package rules embeds the reviewed rule packs Pandaward ships with.
+// Package rules embeds the reviewed rule packs PandaWard ships with.
 package rules
 
 import (

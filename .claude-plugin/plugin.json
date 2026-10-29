@@ -1,6 +1,6 @@
 {
   "name": "pandaward",
-  "displayName": "Pandaward",
+  "displayName": "PandaWard",
   "version": "0.2.1",
   "description": "Local, evidence-based application security assessment: inventory, static checks, cross-domain graph, coverage ledger and reports. Passive by default; network tests need a human-approved scope.",
   "author": {

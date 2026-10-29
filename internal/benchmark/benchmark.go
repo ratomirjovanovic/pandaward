@@ -100,7 +100,7 @@ func Run(ctx context.Context) (*Report, error) {
 		}
 	}
 	rep := &Report{CorpusVersion: CorpusVersion, PandawardVersion: version.Version, CatalogVersion: catalog.Version, MinPrecision: MinPrecision, MinRecall: MinRecall, MinCases: MinCases,
-		Note: "Measured on Pandaward's own small corpus of vulnerable and safe cases. The numbers describe behavior on these cases, not real-world precision or recall."}
+		Note: "Measured on PandaWard's own small corpus of vulnerable and safe cases. The numbers describe behavior on these cases, not real-world precision or recall."}
 	ids := make([]string, 0, len(results))
 	for id := range results {
 		ids = append(ids, id)

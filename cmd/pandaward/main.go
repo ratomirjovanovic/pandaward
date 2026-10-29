@@ -1,4 +1,4 @@
-// Command pandaward is the Pandaward CLI: local, evidence-based application
+// Command pandaward is the PandaWard CLI: local, evidence-based application
 // security assessment. Passive local analysis is the default; anything that
 // sends network traffic requires a scope manifest approved by a human in an
 // interactive terminal.
@@ -77,7 +77,7 @@ Integration and tooling:
   capabilities    Control catalog with adapter maturity
   telemetry       Opt-in usage counters: status, on, off, show (off by default)
   benchmark       TP/FP/FN/TN per built-in rule on the bundled corpus (--json, --strict)
-  selftest        Run the hostile-repository suite: can repository text steer Pandaward? (--json)
+  selftest        Run the hostile-repository suite: can repository text steer PandaWard? (--json)
   mcp             Serve the MCP stdio interface
   hook <name>     Claude Code lifecycle hook (session-start, post-edit, pre-tool, pre-compact, stop)
   version         Print version
@@ -269,9 +269,9 @@ func cmdInit(args []string, w io.Writer) error {
 		return err
 	}
 	if created {
-		fmt.Fprintf(w, "Initialized Pandaward in %s\n", filepath.Join(e.Root, config.Dir))
+		fmt.Fprintf(w, "Initialized PandaWard in %s\n", filepath.Join(e.Root, config.Dir))
 	} else {
-		fmt.Fprintf(w, "Pandaward already initialized in %s\n", filepath.Join(e.Root, config.Dir))
+		fmt.Fprintf(w, "PandaWard already initialized in %s\n", filepath.Join(e.Root, config.Dir))
 	}
 	fmt.Fprintf(w, "  config:   %s (safe to commit)\n  private:  %s (gitignored ledger and evidence)\n", config.Path(e.Root), config.PrivateDir(e.Root))
 	fmt.Fprintf(w, "  profile:  local-passive (no network traffic to any target)\n\n")
@@ -1179,7 +1179,7 @@ func cmdDoctor(ctx context.Context, args []string, w io.Writer) error {
 		fmt.Fprintln(w, "Project: not initialized here (run `pandaward init`)")
 	}
 	fmt.Fprintln(w, "\nBuilt-in adapters (always available, offline): inventory, secrets, code, cicd, infra, supply, mobile, sarif-import (for files in .pandaward/sarif or scan.sarif_files)")
-	fmt.Fprintln(w, "Optional scanners (never installed or downloaded by Pandaward):")
+	fmt.Fprintln(w, "Optional scanners (never installed or downloaded by PandaWard):")
 	for _, t := range tools {
 		state := "not installed"
 		if t.Path != "" {
@@ -1284,7 +1284,7 @@ func cmdSelftest(ctx context.Context, args []string, w io.Writer) error {
 		fmt.Fprintf(w, "\n%d passed, %d failed. %s\n", r.Passed, r.Failed, r.Note)
 	}
 	if r.Failed > 0 {
-		return exitErr{1, "Pandaward was steered by repository content in at least one case"}
+		return exitErr{1, "PandaWard was steered by repository content in at least one case"}
 	}
 	return nil
 }
@@ -1569,7 +1569,7 @@ func cmdTelemetry(args []string, w io.Writer) error {
 		if err != nil {
 			return err
 		}
-		fmt.Fprintln(w, "Telemetry on. Pandaward counts, per day: which commands, MCP tools and hooks ran, the version, OS and")
+		fmt.Fprintln(w, "Telemetry on. PandaWard counts, per day: which commands, MCP tools and hooks ran, the version, OS and")
 		fmt.Fprintln(w, "architecture, and salted project IDs that cannot be turned back into paths. It never records arguments,")
 		fmt.Fprintln(w, "paths, file names, findings or code. Finished days are sent at most once a day; `pandaward telemetry off`")
 		fmt.Fprintln(w, "stops it and deletes what was not sent.")

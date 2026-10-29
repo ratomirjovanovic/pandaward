@@ -14,7 +14,7 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// Dir is the per-project Pandaward directory.
+// Dir is the per-project PandaWard directory.
 const Dir = ".pandaward"
 
 // Config is the project configuration (schema v1).
@@ -159,7 +159,7 @@ func Write(root string, c *Config, force bool) error {
 	if err != nil {
 		return err
 	}
-	header := "# Pandaward project configuration (schema v1). Safe to commit.\n# Private state lives in .pandaward/private/ and is gitignored.\n"
+	header := "# PandaWard project configuration (schema v1). Safe to commit.\n# Private state lives in .pandaward/private/ and is gitignored.\n"
 	return os.WriteFile(p, append([]byte(header), b...), 0o644)
 }
 
@@ -172,7 +172,7 @@ func EnsureLayout(root string) error {
 	}
 	gi := filepath.Join(root, Dir, ".gitignore")
 	if _, err := os.Stat(gi); errors.Is(err, os.ErrNotExist) {
-		return os.WriteFile(gi, []byte("# Pandaward private state, evidence and reports never go to git\nprivate/\nreports/\n"), 0o644)
+		return os.WriteFile(gi, []byte("# PandaWard private state, evidence and reports never go to git\nprivate/\nreports/\n"), 0o644)
 	}
 	return nil
 }

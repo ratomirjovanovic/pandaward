@@ -20,7 +20,7 @@ import (
 	"github.com/ratomirjovanovic/pandaward/rules"
 )
 
-// externalTool wraps a user-installed scanner binary. Pandaward never installs
+// externalTool wraps a user-installed scanner binary. PandaWard never installs
 // or downloads tools itself. Tools run with an argument array (no shell), a
 // scrubbed environment (no cloud/VCS tokens), a disposable HOME, a timeout,
 // and their stdout/stderr kept apart from evidence.
@@ -235,7 +235,7 @@ func gitleaks() Adapter {
 			var out []model.Signal
 			for _, it := range items {
 				out = append(out, model.Signal{RuleID: "gitleaks." + it.RuleID, ControlID: "E-005", Title: "Secret detected: " + it.Description, Severity: model.SevHigh, Confidence: model.StronglySupported, CWE: "CWE-798",
-					File: it.File, StartLine: it.StartLine, EndLine: it.EndLine, Snippet: it.Match, Message: "Gitleaks rule " + it.RuleID + " matched (value redacted by gitleaks and Pandaward).",
+					File: it.File, StartLine: it.StartLine, EndLine: it.EndLine, Snippet: it.Match, Message: "Gitleaks rule " + it.RuleID + " matched (value redacted by gitleaks and PandaWard).",
 					Fix: "Rotate the credential, remove it from code and history, load it at runtime from a secret manager.", Key: it.RuleID})
 			}
 			return out, nil

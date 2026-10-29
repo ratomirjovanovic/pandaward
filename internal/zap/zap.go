@@ -1,6 +1,6 @@
 // Package zap runs a user-installed OWASP ZAP through its automation
-// framework, chained to the Pandaward scope guard, and reads its JSON report.
-// Pandaward never installs or downloads ZAP.
+// framework, chained to the PandaWard scope guard, and reads its JSON report.
+// PandaWard never installs or downloads ZAP.
 package zap
 
 import (
@@ -297,7 +297,7 @@ func Plan(m *scope.Manifest, reportDir string, active bool, minutes int) ([]byte
 	if active {
 		jobs = append(jobs, planJob{Type: "activeScan", Parameters: map[string]any{"context": "pandaward", "maxScanDurationInMins": minutes, "maxRuleDurationInMins": 2, "threadPerHost": 1}})
 	}
-	jobs = append(jobs, planJob{Type: "report", Parameters: map[string]any{"template": "traditional-json", "reportDir": reportDir, "reportFile": "zap", "reportTitle": "Pandaward ZAP run"}})
+	jobs = append(jobs, planJob{Type: "report", Parameters: map[string]any{"template": "traditional-json", "reportDir": reportDir, "reportFile": "zap", "reportTitle": "PandaWard ZAP run"}})
 	doc := planDoc{Env: planEnv{Contexts: []planContext{c}, Parameters: map[string]any{"failOnError": true, "failOnWarning": false, "progressToStdout": true}}, Jobs: jobs}
 	return yaml.Marshal(doc)
 }

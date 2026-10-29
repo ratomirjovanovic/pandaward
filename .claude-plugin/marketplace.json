@@ -12,7 +12,7 @@
         "url": "https://github.com/ratomirjovanovic/pandaward.git",
         "ref": "plugin"
       },
-      "description": "Pandaward for macOS and Linux: local, evidence-based application security assessment. Prebuilt binaries verified by checksum."
+      "description": "PandaWard for macOS and Linux: local, evidence-based application security assessment. Prebuilt binaries verified by checksum."
     },
     {
       "name": "pandaward-windows",
@@ -21,8 +21,8 @@
         "url": "https://github.com/ratomirjovanovic/pandaward.git",
         "ref": "plugin-windows"
       },
-      "description": "Pandaward for Windows: local, evidence-based application security assessment. Prebuilt pandaward.exe."
+      "description": "PandaWard for Windows: local, evidence-based application security assessment. Prebuilt pandaward.exe."
     }
   ],
-  "description": "Pandaward: local, evidence-based application security assessment for Claude Code."
+  "description": "PandaWard: local, evidence-based application security assessment for Claude Code."
 }

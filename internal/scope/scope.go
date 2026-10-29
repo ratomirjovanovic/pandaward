@@ -88,7 +88,7 @@ const Anonymous = "anonymous"
 
 // Template is written by `pandaward scope init`. All targets are empty and
 // acknowledged is false, so nothing can run until a human fills it in.
-const Template = `# Pandaward scope manifest (schema v1)
+const Template = `# PandaWard scope manifest (schema v1)
 # Required before ANY network-active test. Fill in, then approve it yourself
 # from an interactive terminal:  pandaward scope approve --by "<your name>"
 # Editing this file invalidates any previous approval.

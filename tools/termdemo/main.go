@@ -1,4 +1,4 @@
-// Command termdemo records a real Pandaward session on the demo fixture and
+// Command termdemo records a real PandaWard session on the demo fixture and
 // writes it as an animated SVG terminal for the README:
 //
 //	go build -o /tmp/pandaward ./cmd/pandaward
@@ -102,7 +102,7 @@ func render(screens []screen) string {
 	h := padTop + lineH*(maxLines+1) + 16
 	total := seconds * len(screens)
 	var b strings.Builder
-	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d" role="img" aria-label="Pandaward terminal session: init, scan, findings, graph and fix-plan on a demo project">`+"\n", w, h, w, h)
+	fmt.Fprintf(&b, `<svg xmlns="http://www.w3.org/2000/svg" width="%d" height="%d" viewBox="0 0 %d %d" role="img" aria-label="PandaWard terminal session: init, scan, findings, graph and fix-plan on a demo project">`+"\n", w, h, w, h)
 	b.WriteString("<style>\n")
 	b.WriteString(`text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;font-size:14px;white-space:pre;fill:#d4d4d8}` + "\n")
 	b.WriteString(".p{fill:#4ade80}.c{fill:#fafafa;font-weight:600}.f{opacity:0}\n")

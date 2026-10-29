@@ -20,7 +20,7 @@ var fileRuleIDs = []string{
 
 // RuleIDs returns every rule ID the built-in adapters can emit, sorted.
 // Rule IDs of optional tools and of imported SARIF results
-// (sarif.<tool>.<rule>) come from outside Pandaward and are not listed.
+// (sarif.<tool>.<rule>) come from outside PandaWard and are not listed.
 func RuleIDs() []string {
 	out := append([]string{}, fileRuleIDs...)
 	for _, r := range codeRules {

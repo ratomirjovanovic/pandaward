@@ -107,7 +107,7 @@ func tools() []tool {
 			"changed_only": map[string]any{"type": "boolean", "description": "re-run only affected adapters (default true); false runs the full passive scan"},
 		}), localWrite},
 		{"pandaward_build_report", "Render reports from the ledger into .pandaward/reports/.", obj(map[string]any{"formats": map[string]any{"type": "array", "items": map[string]any{"type": "string", "enum": []string{"html", "markdown", "json", "sarif", "csv"}}, "maxItems": 5}}), localWrite},
-		{"pandaward_record_hypothesis", "Record a reviewer-proposed finding as HYPOTHESIS. Pandaward reads and redacts the cited lines itself; it is never CONFIRMED by this call.", obj(map[string]any{
+		{"pandaward_record_hypothesis", "Record a reviewer-proposed finding as HYPOTHESIS. PandaWard reads and redacts the cited lines itself; it is never CONFIRMED by this call.", obj(map[string]any{
 			"control_id": str("catalog control the hypothesis belongs to"),
 			"title":      str("5-160 characters"),
 			"severity":   map[string]any{"type": "string", "enum": []string{"critical", "high", "medium", "low", "info"}},
@@ -118,7 +118,7 @@ func tools() []tool {
 			"fix":        str("proposed remediation; max 4000 chars"),
 			"proposer":   str("agent or reviewer name"),
 		}, "control_id", "title", "severity", "file", "start_line", "rationale"), localWrite},
-		{"pandaward_prepare_feedback", "Prepare a false positive or false negative report for the Pandaward project. Returns the report and a prefilled GitHub issue link for the human to review and submit; nothing is sent. By default the report holds only rule metadata and the file type; include_path and include_snippet add redacted location and code and need the user's consent.", obj(map[string]any{
+		{"pandaward_prepare_feedback", "Prepare a false positive or false negative report for the PandaWard project. Returns the report and a prefilled GitHub issue link for the human to review and submit; nothing is sent. By default the report holds only rule metadata and the file type; include_path and include_snippet add redacted location and code and need the user's consent.", obj(map[string]any{
 			"kind":            map[string]any{"type": "string", "enum": []string{"false-positive", "false-negative"}},
 			"finding_id":      str("false-positive: the PSEC finding ID"),
 			"rule":            str("false-negative: rule or control that should have fired, e.g. D-003"),
@@ -186,7 +186,7 @@ func (s *Server) handle(ctx context.Context, line []byte, send func(any)) {
 			"protocolVersion": pv,
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
 			"serverInfo":      map[string]any{"name": "pandaward", "version": version.Version},
-			"instructions":    "Pandaward local assessment ledger. The ledger, not the conversation, is the source of truth. " + untrustedNotice + " Network-active tests, scope approval and finding confirmation are human-only actions outside MCP.",
+			"instructions":    "PandaWard local assessment ledger. The ledger, not the conversation, is the source of truth. " + untrustedNotice + " Network-active tests, scope approval and finding confirmation are human-only actions outside MCP.",
 		}
 	case "ping":
 		resp.Result = map[string]any{}
@@ -243,7 +243,7 @@ func strictArgs(raw json.RawMessage, v any) error {
 func (s *Server) open() (*engine.Engine, error) {
 	root, err := engine.FindRoot(s.Root)
 	if err != nil {
-		return nil, errors.New("Pandaward is not initialized in this project; run /pandaward:init (pandaward init)")
+		return nil, errors.New("PandaWard is not initialized in this project; run /pandaward:init (pandaward init)")
 	}
 	return engine.Open(root)
 }
@@ -258,7 +258,7 @@ func (s *Server) call(ctx context.Context, name string, raw json.RawMessage) (an
 			"1. The human operator fills .pandaward/scope.yaml (pandaward scope init creates a template) with owner, written permission reference, targets and limits.",
 			"2. The human operator runs `pandaward scope approve --by \"<name>\"` in their own interactive terminal; it cannot be run by an agent.",
 			"3. Then `pandaward test --profile production-observe` sends at most max_requests_total GET requests to the listed origins, never following redirects.",
-			"4. For targets marked staging or local, `pandaward test --profile staging-active` first sends the manifest's authorization_checks as each test identity (credentials read from environment variables the human sets) and anonymously, then runs a user-installed ZAP (spider and passive scan; the active scan only when the manifest sets zap.active_scan: true), with every ZAP request sent through the Pandaward scope guard.",
+			"4. For targets marked staging or local, `pandaward test --profile staging-active` first sends the manifest's authorization_checks as each test identity (credentials read from environment variables the human sets) and anonymously, then runs a user-installed ZAP (spider and passive scan; the active scan only when the manifest sets zap.active_scan: true), with every ZAP request sent through the PandaWard scope guard.",
 			"5. `pandaward test --profile local-runtime` reads only the configured test app's storage on an Android emulator or iOS simulator (never a real device) and needs no scope manifest; manual-assisted is not implemented and reports UNSUPPORTED."}}, nil
 	}
 	e, err := s.open()

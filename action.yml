@@ -1,4 +1,4 @@
-name: Pandaward
+name: PandaWard
 description: Local, evidence-based application security assessment. Passive scan with SARIF output and an optional gate.
 author: Ratomir Jovanovic
 branding:
@@ -7,7 +7,7 @@ branding:
 
 inputs:
   version:
-    description: Pandaward release to download (without the leading v)
+    description: PandaWard release to download (without the leading v)
     default: "0.2.1"
   working-directory:
     description: Project directory to scan
@@ -42,7 +42,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Install Pandaward
+    - name: Install PandaWard
       shell: bash
       env:
         PANDAWARD_VERSION: ${{ inputs.version }}
@@ -54,7 +54,7 @@ runs:
           macOS-X64) asset=pandaward-darwin-amd64 ;;
           macOS-ARM64) asset=pandaward-darwin-arm64 ;;
           Windows-X64) asset=pandaward-windows-amd64.exe ;;
-          *) echo "::error::Pandaward has no release binary for $RUNNER_OS $RUNNER_ARCH"; exit 1 ;;
+          *) echo "::error::PandaWard has no release binary for $RUNNER_OS $RUNNER_ARCH"; exit 1 ;;
         esac
         case "$PANDAWARD_VERSION" in
           *[!0-9A-Za-z.-]* | "") echo "::error::invalid version '$PANDAWARD_VERSION'"; exit 1 ;;
@@ -153,7 +153,7 @@ runs:
         echo "gated=$gated" >> "$GITHUB_OUTPUT"
         if [ "$SUMMARY" != none ]; then
           {
-            echo "## Pandaward"
+            echo "## PandaWard"
             echo
             pandaward status --json | jq -r '"Assessment `\(.assessment.id)`: \(.assessment.status). Decisive coverage: \(.coverage.decisive_controls)/\(.coverage.applicable_controls) applicable controls."'
             echo
@@ -173,6 +173,6 @@ runs:
           } >> "$GITHUB_STEP_SUMMARY"
         fi
         if [ "$gated" -gt 0 ]; then
-          echo "::error::Pandaward: $gated $scope finding(s) at or above $FAIL_ON"
+          echo "::error::PandaWard: $gated $scope finding(s) at or above $FAIL_ON"
           exit 4
         fi

@@ -73,7 +73,7 @@ assert stop.get("decision") == "block" and "1 new" in stop.get("reason", ""), "s
 steps = [
     {"label": "Ask", "items": [
         {"kind": "user", "text": "Check the security of this project."},
-        {"kind": "claude", "text": "I'll run the Pandaward assessment from start to finish and keep a checklist. Nothing is sent to any server; Pandaward only reads the repository."},
+        {"kind": "claude", "text": "I'll run the PandaWard assessment from start to finish and keep a checklist. Nothing is sent to any server; PandaWard only reads the repository."},
     ]},
     {"label": "Assess", "items": [
         {"kind": "tool", "cmd": "pandaward assess", "output": txt("assess.txt")},
@@ -100,8 +100,8 @@ steps = [
     {"label": "Automatic retest", "items": [
         {"kind": "user", "text": "Add an export endpoint that zips the requested file."},
         {"kind": "file", "cmd": "Write src/export.js", "output": txt("export.js")},
-        {"kind": "hook", "cmd": "Pandaward Stop hook", "output": stop.get("reason") or stop.get("systemMessage", "")},
-        {"kind": "claude", "text": "Pandaward retested the file I just wrote and found a new high finding: the shell command is built from the request. I'll switch it to execFile with a fixed argument list and an allow-listed file name, unless you want it another way."},
+        {"kind": "hook", "cmd": "PandaWard Stop hook", "output": stop.get("reason") or stop.get("systemMessage", "")},
+        {"kind": "claude", "text": "PandaWard retested the file I just wrote and found a new high finding: the shell command is built from the request. I'll switch it to execFile with a fixed argument list and an allow-listed file name, unless you want it another way."},
     ]},
 ]
 dest.write_text(json.dumps(steps, ensure_ascii=False), encoding="utf-8")

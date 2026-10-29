@@ -168,7 +168,7 @@ func TestMinimalEnvKeepsSystemDrive(t *testing.T) {
 	}
 }
 
-// Pandaward's own state at the root is never project input, even when a
+// PandaWard's own state at the root is never project input, even when a
 // config from before the rename excludes only .pensec. A nested directory
 // with the same name is scanned, so it cannot be used to hide code.
 func TestWalkAlwaysSkipsStateDirectories(t *testing.T) {

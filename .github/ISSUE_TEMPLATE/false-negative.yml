@@ -1,5 +1,5 @@
 name: False negative (missed issue)
-description: Pandaward did not report a real problem.
+description: PandaWard did not report a real problem.
 title: "[false-negative] "
 labels: [false-negative, needs-triage]
 body:
@@ -19,7 +19,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: Pandaward version
+      label: PandaWard version
       description: Output of `pandaward version`.
     validations:
       required: true

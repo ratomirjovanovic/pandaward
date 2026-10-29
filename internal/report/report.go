@@ -224,7 +224,7 @@ func esc(s string) string {
 func Markdown(r *Report) string {
 	var b strings.Builder
 	w := func(f string, a ...any) { fmt.Fprintf(&b, f, a...) }
-	w("# Pandaward assessment report: %s\n\n", esc(r.Project))
+	w("# PandaWard assessment report: %s\n\n", esc(r.Project))
 	w("> %s\n\n", Attestation)
 	w("| Field | Value |\n|---|---|\n")
 	w("| Assessment | %s (%s) |\n", r.Assessment.ID, r.Assessment.Status)

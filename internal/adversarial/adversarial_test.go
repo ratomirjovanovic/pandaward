@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// Release-blocking: Pandaward must not be steered by repository content.
+// Release-blocking: PandaWard must not be steered by repository content.
 func TestHostileRepositoryCannotSteerPandaward(t *testing.T) {
 	r, err := Run(context.Background())
 	if err != nil {

@@ -1,10 +1,10 @@
 # False positives and false negatives
 
-Pandaward's rules get better from reports by the people who use them. This page describes how a report travels from a user's machine to a fixed rule, and how reports are grouped and prioritized as their number grows.
+PandaWard's rules get better from reports by the people who use them. This page describes how a report travels from a user's machine to a fixed rule, and how reports are grouped and prioritized as their number grows.
 
 ## 1. Reporting
 
-Pandaward never sends anything by itself. It prepares a report and a prefilled GitHub issue link; the user reads it and decides whether to submit.
+PandaWard never sends anything by itself. It prepares a report and a prefilled GitHub issue link; the user reads it and decides whether to submit.
 
 ```sh
 pandaward feedback false-positive PW-0007 --note "the value is a compile-time constant"
@@ -22,7 +22,7 @@ A default report contains only:
 | rule, control | `code.sql-concat`, D-003 |
 | severity, confidence | high, HYPOTHESIS |
 | adapter and tool version | builtin-code 0.1.3, semgrep 1.182.0 |
-| Pandaward and catalog version | 0.1.3, 2026.10-m3 |
+| PandaWard and catalog version | 0.1.3, 2026.10-m3 |
 | file type | `.py`, `Dockerfile`, `github-workflow.yml` |
 
 `--include-path` adds the redacted path and line, `--include-snippet` up to 12 redacted lines of code. Both need the user's explicit choice. The issue forms ask the reporter to confirm that the report holds no secrets or private data.

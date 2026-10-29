@@ -22,7 +22,7 @@ import (
 )
 
 // SARIFImport is the adapter that imports results of analyzers the user ran
-// themselves. Pandaward never runs those tools; it only reads their SARIF files.
+// themselves. PandaWard never runs those tools; it only reads their SARIF files.
 const SARIFImport = "sarif-import"
 
 // SARIFDir holds SARIF files that are imported without configuration.
@@ -259,7 +259,7 @@ type sarifImportResult struct {
 
 // parseSARIF turns one SARIF log into signals. Everything in it is
 // untrusted: text is redacted, locations must resolve inside the root, and
-// snippets come from Pandaward's own read of the file, never from the log.
+// snippets come from PandaWard's own read of the file, never from the log.
 func parseSARIF(c *Context, file string, raw []byte) (sarifImportResult, error) {
 	var out sarifImportResult
 	var doc struct {
@@ -284,8 +284,8 @@ func parseSARIF(c *Context, file string, raw []byte) (sarifImportResult, error) 
 			return out, fmt.Errorf("run %d has no tool.driver.name", i)
 		}
 		d := r.Tool.Driver
-		// Pandaward's own SARIF report must not be imported back as new findings.
-		if strings.EqualFold(d.Name, "Pandaward") {
+		// PandaWard's own SARIF report must not be imported back as new findings.
+		if strings.EqualFold(d.Name, "PandaWard") {
 			out.skipped += len(r.Results)
 			continue
 		}
@@ -328,7 +328,7 @@ func parseSARIF(c *Context, file string, raw []byte) (sarifImportResult, error) 
 			}
 			s := model.Signal{RuleID: "sarif." + toolID + "." + sarifID(ruleID, true), ControlID: sarifControl, Title: redact.Line(d.Name + ": " + title),
 				Severity: sarifSeverity(res, rule), Confidence: model.Hypothesis, CWE: sarifCWE(res, rule), Message: redact.Line(msg),
-				Fix:       redact.Line("Review this " + d.Name + " result and fix it in the code, or record a false positive. Imported from " + file + "; Pandaward did not verify it."),
+				Fix:       redact.Line("Review this " + d.Name + " result and fix it in the code, or record a false positive. Imported from " + file + "; PandaWard did not verify it."),
 				Collector: SARIFImport}
 			if len(res.Locations) > 0 && res.Locations[0].PhysicalLocation != nil {
 				pl := res.Locations[0].PhysicalLocation

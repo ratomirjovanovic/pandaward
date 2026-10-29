@@ -1,12 +1,12 @@
 name: False positive
-description: Pandaward reported something that is not a problem.
+description: PandaWard reported something that is not a problem.
 title: "[false-positive] "
 labels: [false-positive, needs-triage]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for helping make Pandaward more accurate. The quickest way to fill this in is `pandaward feedback false-positive <PW-ID>`, which prefills the form from your ledger without code or paths.
+        Thanks for helping make PandaWard more accurate. The quickest way to fill this in is `pandaward feedback false-positive <PW-ID>`, which prefills the form from your ledger without code or paths.
         **Do not paste secrets, private code or reports from private projects.** A few redacted lines or a minimal made-up example are enough.
   - type: input
     id: rule
@@ -19,7 +19,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: Pandaward version
+      label: PandaWard version
       description: Output of `pandaward version`.
     validations:
       required: true

@@ -1,9 +1,9 @@
 # Benchmarks
 
-Pandaward has two measurements of its built-in rules:
+PandaWard has two measurements of its built-in rules:
 
-- `pandaward benchmark` runs every rule against Pandaward's own small corpus of vulnerable and safe cases (see the README). It checks that each rule does what it was written to do.
-- The OWASP Benchmark measurement below runs the built-in rules against a public, labelled evaluation project that Pandaward's authors did not write. It shows how much of a known test suite the line heuristics find.
+- `pandaward benchmark` runs every rule against PandaWard's own small corpus of vulnerable and safe cases (see the README). It checks that each rule does what it was written to do.
+- The OWASP Benchmark measurement below runs the built-in rules against a public, labelled evaluation project that PandaWard's authors did not write. It shows how much of a known test suite the line heuristics find.
 
 ## OWASP Benchmark for Java
 
@@ -29,13 +29,13 @@ A category with no mapped rule is shown as "not covered" rather than as a score 
 | | |
 |---|---|
 | Benchmark | OWASP BenchmarkJava, commit `f40c618c5a709afce350ef06ed2899c85cf586e9`, expected results 1.2 |
-| Pandaward | source build of commit `745a096` (main after release 0.1.2, same rules), built-in rules only |
+| PandaWard | source build of commit `745a096` (main after release 0.1.2, same rules), built-in rules only |
 | Date | 2026-10-28 |
 | Tool | `tools/owaspbench` |
 
 ### Results
 
-| Category | CWE | Real | Not real | TP | FP | FN | TN | TPR | FPR | Score | Pandaward rules |
+| Category | CWE | Real | Not real | TP | FP | FN | TN | TPR | FPR | Score | PandaWard rules |
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | cmdi | 78 | 126 | 125 | 0 | 0 | 126 | 125 | 0.00 | 0.00 | 0.00 | `code.java-shell` |
 | crypto | 327 | 130 | 116 | - | - | - | - | - | - | not covered | - |
@@ -55,9 +55,9 @@ The built-in rules produced 14 findings on the whole checkout, none of them in a
 
 ### Interpretation
 
-Pandaward's built-in code rules find nothing in the OWASP Benchmark. They also raise no false alarms on it, but a score of zero is a score of zero: on this suite the rules are no better than not running them.
+PandaWard's built-in code rules find nothing in the OWASP Benchmark. They also raise no false alarms on it, but a score of zero is a score of zero: on this suite the rules are no better than not running them.
 
-The reason is the design of the rules, not a bug in the measurement. The built-in code checks are single-line regular expressions that look for well-known risky idioms, mostly in JavaScript, Python, PHP, Ruby and Go. The Benchmark is written to defeat exactly that kind of check: every test case moves the input through variables, helper classes, collections and conditionals before it reaches the sink, and the safe variants differ from the vulnerable ones only in that data flow. Telling them apart needs inter-procedural taint tracking, which Pandaward does not do. Concretely:
+The reason is the design of the rules, not a bug in the measurement. The built-in code checks are single-line regular expressions that look for well-known risky idioms, mostly in JavaScript, Python, PHP, Ruby and Go. The Benchmark is written to defeat exactly that kind of check: every test case moves the input through variables, helper classes, collections and conditionals before it reaches the sink, and the safe variants differ from the vulnerable ones only in that data flow. Telling them apart needs inter-procedural taint tracking, which PandaWard does not do. Concretely:
 
 - cmdi: the rule looks for `Runtime.getRuntime().exec(` on one line. The test cases store the runtime in a variable and call `r.exec(...)` later, or use `ProcessBuilder`.
 - sqli: the rules look for a quoted SQL statement followed by concatenation. The Benchmark's statements end in a quote inside the literal (`... PASSWORD='" + param + "'"`), which the rule's pattern does not cross, and many cases go through prepared statements, stored procedures or Spring's `JdbcTemplate`.
@@ -67,6 +67,6 @@ The reason is the design of the rules, not a bug in the measurement. The built-i
 - xss: the rule matches browser and template sinks (`innerHTML`, `v-html`, `|safe`, ...), not servlet output through `response.getWriter()`.
 - crypto (weak ciphers), ldapi, pathtraver, trustbound and xpathi have no built-in rule at all.
 
-What this means for users: on Java server code, Pandaward's built-in rules should not be relied on for injection, crypto or randomness findings. Run Semgrep or another data flow aware analyzer through Pandaward's optional adapters for that. The built-in rules remain useful for what the own corpus covers, such as CI, infrastructure, supply chain, secrets and the idioms they match in other languages.
+What this means for users: on Java server code, PandaWard's built-in rules should not be relied on for injection, crypto or randomness findings. Run Semgrep or another data flow aware analyzer through PandaWard's optional adapters for that. The built-in rules remain useful for what the own corpus covers, such as CI, infrastructure, supply chain, secrets and the idioms they match in other languages.
 
 These numbers are a baseline. The rules were not changed for this measurement; any future change that targets the Benchmark should report its score next to the own-corpus results, and keep in mind that tuning to a single suite overstates real-world accuracy.
