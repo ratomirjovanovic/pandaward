@@ -297,6 +297,13 @@ func semgrep() Adapter {
 			}
 			var out []model.Signal
 			for _, r := range doc.Results {
+				// Bundled rules follow the built-in checks and skip test and
+				// fixture code; the user's own rules report everything. The
+				// path is made relative first, so a project that itself lives
+				// under a test or fixture directory is not skipped whole.
+				if strings.HasPrefix(lastSegment(r.CheckID), "pandaward-") && IsTestPath(relPath(c.Root, r.Path)) {
+					continue
+				}
 				cwe := ""
 				switch v := r.Extra.Metadata.CWE.(type) {
 				case string:

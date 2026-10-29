@@ -107,6 +107,12 @@ jobs:
         env:
           PANDAWARD_REAL_TOOLS: "1"
         run: go test -count=1 -v -run '^TestRealTools$' ./internal/adapters/
+      # The ruleid and ok annotations in rules/semgrep only hold if semgrep
+      # checks them; the test job has no semgrep, so they run here.
+      - name: Bundled Semgrep rule fixtures
+        run: |
+          go test -count=1 -v -run '^TestSemgrepFixtures$' ./rules/ | tee fixtures.log
+          ! grep -q -- '--- SKIP: TestSemgrepFixtures' fixtures.log
 
   # Runs the ZAP adapter against a pinned ZAP and the fixture site, which
   # links to an out-of-scope origin that must never be contacted.

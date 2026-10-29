@@ -110,10 +110,15 @@ rules:
       cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
     mode: taint
     pattern-sources:
-      - pattern-either:
-          - pattern: $REQ.query
-          - pattern: $REQ.body
-          - pattern: $REQ.params
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.query
+              - pattern: $REQ.body
+              - pattern: $REQ.params
+          # db.query(...) and the like are method calls, not request data.
+          - pattern-not-inside: $REQ.query(...)
+          - pattern-not-inside: $REQ.body(...)
+          - pattern-not-inside: $REQ.params(...)
     pattern-sinks:
       - patterns:
           - pattern-either:
@@ -136,10 +141,15 @@ rules:
       cwe: "CWE-22: Improper Limitation of a Pathname to a Restricted Directory"
     mode: taint
     pattern-sources:
-      - pattern-either:
-          - pattern: $REQ.query
-          - pattern: $REQ.body
-          - pattern: $REQ.params
+      - patterns:
+          - pattern-either:
+              - pattern: $REQ.query
+              - pattern: $REQ.body
+              - pattern: $REQ.params
+          # db.query(...) and the like are method calls, not request data.
+          - pattern-not-inside: $REQ.query(...)
+          - pattern-not-inside: $REQ.body(...)
+          - pattern-not-inside: $REQ.params(...)
     pattern-sinks:
       - patterns:
           - pattern-either:
