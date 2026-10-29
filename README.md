@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <a href="https://ratomirjovanovic.github.io/pandaward/">Website and demo</a> ·
+  <a href="https://pandaward.dev/">Website and demo</a> ·
   <a href="https://github.com/ratomirjovanovic/pandaward/wiki">Documentation</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#what-pandaward-will-not-tell-you">Limitations</a>
@@ -34,13 +34,13 @@ Most scanners print a list of alerts and stop. PandaWard keeps a **ledger**: eve
 </p>
 
 <p align="center">
-  <a href="https://ratomirjovanovic.github.io/pandaward/demo/">
+  <a href="https://pandaward.dev/demo/">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="docs/media/findings-dark.png">
       <img src="docs/media/findings-light.png" width="860" alt="PandaWard findings explorer for the bundled acme-shop fixture: 20 confirmed findings, 11 suspected, 38% decisive coverage, with a critical pull_request_target finding and hardcoded secrets at the top">
     </picture>
   </a>
-  <br><sub>Findings from a real scan of the bundled vulnerable fixture. <a href="https://ratomirjovanovic.github.io/pandaward/demo/">Open the live demo</a> for the terminal replay and the full report.</sub>
+  <br><sub>Findings from a real scan of the bundled vulnerable fixture. <a href="https://pandaward.dev/demo/">Open the live demo</a> for the terminal replay and the full report.</sub>
 </p>
 
 ## Why PandaWard
