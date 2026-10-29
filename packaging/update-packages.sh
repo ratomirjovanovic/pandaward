@@ -159,7 +159,7 @@ if mcpb=$(awk -v n="pandaward-mcp.mcpb" '{ sub(/\r$/, "") } $2 == n || $2 == "*"
     "url": "https://github.com/ratomirjovanovic/pandaward",
     "source": "github"
   },
-  "websiteUrl": "https://ratomirjovanovic.github.io/pandaward/",
+  "websiteUrl": "https://pandaward.dev/",
   "version": "$version",
   "packages": [
     {
