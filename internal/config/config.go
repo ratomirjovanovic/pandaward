@@ -73,7 +73,7 @@ type Config struct {
 func Default(name string) *Config {
 	c := &Config{SchemaVersion: 1, Profile: "local-passive"}
 	c.Project.Name = name
-	c.Inventory.Exclude = []string{"node_modules", "vendor", "dist", "build", ".git", ".next", ".nuxt", "target", "bin", "obj", ".venv", "venv", "__pycache__", ".pandaward", "coverage", ".terraform", "Pods", ".gradle"}
+	c.Inventory.Exclude = []string{"node_modules", "vendor", "dist", "build", ".git", ".next", ".next-*", ".nuxt", "target", "bin", "obj", ".venv", "venv", "__pycache__", ".pandaward", "coverage", ".terraform", "Pods", ".gradle"}
 	c.Inventory.MaxFileBytes = 2 << 20
 	c.Inventory.MaxFiles = 200000
 	c.Scan.MaxDurationMinutes = 45

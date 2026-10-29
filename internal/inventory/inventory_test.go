@@ -203,3 +203,23 @@ func TestWalkAlwaysSkipsStateDirectories(t *testing.T) {
 		t.Errorf("Hashes saw %v, want %v", hs, want)
 	}
 }
+
+// An exclude entry with a * matches directory names as a glob, so build
+// output such as .next-e2e-main is skipped like .next.
+func TestWalkExcludeGlobs(t *testing.T) {
+	inv := walk(t, map[string]string{
+		"src/a.js":                   "console.log(1);\n",
+		".next/server/b.js":          "eval(x);\n",
+		".next-e2e-main/server/c.js": "eval(x);\n",
+		"lib/next-steps.js":          "console.log(2);\n",
+		"docs/.next-steps/notes.js":  "console.log(3);\n",
+	}, inventory.Options{Exclude: []string{".next", ".next-*"}})
+	var paths []string
+	for _, f := range inv.Files {
+		paths = append(paths, f.Path)
+	}
+	slices.Sort(paths)
+	if want := []string{"lib/next-steps.js", "src/a.js"}; !slices.Equal(paths, want) {
+		t.Fatalf("analyzed files = %v, want %v", paths, want)
+	}
+}

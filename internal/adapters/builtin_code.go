@@ -168,7 +168,7 @@ var codeRules = []lineRule{
 	{ID: "code.sql-concat", Control: "D-003", Title: "SQL built with string concatenation", Re: regexp.MustCompile(`(?i)['"\x60]\s*(select\s.+\sfrom|insert\s+into|update\s+\w+\s+set|delete\s+from)\b[^'"\x60]*['"\x60]\s*(\+|\.\s*\$|%\s*[\w(]|\.format\()`),
 		Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-89", Message: "Query text is concatenated with values; if a value is user controlled this is SQL injection.", Fix: "Use parameterized queries / prepared statements or the ORM query builder."},
 	{ID: "code.sql-template", Control: "D-003", Title: "SQL built with string interpolation", Re: regexp.MustCompile(`(?i)(\x60[^\x60]*\b(select\s[^\x60]*\sfrom|insert\s+into|update\s+\w+\s+set|delete\s+from)\b[^\x60]*\$\{|\bf['"][^'"]*\b(select\s.*\sfrom|insert\s+into|update\s+\w+\s+set|delete\s+from)\b[^'"]*\{)`),
-		Not: regexp.MustCompile(`(?i)\bsql\x60|Prisma\.sql|sql\.raw\(\s*\x60\s*\x60`), Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-89",
+		Not: regexp.MustCompile(`(?i)\bsql(<[^\x60]*>)?\x60|Prisma\.sql|sql\.raw\(\s*\x60\s*\x60`), Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-89",
 		Message: "Query text is built with string interpolation.", Fix: "Use bound parameters (tagged sql templates, placeholders) instead of interpolation."},
 	{ID: "code.sql-unsafe-raw", Control: "D-003", Title: "Unsafe raw query API", Re: regexp.MustCompile(`\$(queryRawUnsafe|executeRawUnsafe)\s*\(|\.raw\(\s*f['"]|sequelize\.query\(\s*\x60[^\x60]*\$\{`),
 		Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-89", Message: "Raw query API that does not parameterize input.", Fix: "Use $queryRaw with tagged templates or replacements/bind parameters."},
