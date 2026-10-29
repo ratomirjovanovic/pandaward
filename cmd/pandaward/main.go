@@ -34,6 +34,7 @@ import (
 	"github.com/ratomirjovanovic/pandaward/internal/hooks"
 	"github.com/ratomirjovanovic/pandaward/internal/mcp"
 	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/progress"
 	"github.com/ratomirjovanovic/pandaward/internal/redact"
 	"github.com/ratomirjovanovic/pandaward/internal/report"
 	"github.com/ratomirjovanovic/pandaward/internal/scope"
@@ -66,6 +67,7 @@ Assessment (local, no target network traffic):
   export          --bundle out.zip [--assessment ID] redacted evidence, report and SHA-256 manifest
   verify-bundle   <bundle.zip> recompute and check every hash in a bundle
   events          Recent audit events
+  progress        What the reviewer subagents of a guided review are doing (--watch streams it)
   feedback        Report a false positive or a missed issue to the project (prints a prefilled issue link; sends nothing)
 
 Network-active (human authorization required):
@@ -151,6 +153,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		err = cmdVerifyBundle(rest, stdout)
 	case "events":
 		err = cmdEvents(rest, stdout)
+	case "progress":
+		err = cmdProgress(ctx, rest, stdin, stdout)
 	case "feedback":
 		err = cmdFeedback(rest, stdout)
 	case "scope":
@@ -948,6 +952,70 @@ func cmdEvents(args []string, w io.Writer) error {
 	}
 	for _, ev := range evs {
 		fmt.Fprintf(w, "%5d %s %-30s %s -> %s  %s\n", ev.Seq, ev.TS, redact.Line(ev.Entity), ev.OldState, ev.NewState, redact.Line(ev.Reason))
+	}
+	return nil
+}
+
+func cmdProgress(ctx context.Context, args []string, stdin io.Reader, w io.Writer) error {
+	fs, root := newFS("progress")
+	watch := fs.Bool("watch", false, "print a line per start, hypothesis and finish until every reviewer is done")
+	rows := fs.Bool("rows", false, "render subagent panel rows from the JSON Claude Code passes on stdin")
+	asJSON := fs.Bool("json", false, "JSON output")
+	timeout := fs.Duration("timeout", 25*time.Minute, "stop watching after this long")
+	heartbeat := fs.Duration("heartbeat", time.Minute, "print a summary when nothing else was said for this long")
+	if _, err := parse(fs, args); err != nil {
+		return err
+	}
+	if *rows {
+		// Runs on every panel refresh: stay silent and cheap, never fail.
+		in := progress.ReadPanelInput(stdin)
+		if !in.HasReviewers() {
+			return nil
+		}
+		dir := *root
+		if dir == "" {
+			dir = os.Getenv("CLAUDE_PROJECT_DIR")
+		}
+		if dir == "" {
+			dir = in.Cwd
+		}
+		r, err := engine.FindRoot(dir)
+		if err != nil {
+			return nil
+		}
+		evs, _ := progress.Load(r)
+		progress.Rows(w, in, progress.Fold(evs), time.Now())
+		return nil
+	}
+	dir := *root
+	if dir == "" {
+		dir = "."
+	}
+	r, err := engine.FindRoot(dir)
+	if err != nil {
+		return err
+	}
+	if *watch {
+		return progress.Watch(ctx, r, w, progress.WatchOptions{Timeout: *timeout, Heartbeat: *heartbeat})
+	}
+	evs, err := progress.Load(r)
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	rs := progress.Current(progress.Fold(evs), now)
+	if *asJSON {
+		if rs == nil {
+			rs = []progress.Reviewer{}
+		}
+		return printJSON(w, map[string]any{"reviewers": rs})
+	}
+	if len(rs) == 0 {
+		fmt.Fprintln(w, "No reviewer progress recorded yet.")
+		return nil
+	}
+	for _, rv := range rs {
+		fmt.Fprintln(w, progress.Row(rv, now))
 	}
 	return nil
 }

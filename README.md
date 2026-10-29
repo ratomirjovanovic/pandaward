@@ -175,6 +175,8 @@ flowchart LR
 
 In Claude Code, hooks keep the ledger current without any command. Edited files are marked stale as they change, and when Claude finishes a turn that edited files, PandaWard runs a changed-only passive retest (bounded at 40 seconds) and hands any new or reopened findings back to Claude, which explains them and offers a fix. A clean retest stays silent; one that runs out of time or fails says so instead of claiming anything is fixed. Set `hooks.auto_retest: false` in `.pandaward/config.yaml` to turn it off.
 
+While the specialist reviewers run, you can see what each one is doing. Their rows in the subagent panel below the prompt show the elapsed time, files read, searches, recorded hypotheses and the file or pattern they are on, refreshed by Claude Code. In the chat, Claude passes on a line when a reviewer starts, records a hypothesis or finishes, gives a short summary about once a minute in between, and warns when a reviewer has gone quiet for 10 minutes. The chat lines need Claude Code's Monitor tool, which on Windows needs Git Bash. Hooks record this to `.pandaward/private/progress.jsonl` for subagents named `pandaward:*` only. They record file names and search patterns, never file contents, and `pandaward progress` shows the same view in a terminal.
+
 ## What it checks
 
 | Domain | Automated today (offline) | Needs review or runtime |
@@ -216,6 +218,7 @@ In Claude Code, hooks keep the ledger current without any command. Edited files 
 | `pandaward report [--format ...]` | HTML, Markdown, JSON, SARIF 2.1.0, CSV |
 | `pandaward evidence show ID \| verify` | Read or verify redacted evidence |
 | `pandaward diff [FROM TO]` | New, reopened, remediated, moved, stale and waived findings between two assessments (default: previous vs latest) |
+| `pandaward progress [--watch] [--json]` | What the reviewer subagents of a guided review are doing; `--watch` prints a line per start, hypothesis and finish until all are done |
 | `pandaward export --bundle out.zip` | Report and redacted evidence with a SHA-256 manifest for a reviewer; never raw tool output |
 | `pandaward verify-bundle out.zip` | Recompute every hash in a bundle; compare the printed manifest hash with the sender's |
 | `pandaward scope init \| validate \| approve \| revoke` | Authorization for network tests |
