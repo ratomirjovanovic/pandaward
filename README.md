@@ -26,7 +26,7 @@
 
 ---
 
-Most scanners print a list of alerts and stop. PandaWard keeps a **ledger**: every control it could check, how it checked it, the redacted evidence, and every control it could *not* decide. Findings are fingerprinted across runs, so a fix becomes `REMEDIATED` only when the check runs again and no longer sees the problem.
+Most scanners print a list of alerts and stop. PandaWard keeps a **ledger**: every control it could check, how it checked it, the redacted evidence, and every control it could *not* decide. Findings are fingerprinted across runs, so a fix becomes `REMEDIATED` only when the check runs again and no longer sees the problem, and a moved or renamed file keeps its findings, their IDs and your triage instead of reading as fixed.
 
 <p align="center">
   <img src="docs/media/demo.svg" width="860" alt="Terminal session on the bundled demo project: pandaward init detects the stack, pandaward scan reports which adapters ran and which are BLOCKED, 38% decisive coverage and 33 open findings, then findings, the cross-domain graph and an ordered fix plan">
@@ -118,7 +118,7 @@ scoop bucket add pandaward https://github.com/ratomirjovanovic/pandaward; scoop 
 Or download a binary from the [releases page](https://github.com/ratomirjovanovic/pandaward/releases) (Linux and macOS on amd64 and arm64, Windows on amd64). For example on Linux:
 
 ```sh
-v=v0.2.4
+v=v0.2.5
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/pandaward-linux-amd64
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/SHA256SUMS
 sha256sum --ignore-missing -c SHA256SUMS
@@ -128,7 +128,7 @@ chmod +x pandaward-linux-amd64 && sudo mv pandaward-linux-amd64 /usr/local/bin/p
 On Windows (PowerShell), save `pandaward-windows-amd64.exe` as `pandaward.exe` in a folder on your `PATH`:
 
 ```powershell
-Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.4/pandaward-windows-amd64.exe -OutFile pandaward.exe
+Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.5/pandaward-windows-amd64.exe -OutFile pandaward.exe
 (Get-FileHash pandaward.exe).Hash   # compare with the line in SHA256SUMS
 ```
 
@@ -169,7 +169,7 @@ flowchart LR
 1. **Inventory** walks the repository read-only and records files, routes, manifests, workflows, IaC, mobile manifests and AI/MCP usage.
 2. **Plan** maps the control catalog (domains A to R) onto what was found. Controls without matching assets become `NOT_APPLICABLE` with a reason you can review.
 3. **Adapters** run. Built-in checks are offline and always available; gitleaks, semgrep, osv-scanner, trivy and apktool are used only if you installed them. apktool decodes `.apk` files found in the project (resources only, never the app's code) so the manifest checks also run on what you ship (K-005). If you run [MobSF](https://github.com/MobSF/Mobile-Security-Framework-MobSF) yourself on this machine, set `scan.mobsf_url` (for example `http://127.0.0.1:8000`) and export its REST API key as `MOBSF_API_KEY`; PandaWard uploads the `.apk` and `.ipa` files it finds to that server, runs the static scan and reports MobSF's high and warning items as hypotheses under K-006 (APK) and L-005 (IPA). Code findings that MobSF reports only in bundled library code, outside the app's own package namespace, are listed for review instead. Only loopback addresses are accepted, proxies and redirects are ignored, and the key never appears in evidence, logs or reports. The adapter is tested against MobSF 4.5.3. When semgrep is installed it runs PandaWard's bundled offline rules (see [`rules/README.md`](rules/README.md)) plus any rules you configure. SARIF 2.1.0 files from analyzers you ran yourself (CodeQL or other SAST tools) are imported from `.pandaward/sarif/*.sarif` and any paths listed in `scan.sarif_files`; PandaWard never runs those tools. Imported results are hypotheses under control R-002, with snippets read and redacted from your files rather than taken from the SARIF.
-4. **Findings** are redacted, fingerprinted and linked to evidence. Repeated runs update their lifecycle: `OPEN`, `REMEDIATED`, `REOPENED`, `FALSE_POSITIVE`, `RISK_ACCEPTED`.
+4. **Findings** are redacted, fingerprinted and linked to evidence. Repeated runs update their lifecycle: `OPEN`, `REMEDIATED`, `REOPENED`, `FALSE_POSITIVE`, `RISK_ACCEPTED`. Identical hits in one file are told apart by position, so fixing one of them remediates that one; a finding whose file was moved or renamed keeps its ID and status and is reported as moved, never as fixed.
 5. **Edges** between domains are created only from shared assets and get their status from the linked controls.
 6. **Reports** show confirmed findings, suspected signals, coverage by domain, every undecided control and the evidence index.
 
@@ -215,7 +215,7 @@ In Claude Code, hooks keep the ledger current without any command. Edited files 
 | `pandaward fix-plan` | Ordered remediation steps |
 | `pandaward report [--format ...]` | HTML, Markdown, JSON, SARIF 2.1.0, CSV |
 | `pandaward evidence show ID \| verify` | Read or verify redacted evidence |
-| `pandaward diff [FROM TO]` | New, reopened, remediated, stale and waived findings between two assessments (default: previous vs latest) |
+| `pandaward diff [FROM TO]` | New, reopened, remediated, moved, stale and waived findings between two assessments (default: previous vs latest) |
 | `pandaward export --bundle out.zip` | Report and redacted evidence with a SHA-256 manifest for a reviewer; never raw tool output |
 | `pandaward verify-bundle out.zip` | Recompute every hash in a bundle; compare the printed manifest hash with the sender's |
 | `pandaward scope init \| validate \| approve \| revoke` | Authorization for network tests |
@@ -311,7 +311,7 @@ With [pre-commit](https://pre-commit.com), add this to `.pre-commit-config.yaml`
 ```yaml
 repos:
   - repo: https://github.com/ratomirjovanovic/pandaward
-    rev: v0.2.4
+    rev: v0.2.5
     hooks:
       - id: pandaward-system   # uses the pandaward on your PATH; use id: pandaward to build it with Go 1.26+
 ```
