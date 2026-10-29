@@ -60,11 +60,28 @@ rules:
     metadata:
       pandaward-control: D-003
       cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
+    # A value that is an UPPER_CASE module constant (or a property of one),
+    # a list built from one with .map(...).join(...), or a number cannot
+    # carry request data, so it is not reported on its own (#160).
     patterns:
       - pattern-either:
-          - pattern: $DB.$Q("$SQL" + $X, ...)
-          - pattern: $DB.$Q(`...${$X}...`, ...)
-          - pattern: $DB.$Q($A + $B, ...)
+          - patterns:
+              - pattern-either:
+                  - pattern: $DB.$Q("$SQL" + $X, ...)
+                  - pattern: $DB.$Q(`...${$X}...`, ...)
+              - metavariable-regex:
+                  metavariable: $X
+                  regex: (?s)^(?!(?:[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*|[A-Z][A-Z0-9_]*\.map\(.*\)\.join\([^()]*\)|(Math\.(trunc|floor|ceil|round)|Number|parseInt|parseFloat)\([^()]*\)|\d+(\.\d+)?)$)
+          - patterns:
+              - pattern: $DB.$Q($A + $B, ...)
+              - metavariable-regex:
+                  metavariable: $B
+                  regex: (?s)^(?!(?:[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*|[A-Z][A-Z0-9_]*\.map\(.*\)\.join\([^()]*\)|(Math\.(trunc|floor|ceil|round)|Number|parseInt|parseFloat)\([^()]*\)|\d+(\.\d+)?|"[^"]*"|'[^']*')$)
+          - patterns:
+              - pattern: $DB.$Q($A + $B, ...)
+              - metavariable-regex:
+                  metavariable: $A
+                  regex: (?s)^(?!(?:(?:[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*|[A-Z][A-Z0-9_]*\.map\(.*\)\.join\([^()]*\)|(Math\.(trunc|floor|ceil|round)|Number|parseInt|parseFloat)\([^()]*\)|\d+(\.\d+)?|"[^"]*"|'[^']*')(?:\s*\+\s*(?:[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*|[A-Z][A-Z0-9_]*\.map\(.*\)\.join\([^()]*\)|(Math\.(trunc|floor|ceil|round)|Number|parseInt|parseFloat)\([^()]*\)|\d+(\.\d+)?|"[^"]*"|'[^']*'))*)$)
       - metavariable-regex:
           metavariable: $Q
           regex: ^(query|execute|raw|run|all|prepare|\$queryRawUnsafe|\$executeRawUnsafe)$
