@@ -471,6 +471,10 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 		}
 		progress("adapter: " + ad.Name())
 		out, run := safeRun(ctx, ad, actx)
+		if n := e.dropExcluded(&out); n > 0 {
+			run.SignalsCount -= n
+			run.Detail += fmt.Sprintf("; %d signal(s) in excluded paths dropped", n)
+		}
 		if err := e.St.PutRun(asmt.ID, run); err != nil {
 			return nil, err
 		}
@@ -915,4 +919,31 @@ func edgeStatus(tests []string, byID map[string]model.ControlResult) (model.Stat
 		return model.StatusPass, "all linked controls passed: " + strings.Join(pass, ", ")
 	}
 	return model.StatusInconclusive, "no decisive linked control"
+}
+
+// dropExcluded removes signals in directories inventory.exclude skips, such
+// as build output. Built-in checks never see those files, but external tools
+// walk the tree themselves (gitleaks with --no-git scans everything), and
+// generated files there are not the project's code.
+func (e *Engine) dropExcluded(out *adapters.Result) int {
+	kept := out.Signals[:0]
+	n := 0
+	for _, s := range out.Signals {
+		rel := s.File
+		if filepath.IsAbs(rel) {
+			r, err := filepath.Rel(e.Root, rel)
+			if err != nil || strings.HasPrefix(r, "..") {
+				kept = append(kept, s)
+				continue
+			}
+			rel = r
+		}
+		if rel != "" && inventory.Excluded(rel, e.Cfg.Inventory.Exclude) {
+			n++
+			continue
+		}
+		kept = append(kept, s)
+	}
+	out.Signals = kept
+	return n
 }
