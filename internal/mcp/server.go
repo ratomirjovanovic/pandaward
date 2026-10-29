@@ -24,6 +24,7 @@ import (
 	"github.com/ratomirjovanovic/pandaward/internal/model"
 	"github.com/ratomirjovanovic/pandaward/internal/redact"
 	"github.com/ratomirjovanovic/pandaward/internal/report"
+	"github.com/ratomirjovanovic/pandaward/internal/telemetry"
 	"github.com/ratomirjovanovic/pandaward/internal/version"
 )
 
@@ -73,6 +74,15 @@ func str(desc string) map[string]any { return map[string]any{"type": "string", "
 
 var readOnly = map[string]any{"readOnlyHint": true, "openWorldHint": false}
 var localWrite = map[string]any{"readOnlyHint": false, "destructiveHint": false, "openWorldHint": false}
+
+func knownTool(name string) bool {
+	for _, t := range tools() {
+		if t.Name == name {
+			return true
+		}
+	}
+	return false
+}
 
 func tools() []tool {
 	return []tool{
@@ -124,6 +134,7 @@ func tools() []tool {
 
 // Serve reads JSON-RPC messages line by line until EOF.
 func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
+	go telemetry.Flush(ctx)
 	r := bufio.NewReaderSize(in, 1<<20)
 	enc := json.NewEncoder(out)
 	var wmu sync.Mutex
@@ -189,6 +200,10 @@ func (s *Server) handle(ctx context.Context, line []byte, send func(any)) {
 		if err := json.Unmarshal(req.Params, &p); err != nil {
 			resp.Error = &rpcErr{-32602, "invalid params"}
 			break
+		}
+		if knownTool(p.Name) {
+			root, _ := engine.FindRoot(s.Root)
+			telemetry.Record("mcp", p.Name, root)
 		}
 		s.mu.Lock()
 		res, err := s.call(ctx, p.Name, p.Arguments)
