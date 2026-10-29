@@ -217,6 +217,7 @@ type ScanResult struct {
 	New          int            `json:"new_findings"`
 	Reopened     int            `json:"reopened"`
 	Remediated   int            `json:"remediated"`
+	Moved        int            `json:"moved"`
 	Open         int            `json:"open_findings"`
 	Coverage     Coverage       `json:"coverage"`
 	Errors       []string       `json:"errors,omitempty"`
@@ -518,15 +519,36 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 	// Persist findings with evidence.
 	progress("findings: normalizing, fingerprinting and writing redacted evidence")
 	seen := map[string]bool{}
-	occurrence := map[string]int{}
-	for _, s := range allSignals {
-		base := s.RuleID + "|" + s.File + "|" + s.Key + "|" + normalizeSnippet(s.Snippet)
-		occurrence[base]++
-		fp := fingerprint(base, occurrence[base])
+	ledger, err := e.St.Findings(e.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	pastHashes := map[string]map[string]string{} // assessment -> path -> sha256
+	ids := assignFingerprints(allSignals, ledger, fileView{
+		exists: func(p string) bool { return inv.FileByPath(p) != nil },
+		sameContent: func(old, oldPath, newPath string) bool {
+			if _, ok := pastHashes[old]; !ok {
+				pastHashes[old], _ = e.St.FileHashes(old)
+			}
+			f := inv.FileByPath(newPath)
+			return f != nil && f.SHA256 != "" && pastHashes[old][oldPath] == f.SHA256
+		},
+	})
+	for i, s := range allSignals {
+		fp := ids.FP[i]
 		if seen[fp] {
 			continue
 		}
 		seen[fp] = true
+		if f, ok := ids.Moved[i]; ok {
+			if err := e.St.SetFingerprint(e.ProjectID, f.ID, fp); err != nil {
+				return nil, err
+			}
+			if err := e.St.Event(e.ProjectID, f.ID, string(f.Status), string(f.Status), "moved from "+f.File+" to "+s.File+" in "+asmt.ID); err != nil {
+				return nil, err
+			}
+			res.Moved++
+		}
 		var fileSHA string
 		if f := inv.FileByPath(s.File); f != nil {
 			fileSHA = f.SHA256

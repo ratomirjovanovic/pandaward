@@ -215,7 +215,7 @@ In Claude Code, hooks keep the ledger current without any command. Edited files 
 | `pandaward fix-plan` | Ordered remediation steps |
 | `pandaward report [--format ...]` | HTML, Markdown, JSON, SARIF 2.1.0, CSV |
 | `pandaward evidence show ID \| verify` | Read or verify redacted evidence |
-| `pandaward diff [FROM TO]` | New, reopened, remediated, stale and waived findings between two assessments (default: previous vs latest) |
+| `pandaward diff [FROM TO]` | New, reopened, remediated, moved, stale and waived findings between two assessments (default: previous vs latest) |
 | `pandaward export --bundle out.zip` | Report and redacted evidence with a SHA-256 manifest for a reviewer; never raw tool output |
 | `pandaward verify-bundle out.zip` | Recompute every hash in a bundle; compare the printed manifest hash with the sender's |
 | `pandaward scope init \| validate \| approve \| revoke` | Authorization for network tests |

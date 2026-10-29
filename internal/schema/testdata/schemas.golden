@@ -32,6 +32,14 @@ coverage.edges_verified int
 coverage.note string
 coverage.stale_files int
 delta.from string
+delta.moved[].control_id string
+delta.moved[].file string
+delta.moved[].finding_id string
+delta.moved[].line int
+delta.moved[].note string
+delta.moved[].rule_id string
+delta.moved[].severity string
+delta.moved[].title string
 delta.new[].control_id string
 delta.new[].file string
 delta.new[].finding_id string
