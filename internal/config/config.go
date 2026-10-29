@@ -41,6 +41,9 @@ type Config struct {
 		// SARIFFiles lists SARIF results to import, relative to the project
 		// root, in addition to .pandaward/sarif/*.sarif.
 		SARIFFiles []string `yaml:"sarif_files"`
+		// MobSFURL is a MobSF server on a loopback address, such as
+		// http://127.0.0.1:8000. Its API key is read from MOBSF_API_KEY.
+		MobSFURL string `yaml:"mobsf_url"`
 	} `yaml:"scan"`
 	Report struct {
 		Formats         []string `yaml:"formats"`
@@ -78,7 +81,7 @@ func Default(name string) *Config {
 	c.Scan.FailOnAdapterError = true
 	c.Scan.AllowToolNetwork = false
 	c.Scan.SemgrepConfig = ""
-	c.Scan.Adapters = []string{"builtin-inventory", "builtin-secrets", "builtin-code", "builtin-cicd", "builtin-infra", "builtin-supply", "builtin-mobile", "apktool", "gitleaks", "semgrep", "osv-scanner", "trivy"}
+	c.Scan.Adapters = []string{"builtin-inventory", "builtin-secrets", "builtin-code", "builtin-cicd", "builtin-infra", "builtin-supply", "builtin-mobile", "apktool", "mobsf", "gitleaks", "semgrep", "osv-scanner", "trivy"}
 	c.Report.Formats = []string{"html", "markdown", "json", "sarif"}
 	c.Report.IncludeUntested = true
 	c.Policy.AIAnalysis = "opt_in"

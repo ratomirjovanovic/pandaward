@@ -1189,6 +1189,19 @@ func cmdDoctor(ctx context.Context, args []string, w io.Writer) error {
 	} else {
 		fmt.Fprintf(w, "  %-12s not installed [runtime: pandaward test --profile staging-active; needs Java 17+]\n", "zap")
 	}
+	mobsfURL := ""
+	if cfg != nil {
+		mobsfURL = cfg.Scan.MobSFURL
+	}
+	if _, err := adapters.MobSFURL(mobsfURL); mobsfURL == "" {
+		fmt.Fprintf(w, "  %-12s not configured [set scan.mobsf_url to a MobSF server on this machine and %s]\n", "mobsf", adapters.MobSFKeyEnv)
+	} else if err != nil {
+		fmt.Fprintf(w, "  %-12s %v\n", "mobsf", err)
+	} else if os.Getenv(adapters.MobSFKeyEnv) == "" {
+		fmt.Fprintf(w, "  %-12s %s configured, %s not set\n", "mobsf", mobsfURL, adapters.MobSFKeyEnv)
+	} else {
+		fmt.Fprintf(w, "  %-12s %s configured (not contacted by doctor)\n", "mobsf", mobsfURL)
+	}
 	fmt.Fprintln(w, "\nMissing optional scanners make their controls BLOCKED with a reason; they never count as PASS.")
 	return nil
 }

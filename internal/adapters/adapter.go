@@ -64,6 +64,7 @@ func Registry() []Adapter {
 		&supplyAdapter{},
 		&mobileAdapter{},
 		apktoolAdapter{},
+		mobsfAdapter{},
 		gitleaks(),
 		semgrep(),
 		osvScanner(),

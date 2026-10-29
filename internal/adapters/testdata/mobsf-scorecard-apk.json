@@ -1,0 +1,28 @@
+{
+  "high": [
+    {"title": "Debug Enabled For App", "description": "[android:debuggable=true]\nDebugging was enabled on the app which makes it easier for reverse engineers to hook a debugger to it.", "section": "manifest"}
+  ],
+  "warning": [
+    {"title": "Application Data can be Backed up", "description": "[android:allowBackup=true]\nThis flag allows anyone to backup your application data via adb.", "section": "manifest"},
+    {"title": "This app may contain hardcoded secrets", "description": "The following secrets were identified from the app. Ensure that these are not secrets or private information.\n\"aws_secret\" : \"wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY\"", "section": "secrets"}
+  ],
+  "info": [
+    {"title": "The App logs information. Sensitive information should never be logged.", "description": "The App logs information. Sensitive information should never be logged.\nhttps://mas.owasp.org/MASTG/tests/android/MASVS-STORAGE/MASTG-TEST-0003/\n\nFiles:\ncom/example/clip/Main.java, line(s) 12", "section": "code"}
+  ],
+  "secure": [
+    {"title": "This application has no privacy trackers", "description": "This application does not include any user or device trackers. Unable to find trackers during static analysis.", "section": "trackers"}
+  ],
+  "hotspot": [
+    {"title": "Found 1 critical permission(s)", "description": "Ensure that these permissions are required by the application.\n\nandroid.permission.READ_CONTACTS (dangerous): read your contacts - Allows the app to read contact data.", "section": "permissions"}
+  ],
+  "total_trackers": 432,
+  "trackers": 0,
+  "security_score": 42,
+  "app_name": "ClipDump",
+  "file_name": "ClipDump.apk",
+  "hash": "3a2f8f0f1b5c4d6e7f8091a2b3c4d5e6",
+  "version_name": "1.0",
+  "version": "v4.5.3",
+  "title": "AppSec Scorecard",
+  "efr01": false
+}
