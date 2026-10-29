@@ -36,6 +36,32 @@ app.get('/invoices/:id', async (req, res) => {
   await db.query("SELECT * FROM invoices WHERE id = $1", [req.params.id]);
 });
 
+const OPEN_DISPUTE_STATUSES = ['open', 'needs_response'];
+const INVOICES_TABLE = 'invoices';
+
+app.get('/reports', async (req, res) => {
+  // Module constants, lists built from them and numbers carry no request data.
+  // ok: pandaward-js-sql-string
+  await db.execute(sql.raw(`SELECT * FROM disputes WHERE status IN (${OPEN_DISPUTE_STATUSES.map((s) => `'${s}'`).join(', ')})`));
+  // ok: pandaward-js-sql-string
+  await sql.raw(`SELECT * FROM disputes WHERE status IN (${OPEN_DISPUTE_STATUSES.map((s) => `'${s}'`).join(', ')})`);
+  // ok: pandaward-js-sql-string
+  await db.query("SELECT count(*) FROM " + INVOICES_TABLE);
+  // ok: pandaward-js-sql-string
+  await db.query(`DELETE FROM jobs WHERE attempts > ${Math.trunc(req.query.days)}`);
+  // ok: pandaward-js-sql-string
+  await db.query("SELECT * FROM " + INVOICES_TABLE + " LIMIT " + 50);
+  // ruleid: pandaward-js-sql-string
+  await db.query(`SELECT * FROM ${INVOICES_TABLE} WHERE id = ${req.query.id}`);
+  // ruleid: pandaward-js-sql-string
+  await db.query("SELECT * FROM " + INVOICES_TABLE + " WHERE id = " + req.query.id);
+  // ruleid: pandaward-js-sql-string
+  await db.query(req.query.where + " AND " + INVOICES_TABLE);
+  // ruleid: pandaward-js-sql-string
+  await sql.raw(`SELECT * FROM t WHERE x = ${CONFIG.prefix + req.body.x}`);
+  res.end();
+});
+
 function render(el, msg) {
   // ruleid: pandaward-js-html-sink
   el.innerHTML = msg;
