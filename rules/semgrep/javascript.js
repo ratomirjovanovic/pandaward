@@ -94,6 +94,31 @@ app.get('/fetch-stored', async (req, res) => {
   res.end();
 });
 
+const GITHUB_API = 'https://api.github.com';
+
+app.get('/repos/:id', async (req, res) => {
+  const repo = await db.repos.find(req.params.id);
+  // A fixed origin: only path segments vary.
+  // ok: pandaward-js-ssrf
+  await fetch(`${GITHUB_API}/repos/${repo.nameWithOwner}/commits/${req.query.sha}`);
+  // ok: pandaward-js-ssrf
+  await fetch(`https://api.github.com/users/${req.params.login}`);
+  // ok: pandaward-js-ssrf
+  await axios.get("https://api.github.com/repos/" + req.query.repo);
+  // ok: pandaward-js-ssrf
+  await fetch(GITHUB_API + "/repos/" + req.query.repo);
+  // The host itself comes from the request.
+  // ruleid: pandaward-js-ssrf
+  await fetch(`https://${req.query.host}/status`);
+  // ruleid: pandaward-js-ssrf
+  await fetch(`${GITHUB_API}${req.query.path}`);
+  // ruleid: pandaward-js-ssrf
+  await fetch(`${req.query.base}/repos/${repo.nameWithOwner}`);
+  // ruleid: pandaward-js-ssrf
+  await fetch("https://" + req.query.host + "/status");
+  res.end();
+});
+
 async function migrate(sql) {
   const rows = await sql.query('select id, storage_key from files');
   for (const row of rows) {
