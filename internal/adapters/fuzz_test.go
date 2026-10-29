@@ -34,6 +34,8 @@ func FuzzParseSARIF(f *testing.F) {
 func FuzzMobSFScorecard(f *testing.F) {
 	f.Add([]byte(`{"high":[{"title":"t","description":"d\nFiles:\na/b.java, line(s) 1","section":"code"}],"hash":"h","version":"v4.5.3"}`), "com.example.app")
 	f.Add([]byte(`{"warning":[{"title":"s","description":"k","section":"secrets"}],"hash":"h"}`), "")
+	// Not JSON, with the key split by a control character (found by CI).
+	f.Add([]byte("x 0123456789abcdef0123456789abcdef "), "")
 	f.Fuzz(func(t *testing.T, raw []byte, pkg string) {
 		const key = "0123456789abcdef0123456789abcdef"
 		if out := mobsfRaw(append(raw, []byte(key)...), key); strings.Contains(string(out), key) {

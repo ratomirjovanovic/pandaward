@@ -148,7 +148,11 @@ func parseMobSFScorecard(b []byte) (*mobsfScorecard, error) {
 func mobsfRaw(raw []byte, key string) []byte {
 	var doc map[string]any
 	if err := json.Unmarshal(raw, &doc); err != nil {
-		return []byte(redact.Text(strings.ReplaceAll(string(raw), key, "[REDACTED]")))
+		// Sanitizing drops control characters, which could join pieces of
+		// a split key; remove the key after that, and once more after
+		// redaction.
+		text := strings.ReplaceAll(redact.Sanitize(string(raw)), key, "[REDACTED]")
+		return []byte(strings.ReplaceAll(redact.Text(text), key, "[REDACTED]"))
 	}
 	for _, v := range doc {
 		items, _ := v.([]any)
