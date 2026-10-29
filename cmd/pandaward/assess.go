@@ -109,7 +109,7 @@ func cmdAssess(ctx context.Context, args []string, w io.Writer) error {
 	}
 	if !*asJSON && !*noBanner {
 		fmt.Fprint(w, banner)
-		fmt.Fprintf(w, "\n  Pandaward %s - local, evidence-based security assessment\n", version.Version)
+		fmt.Fprintf(w, "\n  PandaWard %s - local, evidence-based security assessment\n", version.Version)
 		fmt.Fprintln(w, "  by Ratomir Jovanovic - https://github.com/ratomirjovanovic/pandaward")
 		fmt.Fprintln(w, "  Passive: reads the repository, runs no project code, sends nothing to any target.")
 		fmt.Fprintln(w)

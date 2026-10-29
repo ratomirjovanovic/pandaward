@@ -86,6 +86,9 @@ func SARIF(r *Report) ([]byte, error) {
 		"$schema": "https://json.schemastore.org/sarif-2.1.0.json",
 		"version": "2.1.0",
 		"runs": []any{map[string]any{
+			// The driver name keeps the spelling "Pandaward" from before the
+			// PandaWard display name: code scanning keys alerts by tool name, and a
+			// new name would leave every earlier alert open under the old tool.
 			"tool":       map[string]any{"driver": map[string]any{"name": "Pandaward", "version": version.Version, "rules": rl}},
 			"results":    results,
 			"properties": map[string]any{"assessment_id": r.Assessment.ID, "attestation": Attestation},

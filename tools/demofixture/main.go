@@ -1,4 +1,4 @@
-// Command demofixture writes Pandaward's deliberately vulnerable fixture into a
+// Command demofixture writes PandaWard's deliberately vulnerable fixture into a
 // directory. It is used to produce the website demo; all secret-shaped
 // values are synthetic.
 package main

@@ -92,7 +92,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" dist/* --title "Pandaward $GITHUB_REF_NAME" --generate-notes --verify-tag \
+          gh release create "$GITHUB_REF_NAME" dist/* --title "PandaWard $GITHUB_REF_NAME" --generate-notes --verify-tag \
             $(case "$GITHUB_REF_NAME" in *-*|v0.*) echo --prerelease ;; esac)
 
       - name: Update plugin branches
@@ -144,7 +144,7 @@ jobs:
             elif [ "$branch" = plugin ]; then
               git -C "$wt" update-index --chmod=+x bin/pandaward bin/pandaward-linux-amd64 bin/pandaward-linux-arm64 bin/pandaward-darwin-amd64 bin/pandaward-darwin-arm64
             fi
-            git -C "$wt" commit -q -m "Pandaward $GITHUB_REF_NAME for $branch" -m "Built from $(git rev-parse HEAD) by the release workflow."
+            git -C "$wt" commit -q -m "PandaWard $GITHUB_REF_NAME for $branch" -m "Built from $(git rev-parse HEAD) by the release workflow."
             git -C "$wt" push -q origin "$branch"
             git worktree remove --force "$wt"
           }

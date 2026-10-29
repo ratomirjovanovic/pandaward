@@ -30,7 +30,7 @@ var finding = model.Finding{ID: "PW-0004", RuleID: "secret.stripe-live", Control
 func TestDefaultReportCarriesNoProjectData(t *testing.T) {
 	root := project(t)
 	r := FromFinding(root, finding, []model.Run{{Adapter: "builtin-secrets", ToolVersion: "builtin"}}, Options{})
-	if r.RuleID != "secret.stripe-live" || r.ControlID != "E-001" || r.FileType != ".js" || r.ToolVersion != "builtin" || r.Pandaward == "" || r.Catalog == "" {
+	if r.RuleID != "secret.stripe-live" || r.ControlID != "E-001" || r.FileType != ".js" || r.ToolVersion != "builtin" || r.PandaWard == "" || r.Catalog == "" {
 		t.Fatalf("metadata missing: %+v", r)
 	}
 	all := r.Markdown() + r.IssueURL()

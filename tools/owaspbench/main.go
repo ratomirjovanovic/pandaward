@@ -1,4 +1,4 @@
-// Command owaspbench measures Pandaward's built-in rules on the OWASP Benchmark
+// Command owaspbench measures PandaWard's built-in rules on the OWASP Benchmark
 // for Java (https://github.com/OWASP-Benchmark/BenchmarkJava). It walks a
 // local checkout with the same inventory settings as `pandaward scan`, runs the
 // built-in adapters in process, maps each finding to a test case by file name
@@ -134,7 +134,7 @@ func printTable(o *Output) {
 		commit = "unknown (not a git checkout)"
 	}
 	fmt.Printf("%s at %s\n", o.Benchmark, commit)
-	fmt.Printf("Pandaward %s, built-in rules only\n", o.PandawardVersion)
+	fmt.Printf("PandaWard %s, built-in rules only\n", o.PandawardVersion)
 	fmt.Printf("%d labelled test cases, %d test case files, %d of them excluded as test paths\n", o.TestCases, o.TestCaseFiles, o.TestPathExcluded)
 	fmt.Printf("%d findings: %d in test cases (%d of another category), %d elsewhere\n\n", o.Findings, o.FindingsInTests, o.OffCategory, o.FindingsElsewhere+o.UnknownTestCases)
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)

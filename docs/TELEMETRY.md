@@ -1,6 +1,6 @@
 # Telemetry
 
-Pandaward sends nothing about your use of it unless you turn telemetry on. It is off after installing and after every upgrade, and it stays off until you run `pandaward telemetry on` yourself in a terminal.
+PandaWard sends nothing about your use of it unless you turn telemetry on. It is off after installing and after every upgrade, and it stays off until you run `pandaward telemetry on` yourself in a terminal.
 
 ## Turning it on and off
 
@@ -15,18 +15,18 @@ pandaward telemetry off      # stops it and deletes everything not yet sent, inc
 
 ## What is recorded
 
-While it is on, Pandaward keeps one set of counters per UTC day:
+While it is on, PandaWard keeps one set of counters per UTC day:
 
 | Field | Example | Notes |
 |---|---|---|
 | `install_id` | `dd8def0e3c95...` | Random, created when you turn telemetry on; deleted when you turn it off |
 | `version`, `os`, `arch` | `0.2.2`, `linux`, `amd64` | From the binary |
-| `counts` | `{"cli:scan": 3, "mcp:pandaward_get_status": 5, "hook:stop": 12}` | Entry point (`cli`, `mcp`, `hook`) and the command, MCP tool or hook name. Only names from Pandaward's own fixed lists are counted |
+| `counts` | `{"cli:scan": 3, "mcp:pandaward_get_status": 5, "hook:stop": 12}` | Entry point (`cli`, `mcp`, `hook`) and the command, MCP tool or hook name. Only names from PandaWard's own fixed lists are counted |
 | `projects` | `["9f2c41d0a7b3e815"]` | One ID per project root a command ran in: an HMAC-SHA256 of the absolute path under a random salt that never leaves your machine. It cannot be turned back into a path, and the same project gives different IDs on different installs |
 
 Skills and the plugin show up as the commands and MCP tools they run.
 
-Pandaward never records arguments, paths, file or project names, findings, evidence, code, environment variables or anything read from the scanned project.
+PandaWard never records arguments, paths, file or project names, findings, evidence, code, environment variables or anything read from the scanned project.
 
 ## When it is sent
 

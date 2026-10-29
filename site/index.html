@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pandaward</title>
+<title>PandaWard</title>
 <meta name="description" content="Local, evidence-based application security assessment for your own code. A Go CLI and a Claude Code plugin. Passive by default.">
 <link rel="icon" href="icon.png">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header class="top"><div class="wrap">
-  <img src="icon.png" alt=""><b>Pandaward</b>
+  <img src="icon.png" alt=""><b>PandaWard</b>
   <nav>
     <a href="demo/">Demo</a>
     <a href="https://github.com/ratomirjovanovic/pandaward/wiki">Docs</a>
@@ -22,14 +22,14 @@
   <div class="hero">
     <div>
       <h1>Security assessment that tells you what it did not test.</h1>
-      <p class="lead">Pandaward scans your own repository locally, keeps an evidence ledger across sessions, and reports undecided controls as plainly as failed ones. Use it as a CLI or as a Claude Code plugin.</p>
+      <p class="lead">PandaWard scans your own repository locally, keeps an evidence ledger across sessions, and reports undecided controls as plainly as failed ones. Use it as a CLI or as a Claude Code plugin.</p>
       <div class="cta">
         <a class="btn primary" href="demo/">See the demo</a>
         <a class="btn" href="#install">Install</a>
         <a class="btn" href="https://github.com/ratomirjovanovic/pandaward">Source</a>
       </div>
     </div>
-    <img class="logo" src="icon.png" alt="Pandaward logo: a ring with an offset disc">
+    <img class="logo" src="icon.png" alt="PandaWard logo: a ring with an offset disc">
   </div>
 
   <section>
@@ -39,7 +39,7 @@
       <div class="card"><h3>Passive by default</h3><p>Reads the repository as data. Never runs install scripts, builds or repository hooks, and sends no traffic to any target.</p></div>
       <div class="card"><h3>Human-approved network tests</h3><p>A scope manifest you write, approved from an interactive terminal, bound to the file's hash, with a request budget and no redirects.</p></div>
       <div class="card"><h3>Secrets stay masked</h3><p>Values are redacted before they are stored, printed, reported or returned to a model. <code>.env</code> and key files are recorded by name only.</p></div>
-      <div class="card"><h3>No AI-confirmed findings</h3><p>Agents are read-only and can only record hypotheses. Pandaward reads the cited lines itself, so a model cannot supply evidence.</p></div>
+      <div class="card"><h3>No AI-confirmed findings</h3><p>Agents are read-only and can only record hypotheses. PandaWard reads the cited lines itself, so a model cannot supply evidence.</p></div>
       <div class="card"><h3>State that survives</h3><p>A local SQLite ledger keeps assessments, findings and evidence across sessions, compaction and restarts.</p></div>
       <div class="card"><h3>Private</h3><p>No account, no telemetry, no cloud backend. AGPL-3.0 open source.</p></div>
     </div>
@@ -62,7 +62,7 @@
 
   <section>
     <h2>Cross-domain, not just per file</h2>
-    <p class="sub">Eighteen domains, A to R. When two domains share a real asset in your code, Pandaward creates an edge and tracks it on its own, so "authorization passed" never hides "identity to object access is untested".</p>
+    <p class="sub">Eighteen domains, A to R. When two domains share a real asset in your code, PandaWard creates an edge and tracks it on its own, so "authorization passed" never hides "identity to object access is untested".</p>
     <div class="tablewrap"><table>
       <tr><th>Edge</th><th>Created when</th><th>Scenario</th></tr>
       <tr><td><code>AB1</code></td><td>login or token routes exist</td><td>new auth route missing session coverage</td></tr>
@@ -132,12 +132,12 @@ pandaward assess</pre>
 
   <section>
     <h2>What it is not</h2>
-    <p class="note">Pandaward is alpha software and an automated technical assessment. It is not a certification, attestation, legal opinion or independently signed penetration test, and it cannot prove the absence of vulnerabilities. Runtime profiles beyond passive header review are on the roadmap.</p>
+    <p class="note">PandaWard is alpha software and an automated technical assessment. It is not a certification, attestation, legal opinion or independently signed penetration test, and it cannot prove the absence of vulnerabilities. Runtime profiles beyond passive header review are on the roadmap.</p>
   </section>
 </main>
 
 <footer><div class="wrap">
-  Pandaward is free and open source under AGPL-3.0-only ·
+  PandaWard is free and open source under AGPL-3.0-only ·
   <a href="https://github.com/ratomirjovanovic/pandaward/wiki">Documentation</a> ·
   <a href="https://github.com/ratomirjovanovic/pandaward/security/advisories/new">Report a vulnerability</a>
 </div></footer>

@@ -1,6 +1,6 @@
 //go:build ignore
 
-// Fixture for go.yaml; excluded from the Pandaward build.
+// Fixture for go.yaml; excluded from the PandaWard build.
 package main
 
 import (

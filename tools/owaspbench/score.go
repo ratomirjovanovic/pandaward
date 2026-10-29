@@ -112,7 +112,7 @@ func ParseExpected(r io.Reader) ([]Expected, error) {
 	return out, sc.Err()
 }
 
-// Finding is the part of a Pandaward signal the scoring needs.
+// Finding is the part of a PandaWard signal the scoring needs.
 type Finding struct {
 	Rule string
 	CWE  string

@@ -2,7 +2,7 @@
 
 ## Semgrep (`semgrep/`)
 
-Pandaward ships a small, reviewed set of Semgrep rules for JavaScript/TypeScript, Python, Go and Java. They are embedded in the `pandaward` binary and run automatically whenever `semgrep` is installed. They are local files, so they work with `scan.allow_tool_network: false`. Rules set in `scan.semgrep_config` or `.pandaward/semgrep/` run in addition to them.
+PandaWard ships a small, reviewed set of Semgrep rules for JavaScript/TypeScript, Python, Go and Java. They are embedded in the `pandaward` binary and run automatically whenever `semgrep` is installed. They are local files, so they work with `scan.allow_tool_network: false`. Rules set in `scan.semgrep_config` or `.pandaward/semgrep/` run in addition to them.
 
 | File | Covers |
 |---|---|
@@ -25,4 +25,4 @@ The Go fixture has a `//go:build ignore` tag so it is not part of the build.
 
 ### License
 
-These rules were written for Pandaward and are licensed under the project license (AGPL-3.0-only, see `LICENSE`). They are not copied or derived from the Semgrep Registry, whose rules are under the separate Semgrep Rules License. Semgrep itself is not bundled; install it yourself if you want these rules to run.
+These rules were written for PandaWard and are licensed under the project license (AGPL-3.0-only, see `LICENSE`). They are not copied or derived from the Semgrep Registry, whose rules are under the separate Semgrep Rules License. Semgrep itself is not bundled; install it yourself if you want these rules to run.

@@ -1,5 +1,5 @@
 // Package telemetry keeps opt-in usage counters and sends them, at most once
-// a day, to the Pandaward collector. It is off unless the user turns it on
+// a day, to the PandaWard collector. It is off unless the user turns it on
 // with `pandaward telemetry on`; the setting lives only in the user config
 // directory, so no repository can enable it. Counters hold an entry point
 // and command name per day, the version, OS and architecture, and salted

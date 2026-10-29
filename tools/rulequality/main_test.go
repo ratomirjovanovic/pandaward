@@ -8,7 +8,7 @@ import (
 )
 
 func form(heading, value string) string {
-	return "### " + heading + "\n\n" + value + "\n\n### Pandaward version\n\n0.1.3\n"
+	return "### " + heading + "\n\n" + value + "\n\n### PandaWard version\n\n0.1.3\n"
 }
 
 func TestRuleFromBody(t *testing.T) {
@@ -20,7 +20,7 @@ func TestRuleFromBody(t *testing.T) {
 		form("Rule ID", "x; rm -rf / $(id) <script>"):   "x-rm-rf-id-script",
 		form("Rule ID", strings.Repeat("a", 80)):        strings.Repeat("a", 40),
 		"no form at all":                                "unknown",
-		"### Rule ID\n\n### Pandaward version\n\n0.1.3": "unknown",
+		"### Rule ID\n\n### PandaWard version\n\n0.1.3": "unknown",
 		form("Rule ID", "../../etc/passwd"):             "etc-passwd",
 	} {
 		if got := RuleFromBody(body); got != want {

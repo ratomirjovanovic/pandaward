@@ -72,7 +72,7 @@ func TestReportsAreRedactedAndValid(t *testing.T) {
 }
 
 // Imported SARIF results reach every report format as unconfirmed findings,
-// and Pandaward's own SARIF report is never imported back.
+// and PandaWard's own SARIF report is never imported back.
 func TestImportedSARIFInReports(t *testing.T) {
 	root := t.TempDir()
 	testfixture.Write(t, root, "src/db.js", "const id = req.query.id;\ndb.query('SELECT * FROM t WHERE id=' + id);\n")
@@ -120,6 +120,6 @@ func TestImportedSARIFInReports(t *testing.T) {
 		t.Fatal(err)
 	}
 	if res.New != 0 || res.Status != "COMPLETE" {
-		t.Errorf("re-importing Pandaward's own report: %d new, %s %v", res.New, res.Status, res.Errors)
+		t.Errorf("re-importing PandaWard's own report: %d new, %s %v", res.New, res.Status, res.Errors)
 	}
 }

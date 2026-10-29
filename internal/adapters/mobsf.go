@@ -52,7 +52,7 @@ func MobSFURL(raw string) (*url.URL, error) {
 	}
 	h := u.Hostname()
 	if ip := net.ParseIP(h); !(strings.EqualFold(h, "localhost") || ip != nil && ip.IsLoopback()) {
-		return nil, fmt.Errorf("scan.mobsf_url host %q is not a loopback address; Pandaward only talks to a MobSF server on this machine", h)
+		return nil, fmt.Errorf("scan.mobsf_url host %q is not a loopback address; PandaWard only talks to a MobSF server on this machine", h)
 	}
 	u.Path = strings.TrimRight(u.Path, "/")
 	u.RawQuery, u.Fragment = "", ""
@@ -154,7 +154,7 @@ func mobsfRaw(raw []byte, key string) []byte {
 		items, _ := v.([]any)
 		for _, it := range items {
 			if m, ok := it.(map[string]any); ok && m["section"] == "secrets" {
-				m["description"] = "[omitted by Pandaward: candidate secrets]"
+				m["description"] = "[omitted by PandaWard: candidate secrets]"
 			}
 		}
 	}

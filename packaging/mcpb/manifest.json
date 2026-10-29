@@ -1,10 +1,10 @@
 {
   "manifest_version": "0.3",
   "name": "pandaward",
-  "display_name": "Pandaward",
+  "display_name": "PandaWard",
   "version": "VERSION",
   "description": "Local, evidence-based application security assessment: scan state, findings, evidence and retests for one project.",
-  "long_description": "Pandaward scans your own repository locally, keeps an evidence ledger across sessions and reports undecided controls as plainly as failed ones. The MCP server reads that ledger and can run passive scans and retests. It sends nothing to any target; network tests need a scope manifest approved by a person in a terminal.",
+  "long_description": "PandaWard scans your own repository locally, keeps an evidence ledger across sessions and reports undecided controls as plainly as failed ones. The MCP server reads that ledger and can run passive scans and retests. It sends nothing to any target; network tests need a scope manifest approved by a person in a terminal.",
   "author": {
     "name": "Ratomir Jovanovic",
     "url": "https://github.com/ratomirjovanovic"

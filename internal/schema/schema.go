@@ -1,4 +1,4 @@
-// Package schema describes the shape of every format Pandaward writes or reads
+// Package schema describes the shape of every format PandaWard writes or reads
 // that other programs depend on, so tests can pin them. A shape is one line
 // per field: its dotted path, the encoding name and a coarse type.
 package schema

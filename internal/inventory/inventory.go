@@ -128,7 +128,7 @@ func Hashes(ctx context.Context, root string, opt Options) (map[string]string, e
 	return out, nil
 }
 
-// stateDirs hold Pandaward's own state (ledger, evidence, reports) at the
+// stateDirs hold PandaWard's own state (ledger, evidence, reports) at the
 // project root. They are skipped whatever inventory.exclude says: a config
 // from before the rename lists .pensec, and evidence read back as project
 // files would show up as findings and make every scan look stale. Only the
@@ -229,7 +229,7 @@ func walkFiles(ctx context.Context, absRoot string, opt Options, withLines bool,
 	})
 }
 
-// LangOf returns the analysis language for a file name, or "" when Pandaward does
+// LangOf returns the analysis language for a file name, or "" when PandaWard does
 // not analyze that file type.
 func LangOf(name string) string { return langOf(name) }
 
