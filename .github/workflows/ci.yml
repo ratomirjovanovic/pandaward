@@ -35,6 +35,14 @@ jobs:
         run: |
           go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
           go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 -mode binary pandaward
+      # The seed corpora run in go test; this explores beyond them for a
+      # bounded time on the parsers that read untrusted input.
+      - name: Fuzz
+        if: runner.os == 'Linux'
+        run: |
+          go test ./internal/redact -run '^$' -fuzz '^FuzzLine$' -fuzztime 30s
+          go test ./internal/adapters -run '^$' -fuzz '^FuzzParseSARIF$' -fuzztime 30s
+          go test ./internal/adapters -run '^$' -fuzz '^FuzzMobSFScorecard$' -fuzztime 30s
       # Release-blocking: the hostile-repository suite must pass on every OS.
       - name: Self-test against a hostile repository
         run: go run ./cmd/pandaward selftest

@@ -1,0 +1,23 @@
+# Weekly update proposals for Go modules and the pinned GitHub Actions,
+# grouped so that each ecosystem opens at most one PR a week. The Go
+# toolchain in go.mod is updated by hand (see docs/RELEASING.md).
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      go-modules:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+  - package-ecosystem: pip
+    directory: /.github/requirements
+    schedule:
+      interval: monthly
