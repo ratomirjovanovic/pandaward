@@ -17,6 +17,7 @@ import (
 
 	"github.com/ratomirjovanovic/pandaward/internal/engine"
 	"github.com/ratomirjovanovic/pandaward/internal/redact"
+	"github.com/ratomirjovanovic/pandaward/internal/telemetry"
 )
 
 // Input is the subset of the hook payload Pandaward reads.
@@ -63,6 +64,12 @@ func openEngine(in Input) *engine.Engine {
 // Run dispatches a hook by name.
 func Run(name string, stdin io.Reader, stdout io.Writer) int {
 	in := readInput(stdin)
+	switch name {
+	case "session-start", "post-edit", "pre-tool", "pre-compact", "stop":
+		// Counted only; hooks never send, so they never wait on the network.
+		root, _ := engine.FindRoot(projectDir(in))
+		telemetry.Record("hook", name, root)
+	}
 	switch name {
 	case "session-start":
 		return sessionStart(in, stdout)

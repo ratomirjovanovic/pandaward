@@ -37,6 +37,7 @@ import (
 	"github.com/ratomirjovanovic/pandaward/internal/report"
 	"github.com/ratomirjovanovic/pandaward/internal/scope"
 	"github.com/ratomirjovanovic/pandaward/internal/store"
+	"github.com/ratomirjovanovic/pandaward/internal/telemetry"
 	"github.com/ratomirjovanovic/pandaward/internal/version"
 	"github.com/ratomirjovanovic/pandaward/internal/zap"
 )
@@ -74,6 +75,7 @@ Network-active (human authorization required):
 Integration and tooling:
   doctor          Environment, optional scanners and their network needs
   capabilities    Control catalog with adapter maturity
+  telemetry       Opt-in usage counters: status, on, off, show (off by default)
   benchmark       TP/FP/FN/TN per built-in rule on the bundled corpus (--json, --strict)
   selftest        Run the hostile-repository suite: can repository text steer Pandaward? (--json)
   mcp             Serve the MCP stdio interface
@@ -161,9 +163,16 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		err = cmdSelftest(ctx, rest, stdout)
 	case "capabilities":
 		err = cmdCapabilities(rest, stdout)
+	case "telemetry":
+		err = cmdTelemetry(rest, stdout)
 	default:
 		fmt.Fprintf(stderr, "unknown command %q\n\n%s", cmd, usage)
 		return 2
+	}
+	if cmd != "mcp" && cmd != "telemetry" {
+		root, _ := engine.FindRoot(rootArg(rest))
+		telemetry.Record("cli", cmd, root)
+		telemetry.Flush(ctx)
 	}
 	if err != nil {
 		var ee exitErr
@@ -937,7 +946,9 @@ func cmdEvents(args []string, w io.Writer) error {
 	return nil
 }
 
-func isInteractive() bool {
+// isInteractive reports whether stdin is a terminal. A variable so tests
+// can take the terminal away.
+var isInteractive = func() bool {
 	st, err := os.Stdin.Stat()
 	if err != nil {
 		return false
@@ -1203,6 +1214,11 @@ func cmdDoctor(ctx context.Context, args []string, w io.Writer) error {
 		fmt.Fprintf(w, "  %-12s %s configured (not contacted by doctor)\n", "mobsf", mobsfURL)
 	}
 	fmt.Fprintln(w, "\nMissing optional scanners make their controls BLOCKED with a reason; they never count as PASS.")
+	if s := telemetry.Load(); s.Enabled && !telemetry.ForcedOff() {
+		fmt.Fprintln(w, "Telemetry: on (`pandaward telemetry show` prints what is sent, `pandaward telemetry off` stops it)")
+	} else {
+		fmt.Fprintln(w, "Telemetry: off")
+	}
 	return nil
 }
 
@@ -1503,6 +1519,85 @@ func cmdFeedback(args []string, w io.Writer) error {
 	fmt.Fprintln(w, "Already reported? Upvote the existing issue instead:", r.ExistingURL())
 	if r.Kind == feedback.FalsePositive {
 		fmt.Fprintln(w, "\nTo close it in this project as well: pandaward findings false-positive "+redact.Line(pos[0])+" --by <name> --note <why>")
+	}
+	return nil
+}
+
+// rootArg returns the --root value of a command line, or "." when there is
+// none, so telemetry can tell which project a command ran on.
+func rootArg(args []string) string {
+	for i, a := range args {
+		switch {
+		case (a == "--root" || a == "-root") && i+1 < len(args):
+			return args[i+1]
+		case strings.HasPrefix(a, "--root="):
+			return strings.TrimPrefix(a, "--root=")
+		case strings.HasPrefix(a, "-root="):
+			return strings.TrimPrefix(a, "-root=")
+		}
+	}
+	return "."
+}
+
+func cmdTelemetry(args []string, w io.Writer) error {
+	sub := "status"
+	if len(args) > 0 {
+		sub = args[0]
+	}
+	switch sub {
+	case "status":
+		s := telemetry.Load()
+		switch {
+		case telemetry.ForcedOff():
+			fmt.Fprintln(w, "Telemetry: off (forced by PANDAWARD_TELEMETRY or DO_NOT_TRACK)")
+		case s.Enabled:
+			fmt.Fprintln(w, "Telemetry: on")
+		default:
+			fmt.Fprintln(w, "Telemetry: off (the default; nothing is recorded or sent)")
+		}
+		if telemetry.Endpoint == "" {
+			fmt.Fprintln(w, "This build has no collector address, so nothing is ever sent.")
+		}
+		fmt.Fprintln(w, "`pandaward telemetry show` prints exactly what would be sent; docs/TELEMETRY.md lists every field.")
+	case "on":
+		// Consent is the person's, not an agent's: like scope approval it
+		// needs a terminal. Turning it off works from anywhere.
+		if !isInteractive() {
+			return exitErr{3, "telemetry can only be turned on by a person in an interactive terminal (stdin is not a TTY). Run `pandaward telemetry on` yourself in PowerShell, cmd or a Unix terminal."}
+		}
+		s, err := telemetry.Enable()
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(w, "Telemetry on. Pandaward counts, per day: which commands, MCP tools and hooks ran, the version, OS and")
+		fmt.Fprintln(w, "architecture, and salted project IDs that cannot be turned back into paths. It never records arguments,")
+		fmt.Fprintln(w, "paths, file names, findings or code. Finished days are sent at most once a day; `pandaward telemetry off`")
+		fmt.Fprintln(w, "stops it and deletes what was not sent.")
+		fmt.Fprintf(w, "Install ID: %s\n", s.InstallID)
+		if telemetry.ForcedOff() {
+			fmt.Fprintln(w, "Note: PANDAWARD_TELEMETRY or DO_NOT_TRACK is set in this environment, so nothing is recorded while it is.")
+		}
+	case "off":
+		if err := telemetry.Disable(); err != nil {
+			return err
+		}
+		fmt.Fprintln(w, "Telemetry off. Unsent counters and the install ID were deleted.")
+	case "show":
+		s := telemetry.Load()
+		p, _ := telemetry.Pending(s)
+		b, err := json.MarshalIndent(p, "", "  ")
+		if err != nil {
+			return err
+		}
+		fmt.Fprintln(w, "Next payload, byte for byte:")
+		fmt.Fprintln(w, string(b))
+		if d := telemetry.Today(s); d != nil {
+			b, _ := json.MarshalIndent(d, "", "  ")
+			fmt.Fprintln(w, "Today so far (sent after the day ends):")
+			fmt.Fprintln(w, string(b))
+		}
+	default:
+		return exitErr{code: 2, msg: "usage: pandaward telemetry [status|on|off|show]"}
 	}
 	return nil
 }

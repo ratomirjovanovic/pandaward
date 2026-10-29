@@ -54,7 +54,7 @@ Most scanners print a list of alerts and stop. Pandaward keeps a **ledger**: eve
 | **Secrets never leak** | Values are masked before they are stored, printed, reported or returned to a model. `.env` and key files are recorded by name only. |
 | **Remembers across sessions** | State lives in a local SQLite ledger, so context compaction or a restart does not lose results. |
 | **Cross-domain thinking** | Links such as *identity -> authorization* (`BC1`) or *webhook -> payment state* (`FG1`) are created from shared assets in your code and tracked separately. |
-| **Private** | No account, no telemetry, no cloud backend. |
+| **Private** | No account and no cloud backend. Usage telemetry is off unless you turn it on yourself, and `pandaward telemetry show` prints every byte it would send ([details](docs/TELEMETRY.md)). |
 
 > **Formerly PenSec.** The project was renamed to Pandaward in 0.2.0. If you used PenSec, see [Moving from PenSec](#moving-from-pensec).
 
@@ -227,6 +227,7 @@ In Claude Code, hooks keep the ledger current without any command. Edited files 
 | `pandaward benchmark` | TP, FP, FN and TN per built-in rule on the bundled corpus |
 | `pandaward selftest` | Runs a hostile fixture repository (instructions in comments, README, OpenAPI, MCP descriptions and scanner output) through scan, reports, MCP and hooks and checks Pandaward was not steered by it; CI and every release run it and fail on any case |
 | `pandaward mcp` | Local stdio MCP server used by the plugin |
+| `pandaward telemetry [on \| off \| show]` | Opt-in usage counters, off by default; `on` needs an interactive terminal ([what is sent](docs/TELEMETRY.md)) |
 
 Human decisions are explicit and recorded:
 

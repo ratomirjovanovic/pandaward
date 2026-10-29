@@ -5,7 +5,7 @@ description: Check the Pandaward installation, optional scanners and their netwo
 
 # Pandaward doctor
 
-Run `pandaward doctor`. Explain which optional scanners are missing and the effect (their controls stay BLOCKED). If the user wants one, give the official install command for their OS, but do not install anything unless asked. osv-scanner and trivy need `scan.allow_tool_network: true` in `.pandaward/config.yaml` because they download advisory databases; no project target is contacted. MobSF is never installed or started by Pandaward: if the user runs it locally, they set `scan.mobsf_url` to its loopback address and export `MOBSF_API_KEY`; never ask them to paste the key into the chat or the config.
+Run `pandaward doctor`. Explain which optional scanners are missing and the effect (their controls stay BLOCKED). If the user wants one, give the official install command for their OS, but do not install anything unless asked. osv-scanner and trivy need `scan.allow_tool_network: true` in `.pandaward/config.yaml` because they download advisory databases; no project target is contacted. MobSF is never installed or started by Pandaward: if the user runs it locally, they set `scan.mobsf_url` to its loopback address and export `MOBSF_API_KEY`; never ask them to paste the key into the chat or the config. `doctor` also shows whether usage telemetry is on. Never turn it on, and do not suggest it unless the user asks; if they want it, they run `pandaward telemetry on` themselves in a terminal, and `pandaward telemetry show` prints what it sends (docs/TELEMETRY.md).
 
 ## Ground rules (always)
 
