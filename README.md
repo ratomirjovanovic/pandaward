@@ -118,7 +118,7 @@ scoop bucket add pandaward https://github.com/ratomirjovanovic/pandaward; scoop 
 Or download a binary from the [releases page](https://github.com/ratomirjovanovic/pandaward/releases) (Linux and macOS on amd64 and arm64, Windows on amd64). For example on Linux:
 
 ```sh
-v=v0.2.5
+v=v0.2.6
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/pandaward-linux-amd64
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/SHA256SUMS
 sha256sum --ignore-missing -c SHA256SUMS
@@ -128,7 +128,7 @@ chmod +x pandaward-linux-amd64 && sudo mv pandaward-linux-amd64 /usr/local/bin/p
 On Windows (PowerShell), save `pandaward-windows-amd64.exe` as `pandaward.exe` in a folder on your `PATH`:
 
 ```powershell
-Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.5/pandaward-windows-amd64.exe -OutFile pandaward.exe
+Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.6/pandaward-windows-amd64.exe -OutFile pandaward.exe
 (Get-FileHash pandaward.exe).Hash   # compare with the line in SHA256SUMS
 ```
 
@@ -175,6 +175,8 @@ flowchart LR
 
 In Claude Code, hooks keep the ledger current without any command. Edited files are marked stale as they change, and when Claude finishes a turn that edited files, PandaWard runs a changed-only passive retest (bounded at 40 seconds) and hands any new or reopened findings back to Claude, which explains them and offers a fix. A clean retest stays silent; one that runs out of time or fails says so instead of claiming anything is fixed. Set `hooks.auto_retest: false` in `.pandaward/config.yaml` to turn it off.
 
+While the specialist reviewers run, you can see what each one is doing. Their rows in the subagent panel below the prompt show the elapsed time, files read, searches, recorded hypotheses and the file or pattern they are on, refreshed by Claude Code. In the chat, Claude passes on a line when a reviewer starts, records a hypothesis or finishes, gives a short summary about once a minute in between, and warns when a reviewer has gone quiet for 10 minutes. The chat lines need Claude Code's Monitor tool, which on Windows needs Git Bash. Hooks record this to `.pandaward/private/progress.jsonl` for subagents named `pandaward:*` only. They record file names and search patterns, never file contents, and `pandaward progress` shows the same view in a terminal.
+
 ## What it checks
 
 | Domain | Automated today (offline) | Needs review or runtime |
@@ -216,6 +218,7 @@ In Claude Code, hooks keep the ledger current without any command. Edited files 
 | `pandaward report [--format ...]` | HTML, Markdown, JSON, SARIF 2.1.0, CSV |
 | `pandaward evidence show ID \| verify` | Read or verify redacted evidence |
 | `pandaward diff [FROM TO]` | New, reopened, remediated, moved, stale and waived findings between two assessments (default: previous vs latest) |
+| `pandaward progress [--watch] [--json]` | What the reviewer subagents of a guided review are doing; `--watch` prints a line per start, hypothesis and finish until all are done |
 | `pandaward export --bundle out.zip` | Report and redacted evidence with a SHA-256 manifest for a reviewer; never raw tool output |
 | `pandaward verify-bundle out.zip` | Recompute every hash in a bundle; compare the printed manifest hash with the sender's |
 | `pandaward scope init \| validate \| approve \| revoke` | Authorization for network tests |
@@ -311,7 +314,7 @@ With [pre-commit](https://pre-commit.com), add this to `.pre-commit-config.yaml`
 ```yaml
 repos:
   - repo: https://github.com/ratomirjovanovic/pandaward
-    rev: v0.2.5
+    rev: v0.2.6
     hooks:
       - id: pandaward-system   # uses the pandaward on your PATH; use id: pandaward to build it with Go 1.26+
 ```
