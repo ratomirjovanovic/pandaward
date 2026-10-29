@@ -40,7 +40,7 @@
       <div class="card"><h3>Human-approved network tests</h3><p>A scope manifest you write, approved from an interactive terminal, bound to the file's hash, with a request budget and no redirects.</p></div>
       <div class="card"><h3>Secrets stay masked</h3><p>Values are redacted before they are stored, printed, reported or returned to a model. <code>.env</code> and key files are recorded by name only.</p></div>
       <div class="card"><h3>No AI-confirmed findings</h3><p>Agents are read-only and can only record hypotheses. PandaWard reads the cited lines itself, so a model cannot supply evidence.</p></div>
-      <div class="card"><h3>State that survives</h3><p>A local SQLite ledger keeps assessments, findings and evidence across sessions, compaction and restarts.</p></div>
+      <div class="card"><h3>State that survives</h3><p>A local SQLite ledger keeps assessments, findings and evidence across sessions, compaction and restarts. A fix counts only when the check runs again and no longer sees the problem; a moved file keeps its findings instead of reading as fixed.</p></div>
       <div class="card"><h3>Private</h3><p>No account and no cloud backend. Usage telemetry is off unless you turn it on yourself, and <code>pandaward telemetry show</code> prints every byte it would send (<a href="https://github.com/ratomirjovanovic/pandaward/blob/main/docs/TELEMETRY.md">details</a>). AGPL-3.0 open source.</p></div>
     </div>
   </section>
