@@ -223,3 +223,25 @@ func TestWalkExcludeGlobs(t *testing.T) {
 		t.Fatalf("analyzed files = %v, want %v", paths, want)
 	}
 }
+
+func TestExcluded(t *testing.T) {
+	ex := []string{"node_modules", ".next", ".next-*", "build", "web/out"}
+	for rel, want := range map[string]bool{
+		".next/cache/.rscinfo":                   true,
+		".next/server/preview-props.json":        true,
+		`apps\web\.next\prerender-manifest.json`: true,
+		".next-dev/trace":                        true,
+		"packages/ui/node_modules/x/index.js":    true,
+		"web/out/index.html":                     true,
+		".pandaward/private/state.db":            true,
+		"src/.pandaward/notes.md":                false,
+		"src/next.config.js":                     false,
+		"src/build.ts":                           false,
+		"docs/out/index.html":                    false,
+		".env":                                   false,
+	} {
+		if got := inventory.Excluded(rel, ex); got != want {
+			t.Errorf("Excluded(%q) = %v, want %v", rel, got, want)
+		}
+	}
+}

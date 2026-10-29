@@ -136,29 +136,61 @@ func Hashes(ctx context.Context, root string, opt Options) (map[string]string, e
 // a nested directory .pandaward.
 var stateDirs = map[string]bool{".pandaward": true, ".pensec": true}
 
+// excluder matches directories against inventory.exclude. Plain entries
+// match a directory name or path exactly; entries with a * match directory
+// names as a glob (".next-*").
+type excluder struct {
+	names map[string]bool
+	globs []string
+}
+
+func newExcluder(exclude []string) excluder {
+	x := excluder{names: map[string]bool{}}
+	for _, e := range exclude {
+		if strings.Contains(e, "*") {
+			x.globs = append(x.globs, e)
+			continue
+		}
+		x.names[e] = true
+	}
+	return x
+}
+
+// dir reports whether the directory at project-relative path rel, named
+// name, is skipped.
+func (x excluder) dir(rel, name string) bool {
+	if stateDirs[rel] || x.names[name] || x.names[rel] {
+		return true
+	}
+	for _, g := range x.globs {
+		if ok, _ := path.Match(g, name); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// Excluded reports whether the project-relative file path rel (slash or
+// OS separated) lies in a directory the inventory skips. Adapters that walk
+// the tree themselves, such as gitleaks, can report files there; the engine
+// drops those signals so every adapter honours inventory.exclude.
+func Excluded(rel string, exclude []string) bool {
+	rel = path.Clean(filepath.ToSlash(rel))
+	x := newExcluder(exclude)
+	dirs := strings.Split(rel, "/")
+	for i := 1; i < len(dirs); i++ {
+		if x.dir(strings.Join(dirs[:i], "/"), dirs[i-1]) {
+			return true
+		}
+	}
+	return false
+}
+
 // walkFiles applies the inventory rules (exclusions, no symlinks, sensitive
 // names by name only, size cap, text files of known types) and reports each
 // analyzable file to add. Lines are read only when withLines is set.
 func walkFiles(ctx context.Context, absRoot string, opt Options, withLines bool, add func(*File), skip func(rel, why string), sensitive func(rel string)) error {
-	// Plain entries match a directory name or path exactly; entries with
-	// a * match directory names as a glob (".next-*").
-	excl := map[string]bool{}
-	var globs []string
-	for _, e := range opt.Exclude {
-		if strings.Contains(e, "*") {
-			globs = append(globs, e)
-			continue
-		}
-		excl[e] = true
-	}
-	globbed := func(name string) bool {
-		for _, g := range globs {
-			if ok, _ := path.Match(g, name); ok {
-				return true
-			}
-		}
-		return false
-	}
+	skipDir := newExcluder(opt.Exclude).dir
 	count := 0
 	deadline, hasDeadline := ctx.Deadline()
 	return filepath.WalkDir(absRoot, func(p string, d fs.DirEntry, werr error) error {
@@ -187,7 +219,7 @@ func walkFiles(ctx context.Context, absRoot string, opt Options, withLines bool,
 			return nil
 		}
 		if d.IsDir() {
-			if stateDirs[rel] || excl[d.Name()] || excl[rel] || globbed(d.Name()) {
+			if skipDir(rel, d.Name()) {
 				return fs.SkipDir
 			}
 			return nil
