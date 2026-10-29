@@ -390,6 +390,26 @@ var (
 	jwtLibRe      = regexp.MustCompile(`(?i)(jsonwebtoken|\bjwt\b|jose|passport|next-auth|auth\.js|@clerk/|firebase/auth|flask_login|django\.contrib\.auth|devise|golang-jwt|spring-security|express-session|cookie-session|iron-session|lucia|better-auth)`)
 )
 
+var (
+	// hookPathRe is webhookPathRe without "callback", which sign-in flows
+	// use as well.
+	hookPathRe = regexp.MustCompile(`(?i)(webhook|/hooks?/|/notify|/ipn)`)
+	// signInSegRe is a path segment of an OAuth, OIDC, SAML or SSO sign-in
+	// flow. Their callbacks are browser redirects checked by state, PKCE or
+	// a signed assertion, not provider webhooks with an HMAC signature.
+	signInSegRe = regexp.MustCompile(`(?i)(^|/)(oauth2?|auth|authorize|login|signin|sign-in|sso|oidc|openid|saml|connect)(/|$)`)
+)
+
+// isWebhookPath reports whether a route path looks like a webhook receiver.
+// A "callback" under a sign-in path segment (/api/github/oauth/callback,
+// /api/auth/callback/google) is an OAuth or SSO redirect, not a webhook.
+func isWebhookPath(p string) bool {
+	if hookPathRe.MatchString(p) {
+		return true
+	}
+	return webhookPathRe.MatchString(p) && !signInSegRe.MatchString(p)
+}
+
 func (inv *Inventory) feature(name, prov string) {
 	for _, p := range inv.Features[name] {
 		if p == prov {
