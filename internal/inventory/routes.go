@@ -694,7 +694,7 @@ func (inv *Inventory) addEntrypoints(entries []entry, roots []string, nestGlobal
 			if adminPathRe.MatchString(e.path) {
 				inv.feature("admin_routes", id)
 			}
-			if e.kind == "route" && webhookPathRe.MatchString(e.path) {
+			if e.kind == "route" && isWebhookPath(e.path) {
 				inv.feature("webhooks", id)
 			}
 		case "queue_consumer":
