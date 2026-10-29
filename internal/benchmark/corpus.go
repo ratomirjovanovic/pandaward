@@ -14,7 +14,7 @@ import (
 )
 
 // CorpusVersion changes whenever cases are added, removed or edited.
-const CorpusVersion = "2026.10.3"
+const CorpusVersion = "2026.10.4"
 
 // Case is one repository that a rule must fire on (Vulnerable) or must not
 // fire on (Safe).
@@ -98,6 +98,8 @@ func Corpus() []Case {
 	add(code("code.ruby-shell", "a.rb", "out = `ls #{dir}`\n", "system(\"ls\", dir)\n"))
 	add(code("code.sql-concat", "a.js", "db.query(\"SELECT * FROM users WHERE id = \" + id);\n", "db.query(\"SELECT * FROM users WHERE id = $1\", [id]);\n"))
 	add(code("code.sql-template", "a.js", "db.query(`SELECT * FROM users WHERE id = ${id}`);\n", "db.query(sql`SELECT * FROM users WHERE id = ${id}`);\n"))
+	// Drizzle and other typed tagged templates bind ${...} as parameters.
+	add(code("code.sql-template", "b.ts", "await db.query(`select * from users where name = '${name}'`);\n", "const n = sql<number>`select count(*) from ${users} where ${eq(users.id, id)}`;\n"))
 	add(code("code.sql-unsafe-raw", "a.js", "prisma.$queryRawUnsafe(q);\n", "prisma.$queryRaw(q);\n"))
 	add(code("code.py-deserialize", "a.py", "obj = pickle.loads(data)\n", "cfg = yaml.load(text, Loader=yaml.SafeLoader)\n"))
 	add(code("code.java-deserialize", "A.java", "ObjectInputStream in = new ObjectInputStream(s);\n", "ObjectMapper m = new ObjectMapper();\n"))

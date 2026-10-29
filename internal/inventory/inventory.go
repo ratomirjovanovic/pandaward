@@ -140,9 +140,24 @@ var stateDirs = map[string]bool{".pandaward": true, ".pensec": true}
 // names by name only, size cap, text files of known types) and reports each
 // analyzable file to add. Lines are read only when withLines is set.
 func walkFiles(ctx context.Context, absRoot string, opt Options, withLines bool, add func(*File), skip func(rel, why string), sensitive func(rel string)) error {
+	// Plain entries match a directory name or path exactly; entries with
+	// a * match directory names as a glob (".next-*").
 	excl := map[string]bool{}
+	var globs []string
 	for _, e := range opt.Exclude {
+		if strings.Contains(e, "*") {
+			globs = append(globs, e)
+			continue
+		}
 		excl[e] = true
+	}
+	globbed := func(name string) bool {
+		for _, g := range globs {
+			if ok, _ := path.Match(g, name); ok {
+				return true
+			}
+		}
+		return false
 	}
 	count := 0
 	deadline, hasDeadline := ctx.Deadline()
@@ -172,7 +187,7 @@ func walkFiles(ctx context.Context, absRoot string, opt Options, withLines bool,
 			return nil
 		}
 		if d.IsDir() {
-			if stateDirs[rel] || excl[d.Name()] || excl[rel] {
+			if stateDirs[rel] || excl[d.Name()] || excl[rel] || globbed(d.Name()) {
 				return fs.SkipDir
 			}
 			return nil

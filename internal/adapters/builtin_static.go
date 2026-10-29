@@ -27,6 +27,28 @@ func (secretsAdapter) Network() bool      { return false }
 
 var exampleRe = regexp.MustCompile(`(?i)(EXAMPLE|dummy|placeholder|your[_-]?(api[_-]?)?key|xxxxxxxx|<[a-z_ -]+>|redacted)`)
 
+// pemBodyRe matches base64 key material of a realistic length; PEM lines
+// are 64 characters, and a key is several of them.
+var pemBodyRe = regexp.MustCompile(`[A-Za-z0-9+/]{40,}`)
+
+// pemBodyFollows reports whether key material follows the PEM header on
+// line i: on the same line after the header (a key embedded with "\n"
+// escapes) or on one of the next three lines.
+func pemBodyFollows(lines []string, i int, header string) bool {
+	if j := strings.Index(header, "-----BEGIN"); j >= 0 {
+		rest := header[j+10:]
+		if k := strings.Index(rest, "-----"); k >= 0 && pemBodyRe.MatchString(rest[k+5:]) {
+			return true
+		}
+	}
+	for j := i + 1; j < len(lines) && j <= i+3; j++ {
+		if pemBodyRe.MatchString(lines[j]) {
+			return true
+		}
+	}
+	return false
+}
+
 func (a secretsAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 	run := newRun(a.Name(), version.Version)
 	res := Result{Decisions: map[string]Decision{}}
@@ -57,12 +79,19 @@ func (a secretsAdapter) Run(ctx context.Context, c *Context) (Result, model.Run)
 				sev, conf := model.SevHigh, model.Confirmed
 				if r.ID == "private-key" {
 					sev = model.SevCritical
+					// The header alone does not show a key: only a body of
+					// real length does.
+					if !pemBodyFollows(f.Lines, i, l) {
+						sev, conf = model.SevMedium, model.Hypothesis
+					}
 				}
 				if r.ID == "jwt" || r.ID == "db-url-password" {
 					sev, conf = model.SevMedium, model.StronglySupported
 				}
+				// Test fixtures routinely hold fake values in real formats.
+				// A match there is still reported, as a hypothesis.
 				if IsTestPath(f.Path) {
-					sev = model.SevLow
+					sev, conf = model.SevLow, model.Hypothesis
 				}
 				res.Signals = append(res.Signals, model.Signal{
 					RuleID: "secret." + r.ID, ControlID: "E-001", Title: "Hardcoded " + r.Title, Severity: sev, Confidence: conf, CWE: "CWE-798",

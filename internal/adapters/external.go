@@ -234,7 +234,17 @@ func gitleaks() Adapter {
 			}
 			var out []model.Signal
 			for _, it := range items {
-				out = append(out, model.Signal{RuleID: "gitleaks." + it.RuleID, ControlID: "E-005", Title: "Secret detected: " + it.Description, Severity: model.SevHigh, Confidence: model.StronglySupported, CWE: "CWE-798",
+				// Specific formats are strong signals. Generic rules match on
+				// entropy, and test fixtures hold fake values in real formats,
+				// so those are hypotheses; they are still reported.
+				sev, conf := model.SevHigh, model.StronglySupported
+				if strings.HasPrefix(it.RuleID, "generic") {
+					sev, conf = model.SevMedium, model.Hypothesis
+				}
+				if IsTestPath(relPath(c.Root, it.File)) {
+					sev, conf = model.SevLow, model.Hypothesis
+				}
+				out = append(out, model.Signal{RuleID: "gitleaks." + it.RuleID, ControlID: "E-005", Title: "Secret detected: " + it.Description, Severity: sev, Confidence: conf, CWE: "CWE-798",
 					File: it.File, StartLine: it.StartLine, EndLine: it.EndLine, Snippet: it.Match, Message: "Gitleaks rule " + it.RuleID + " matched (value redacted by gitleaks and PandaWard).",
 					Fix: "Rotate the credential, remove it from code and history, load it at runtime from a secret manager.", Key: it.RuleID})
 			}
