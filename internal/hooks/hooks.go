@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ratomirjovanovic/pandaward/internal/engine"
+	"github.com/ratomirjovanovic/pandaward/internal/progress"
 	"github.com/ratomirjovanovic/pandaward/internal/redact"
 	"github.com/ratomirjovanovic/pandaward/internal/telemetry"
 )
@@ -29,6 +30,11 @@ type Input struct {
 	ToolInput json.RawMessage `json:"tool_input"`
 	// StopHookActive is set when Claude continues because of a Stop hook.
 	StopHookActive bool `json:"stop_hook_active"`
+	// AgentID and AgentType identify the subagent a hook fired for; they
+	// are empty in the main session.
+	AgentID      string          `json:"agent_id"`
+	AgentType    string          `json:"agent_type"`
+	ToolResponse json.RawMessage `json:"tool_response"`
 }
 
 func readInput(r io.Reader) Input {
@@ -81,6 +87,12 @@ func Run(name string, stdin io.Reader, stdout io.Writer) int {
 		return preCompact(in)
 	case "stop":
 		return stop(in, stdout)
+	case "subagent-start":
+		return recordProgress(in, progress.KindStart)
+	case "subagent-stop":
+		return recordProgress(in, progress.KindStop)
+	case "reviewer-tool":
+		return recordProgress(in, progress.KindTool)
 	}
 	return 0
 }

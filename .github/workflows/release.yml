@@ -99,7 +99,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          plugin_files=".claude-plugin/plugin.json .claude-plugin/icon.png skills agents hooks LICENSE NOTICE README.md SECURITY.md"
+          plugin_files=".claude-plugin/plugin.json .claude-plugin/icon.png settings.json skills agents hooks LICENSE NOTICE README.md SECURITY.md"
 
           publish() {
             branch=$1

@@ -7,7 +7,14 @@
       { "matcher": "Bash|PowerShell|Edit|Write|MultiEdit|NotebookEdit", "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/bin/pandaward", "args": ["hook", "pre-tool"], "timeout": 10 } ] }
     ],
     "PostToolUse": [
-      { "matcher": "Edit|Write|MultiEdit|NotebookEdit", "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/bin/pandaward", "args": ["hook", "post-edit"], "timeout": 10 } ] }
+      { "matcher": "Edit|Write|MultiEdit|NotebookEdit", "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/bin/pandaward", "args": ["hook", "post-edit"], "timeout": 10 } ] },
+      { "matcher": "^(Read|Grep|Glob|mcp__plugin_pandaward_pandaward__pandaward_record_hypothesis)$", "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/bin/pandaward", "args": ["hook", "reviewer-tool"], "timeout": 5 } ] }
+    ],
+    "SubagentStart": [
+      { "matcher": "^pandaward:", "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/bin/pandaward", "args": ["hook", "subagent-start"], "timeout": 5 } ] }
+    ],
+    "SubagentStop": [
+      { "matcher": "^pandaward:", "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/bin/pandaward", "args": ["hook", "subagent-stop"], "timeout": 5 } ] }
     ],
     "PreCompact": [
       { "hooks": [ { "type": "command", "command": "${CLAUDE_PLUGIN_ROOT}/bin/pandaward", "args": ["hook", "pre-compact"], "timeout": 10 } ] }
