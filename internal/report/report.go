@@ -258,7 +258,7 @@ func Markdown(r *Report) string {
 
 	if d := r.Delta; d != nil {
 		w("## Changes since %s\n\n", d.From)
-		w("New %d, reopened %d, remediated %d, stale %d, waived %d, unchanged %d.\n\n", len(d.New), len(d.Reopened), len(d.Remediated), len(d.Stale), len(d.Waived), d.Unchanged)
+		w("New %d, reopened %d, remediated %d, moved %d, stale %d, waived %d, unchanged %d.\n\n", len(d.New), len(d.Reopened), len(d.Remediated), len(d.Moved), len(d.Stale), len(d.Waived), d.Unchanged)
 		for _, sec := range deltaSections(d) {
 			for _, it := range sec.Items {
 				loc := it.File
@@ -373,5 +373,5 @@ type DeltaSection struct {
 }
 
 func deltaSections(d *engine.Delta) []DeltaSection {
-	return []DeltaSection{{"New", d.New}, {"Reopened", d.Reopened}, {"Remediated", d.Remediated}, {"Stale", d.Stale}, {"Waived", d.Waived}}
+	return []DeltaSection{{"New", d.New}, {"Reopened", d.Reopened}, {"Remediated", d.Remediated}, {"Moved", d.Moved}, {"Stale", d.Stale}, {"Waived", d.Waived}}
 }

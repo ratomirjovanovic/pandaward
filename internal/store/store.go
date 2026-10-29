@@ -583,6 +583,13 @@ func upsertFinding(x execer, projectID string, f model.Finding) error {
 	return err
 }
 
+// SetFingerprint gives a finding a new fingerprint, for a finding whose
+// file moved.
+func (s *Store) SetFingerprint(projectID, id, fp string) error {
+	_, err := s.DB.Exec(`UPDATE findings SET fingerprint=? WHERE project_id=? AND id=?`, fp, projectID, id)
+	return err
+}
+
 // MarkStale records a changed file and flags findings in that file.
 func (s *Store) MarkStale(projectID, path string) error {
 	tx, err := s.DB.Begin()
@@ -786,21 +793,21 @@ func (s *Store) Observations(asmt string) (map[string]Observation, bool, error) 
 	return out, tracked == 1, rows.Err()
 }
 
-// ObservedBefore returns the fingerprints observed by any assessment of the
-// project with a sequence number below seq.
+// ObservedBefore returns the IDs of findings observed by any assessment of
+// the project with a sequence number below seq.
 func (s *Store) ObservedBefore(projectID string, seq int) (map[string]bool, error) {
-	rows, err := s.DB.Query(`SELECT DISTINCT o.fingerprint FROM observations o JOIN assessments a ON a.id=o.assessment_id WHERE a.project_id=? AND a.seq<?`, projectID, seq)
+	rows, err := s.DB.Query(`SELECT DISTINCT o.finding_id FROM observations o JOIN assessments a ON a.id=o.assessment_id WHERE a.project_id=? AND a.seq<?`, projectID, seq)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	out := map[string]bool{}
 	for rows.Next() {
-		var fp string
-		if err := rows.Scan(&fp); err != nil {
+		var id string
+		if err := rows.Scan(&id); err != nil {
 			return nil, err
 		}
-		out[fp] = true
+		out[id] = true
 	}
 	return out, rows.Err()
 }

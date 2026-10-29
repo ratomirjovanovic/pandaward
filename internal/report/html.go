@@ -97,7 +97,7 @@ code{font:12.5px ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:an
 <p class="mut">{{.R.Coverage.Note}}</p>
 {{with .R.Delta}}
 <h2>Changes since {{.From}}</h2>
-<p>New {{len .New}}, reopened {{len .Reopened}}, remediated {{len .Remediated}}, stale {{len .Stale}}, waived {{len .Waived}}, unchanged {{.Unchanged}}.</p>
+<p>New {{len .New}}, reopened {{len .Reopened}}, remediated {{len .Remediated}}, moved {{len .Moved}}, stale {{len .Stale}}, waived {{len .Waived}}, unchanged {{.Unchanged}}.</p>
 <ul>{{range $.Delta}}{{$t := .Title}}{{range .Items}}<li><b>{{$t}}</b> {{.FindingID}} {{.Title}} ({{.Severity}}) <code>{{.File}}{{if .Line}}:{{.Line}}{{end}}</code>{{if .Note}}: {{.Note}}{{end}}</li>{{end}}{{end}}</ul>
 <p class="mut">{{.Note}}</p>
 {{end}}

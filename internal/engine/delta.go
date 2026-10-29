@@ -27,6 +27,7 @@ type Delta struct {
 	New        []DeltaItem `json:"new"`
 	Reopened   []DeltaItem `json:"reopened"`
 	Remediated []DeltaItem `json:"remediated"`
+	Moved      []DeltaItem `json:"moved"`
 	Stale      []DeltaItem `json:"stale"`
 	Waived     []DeltaItem `json:"waived"`
 	Unchanged  int         `json:"unchanged"`
@@ -38,6 +39,7 @@ type Delta struct {
 //   - reopened: observed in to, not in from, but observed before from
 //   - remediated: observed in from, not in to, and its collector completed in to
 //   - stale: observed in from, not in to, but its collector did not complete in to
+//   - moved: observed in both, under a new fingerprint because its file moved
 //   - waived: marked false positive or risk accepted between the two assessments
 func (e *Engine) Diff(fromID, toID string) (*Delta, error) {
 	from, err := e.St.Assessment(e.ProjectID, fromID)
@@ -81,35 +83,46 @@ func (e *Engine) Diff(fromID, toID string) (*Delta, error) {
 	if err != nil {
 		return nil, err
 	}
-	byFP := map[string]model.Finding{}
 	byID := map[string]model.Finding{}
 	for _, f := range fs {
-		byFP[f.Fingerprint], byID[f.ID] = f, f
+		byID[f.ID] = f
 	}
 	item := func(f model.Finding, note string) DeltaItem {
 		return DeltaItem{FindingID: f.ID, RuleID: f.RuleID, ControlID: f.ControlID, Title: f.Title, Severity: f.Severity, File: f.File, Line: f.StartLine, Note: note}
 	}
 	d := &Delta{From: from.ID, To: to.ID,
-		Note: "Compares findings observed by automated collectors in each assessment. Remediated means the collector ran again and no longer observed it; stale means it did not run, so the finding is not confirmed fixed."}
-	for fp := range obsTo {
-		f, ok := byFP[fp]
+		Note: "Compares findings observed by automated collectors in each assessment. Remediated means the collector ran again and no longer observed it; stale means it did not run, so the finding is not confirmed fixed; moved means the same finding now lives in another file."}
+	// Compare by finding ID: a finding keeps its ID when its file moves,
+	// while its fingerprint changes with the file.
+	idsFrom, idsTo := map[string]string{}, map[string]string{}
+	for fp, o := range obsFrom {
+		idsFrom[o.FindingID] = fp
+	}
+	for fp, o := range obsTo {
+		idsTo[o.FindingID] = fp
+	}
+	for id, fpTo := range idsTo {
+		f, ok := byID[id]
 		if !ok {
 			continue
 		}
+		fpFrom, inFrom := idsFrom[id]
 		switch {
-		case obsFrom[fp].Fingerprint != "":
+		case inFrom && fpFrom != fpTo:
+			d.Moved = append(d.Moved, item(f, "same finding, now in "+f.File))
+		case inFrom:
 			d.Unchanged++
-		case before[fp]:
+		case before[id]:
 			d.Reopened = append(d.Reopened, item(f, ""))
 		default:
 			d.New = append(d.New, item(f, ""))
 		}
 	}
-	for fp := range obsFrom {
-		if obsTo[fp].Fingerprint != "" {
+	for id := range idsFrom {
+		if _, ok := idsTo[id]; ok {
 			continue
 		}
-		f, ok := byFP[fp]
+		f, ok := byID[id]
 		if !ok {
 			continue
 		}
@@ -128,7 +141,7 @@ func (e *Engine) Diff(fromID, toID string) (*Delta, error) {
 			d.Waived = append(d.Waived, item(f, "marked "+st))
 		}
 	}
-	for _, l := range [][]DeltaItem{d.New, d.Reopened, d.Remediated, d.Stale, d.Waived} {
+	for _, l := range [][]DeltaItem{d.New, d.Reopened, d.Remediated, d.Moved, d.Stale, d.Waived} {
 		sort.Slice(l, func(i, j int) bool { return l[i].FindingID < l[j].FindingID })
 	}
 	return d, nil

@@ -62,7 +62,7 @@ Assessment (local, no target network traffic):
   fix-plan        Ordered remediation plan from open findings
   report          Render HTML, Markdown, JSON, SARIF and CSV reports
   evidence        show <id> | verify
-  diff            [FROM TO] findings new, reopened, remediated, stale, waived between assessments
+  diff            [FROM TO] findings new, reopened, remediated, moved, stale, waived between assessments
   export          --bundle out.zip [--assessment ID] redacted evidence, report and SHA-256 manifest
   verify-bundle   <bundle.zip> recompute and check every hash in a bundle
   events          Recent audit events
@@ -474,7 +474,11 @@ func cmdScan(ctx context.Context, args []string, w, ew io.Writer, retest bool) e
 	fmt.Fprintf(w, "Controls: %s\n", strings.Join(st, ", "))
 	fmt.Fprintf(w, "Decisive coverage: %d/%d applicable controls (%.0f%%). Edges: %d (%d verified, %d failed, %d open)\n",
 		res.Coverage.Decisive, res.Coverage.Applicable, res.Coverage.Ratio*100, res.Coverage.EdgesTotal, res.Coverage.EdgesVerified, res.Coverage.EdgesFailed, res.Coverage.EdgesOpen)
-	fmt.Fprintf(w, "Findings: %d open (%d new, %d reopened, %d remediated in this run)\n", res.Open, res.New, res.Reopened, res.Remediated)
+	moved := ""
+	if res.Moved > 0 {
+		moved = fmt.Sprintf(", %d moved with their file", res.Moved)
+	}
+	fmt.Fprintf(w, "Findings: %d open (%d new, %d reopened, %d remediated%s in this run)\n", res.Open, res.New, res.Reopened, res.Remediated, moved)
 	if len(res.Errors) > 0 {
 		fmt.Fprintln(w, "Errors (coverage is INCOMPLETE, not clean):")
 		for _, e := range res.Errors {
@@ -1329,12 +1333,12 @@ func cmdDiff(args []string, w io.Writer) error {
 	if *asJSON {
 		return printJSON(w, d)
 	}
-	fmt.Fprintf(w, "%s -> %s: new %d, reopened %d, remediated %d, stale %d, waived %d, unchanged %d\n",
-		d.From, d.To, len(d.New), len(d.Reopened), len(d.Remediated), len(d.Stale), len(d.Waived), d.Unchanged)
+	fmt.Fprintf(w, "%s -> %s: new %d, reopened %d, remediated %d, moved %d, stale %d, waived %d, unchanged %d\n",
+		d.From, d.To, len(d.New), len(d.Reopened), len(d.Remediated), len(d.Moved), len(d.Stale), len(d.Waived), d.Unchanged)
 	for _, sec := range []struct {
 		title string
 		items []engine.DeltaItem
-	}{{"new", d.New}, {"reopened", d.Reopened}, {"remediated", d.Remediated}, {"stale", d.Stale}, {"waived", d.Waived}} {
+	}{{"new", d.New}, {"reopened", d.Reopened}, {"remediated", d.Remediated}, {"moved", d.Moved}, {"stale", d.Stale}, {"waived", d.Waived}} {
 		for _, it := range sec.items {
 			fmt.Fprintf(w, "  %-10s %s %-8s %s  %s:%d\n", sec.title, it.FindingID, it.Severity, redact.Line(it.Title), redact.Line(it.File), it.Line)
 		}

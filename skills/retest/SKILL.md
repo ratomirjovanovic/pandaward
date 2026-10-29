@@ -1,11 +1,11 @@
 ---
 name: retest
-description: Re-run the PandaWard passive scan after code changes and report the delta (remediated, reopened, new findings, changed files).
+description: Re-run the PandaWard passive scan after code changes and report the delta (remediated, reopened, new and moved findings, changed files).
 ---
 
 # PandaWard retest
 
-Call the `pandaward_retest` MCP tool (or run `pandaward retest --changed`). It re-runs only the adapters whose inputs changed; the others are reported as CARRIED and keep their previous decisions. Pass `changed_only: false` (or run plain `pandaward retest`) for a full re-scan when the user asks for one. Report the files changed since the last assessment, which adapters re-ran, then the delta: remediated, reopened and new findings, and coverage. Only call something fixed if the ledger marks it REMEDIATED.
+Call the `pandaward_retest` MCP tool (or run `pandaward retest --changed`). It re-runs only the adapters whose inputs changed; the others are reported as CARRIED and keep their previous decisions. Pass `changed_only: false` (or run plain `pandaward retest`) for a full re-scan when the user asks for one. Report the files changed since the last assessment, which adapters re-ran, then the delta: remediated, reopened, new and moved findings, and coverage. Only call something fixed if the ledger marks it REMEDIATED; a finding that moved with its file (renamed or moved file, same code) is not fixed and keeps its ID and triage.
 
 Run this yourself, without being asked, after you edit code in a project that has a PandaWard assessment, and keep the report to the delta. If new or reopened findings appear, explain them and offer to fix them.
 
