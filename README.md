@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <a href="https://ratomirjovanovic.github.io/pandaward/">Website and demo</a> ·
+  <a href="https://pandaward.dev/">Website and demo</a> ·
   <a href="https://github.com/ratomirjovanovic/pandaward/wiki">Documentation</a> ·
   <a href="#quick-start">Quick start</a> ·
   <a href="#what-pandaward-will-not-tell-you">Limitations</a>
@@ -34,13 +34,13 @@ Most scanners print a list of alerts and stop. PandaWard keeps a **ledger**: eve
 </p>
 
 <p align="center">
-  <a href="https://ratomirjovanovic.github.io/pandaward/demo/">
+  <a href="https://pandaward.dev/demo/">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="docs/media/findings-dark.png">
       <img src="docs/media/findings-light.png" width="860" alt="PandaWard findings explorer for the bundled acme-shop fixture: 20 confirmed findings, 11 suspected, 38% decisive coverage, with a critical pull_request_target finding and hardcoded secrets at the top">
     </picture>
   </a>
-  <br><sub>Findings from a real scan of the bundled vulnerable fixture. <a href="https://ratomirjovanovic.github.io/pandaward/demo/">Open the live demo</a> for the terminal replay and the full report.</sub>
+  <br><sub>Findings from a real scan of the bundled vulnerable fixture. <a href="https://pandaward.dev/demo/">Open the live demo</a> for the terminal replay and the full report.</sub>
 </p>
 
 ## Why PandaWard
@@ -118,7 +118,7 @@ scoop bucket add pandaward https://github.com/ratomirjovanovic/pandaward; scoop 
 Or download a binary from the [releases page](https://github.com/ratomirjovanovic/pandaward/releases) (Linux and macOS on amd64 and arm64, Windows on amd64). For example on Linux:
 
 ```sh
-v=v0.2.3
+v=v0.2.4
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/pandaward-linux-amd64
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/SHA256SUMS
 sha256sum --ignore-missing -c SHA256SUMS
@@ -128,7 +128,7 @@ chmod +x pandaward-linux-amd64 && sudo mv pandaward-linux-amd64 /usr/local/bin/p
 On Windows (PowerShell), save `pandaward-windows-amd64.exe` as `pandaward.exe` in a folder on your `PATH`:
 
 ```powershell
-Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.3/pandaward-windows-amd64.exe -OutFile pandaward.exe
+Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.4/pandaward-windows-amd64.exe -OutFile pandaward.exe
 (Get-FileHash pandaward.exe).Hash   # compare with the line in SHA256SUMS
 ```
 
@@ -311,7 +311,7 @@ With [pre-commit](https://pre-commit.com), add this to `.pre-commit-config.yaml`
 ```yaml
 repos:
   - repo: https://github.com/ratomirjovanovic/pandaward
-    rev: v0.2.3
+    rev: v0.2.4
     hooks:
       - id: pandaward-system   # uses the pandaward on your PATH; use id: pandaward to build it with Go 1.26+
 ```
