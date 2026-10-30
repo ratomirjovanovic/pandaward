@@ -118,7 +118,7 @@ scoop bucket add pandaward https://github.com/ratomirjovanovic/pandaward; scoop 
 Or download a binary from the [releases page](https://github.com/ratomirjovanovic/pandaward/releases) (Linux and macOS on amd64 and arm64, Windows on amd64). For example on Linux:
 
 ```sh
-v=v0.2.7
+v=v0.2.8
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/pandaward-linux-amd64
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/SHA256SUMS
 sha256sum --ignore-missing -c SHA256SUMS
@@ -128,7 +128,7 @@ chmod +x pandaward-linux-amd64 && sudo mv pandaward-linux-amd64 /usr/local/bin/p
 On Windows (PowerShell), save `pandaward-windows-amd64.exe` as `pandaward.exe` in a folder on your `PATH`:
 
 ```powershell
-Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.7/pandaward-windows-amd64.exe -OutFile pandaward.exe
+Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.8/pandaward-windows-amd64.exe -OutFile pandaward.exe
 (Get-FileHash pandaward.exe).Hash   # compare with the line in SHA256SUMS
 ```
 
@@ -226,6 +226,7 @@ While the specialist reviewers run, you can see what each one is doing. Their ro
 | `pandaward test --profile local-runtime` | Storage of the configured Android test build on a running emulator and the iOS test build in a booted simulator; real devices are refused |
 | `pandaward test --profile staging-active` | Authorization checks with test identities, then a ZAP spider and passive scan of approved staging origins, active scan when the manifest allows it |
 | `pandaward feedback false-positive ID \| false-negative \| summary` | Prepare a report about a wrong or missed finding; prints a prefilled issue link, sends nothing |
+| `pandaward feedback pending \| submit \| mode ask\|batch\|off` | Reports not sent yet, grouped by rule, including missed issues found from confirmed reviewer findings; `submit` asks, then files them with `gh` or prints links |
 | `pandaward doctor` | Optional scanners and their network needs |
 | `pandaward benchmark` | TP, FP, FN and TN per built-in rule on the bundled corpus |
 | `pandaward selftest` | Runs a hostile fixture repository (instructions in comments, README, OpenAPI, MCP descriptions and scanner output) through scan, reports, MCP and hooks and checks PandaWard was not steered by it; CI and every release run it and fail on any case |
@@ -237,10 +238,13 @@ Human decisions are explicit and recorded:
 ```sh
 pandaward findings false-positive PW-0007 --by "Jane" --note "constant input, not user controlled"
 pandaward findings accept-risk   PW-0003 --by "Jane" --note "internal tool" --expires 2027-03-01
+pandaward findings remediated    PW-0012 --by "Jane" --note "fixed in #42"
 pandaward findings apply --file decisions.json --by "Jane"   # many at once, all or nothing
 ```
 
-`decisions.json` is an array of `{"finding_id", "action", "note", "expires"}` with `action` one of `confirm`, `false-positive`, `accept-risk` (needs `expires`) or `reopen`. Every entry is checked before anything is written, so one bad entry rejects the batch. In Claude Code this is how the guided assessment records triage results: you see the whole list in one confirmation prompt instead of one prompt per finding.
+`remediated` is for a fix that no scanner can confirm, mostly findings from the specialist reviewers: a finding a rule reported becomes `REMEDIATED` by itself when the rule runs again and no longer sees it. If the rule still sees it, or a reviewer records the same issue again, the finding becomes `REOPENED`.
+
+`decisions.json` is an array of `{"finding_id", "action", "note", "expires"}` with `action` one of `confirm`, `false-positive`, `accept-risk` (needs `expires`), `remediated` or `reopen`. Every entry is checked before anything is written, so one bad entry rejects the batch. In Claude Code this is how the guided assessment records triage results: you see the whole list in one confirmation prompt instead of one prompt per finding.
 
 ## Network tests
 
@@ -314,7 +318,7 @@ With [pre-commit](https://pre-commit.com), add this to `.pre-commit-config.yaml`
 ```yaml
 repos:
   - repo: https://github.com/ratomirjovanovic/pandaward
-    rev: v0.2.7
+    rev: v0.2.8
     hooks:
       - id: pandaward-system   # uses the pandaward on your PATH; use id: pandaward to build it with Go 1.26+
 ```
@@ -364,7 +368,7 @@ CLI: `brew uninstall pensec && brew untap ratomirjovanovic/pensec`, then install
 
 ## Wrong or missed findings
 
-Tell us, and the rule gets fixed. `pandaward feedback false-positive <PW-ID>` or `pandaward feedback false-negative --rule <id>` (or `/pandaward:feedback` in Claude Code) prepares a report with rule metadata only and prints a prefilled issue link; nothing is sent unless you submit it. Reports are grouped by rule, prioritized automatically and every fix adds a benchmark case. See [docs/FEEDBACK.md](docs/FEEDBACK.md).
+Tell us, and the rule gets fixed. PandaWard is open source and its rules improve from these reports. The first `/pandaward:start` in a project asks once whether you want to send them; with `batch`, PandaWard collects them after triage and sends them in one step after you confirm. It groups the false positives you closed by rule and finds missed issues itself: problems a reviewer found and you confirmed that no rule caught. A report holds rule metadata, counts and file types only. With the GitHub CLI signed in, `pandaward feedback submit` files the reports (or adds to an open report about the same rule); without it, you get prefilled issue links. By hand: `pandaward feedback false-positive <PW-ID>`, `pandaward feedback false-negative --rule <id>` or `/pandaward:feedback`. Reports are prioritized automatically and every fix adds a benchmark case. See [docs/FEEDBACK.md](docs/FEEDBACK.md).
 
 ## Contributing and security
 
