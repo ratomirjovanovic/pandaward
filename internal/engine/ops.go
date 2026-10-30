@@ -403,7 +403,7 @@ func diffHashes(old, cur map[string]string) []string {
 }
 
 // EntrypointKinds are the asset kinds Entrypoints lists, in display order.
-var EntrypointKinds = []string{"route", "graphql_operation", "grpc_method", "queue_consumer", "cron_job"}
+var EntrypointKinds = []string{"route", "graphql_operation", "grpc_method", "queue_consumer", "cron_job", "server_action"}
 
 // Entrypoints lists the entrypoints found by the latest assessment, each with
 // its file and line, optionally limited to one service root or kind.

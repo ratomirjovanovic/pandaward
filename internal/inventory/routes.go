@@ -17,7 +17,7 @@ import (
 
 // entry is one discovered entrypoint before it becomes an asset.
 type entry struct {
-	kind       string // route, graphql_operation, grpc_method, queue_consumer, cron_job
+	kind       string // route, graphql_operation, grpc_method, queue_consumer, cron_job, server_action
 	method     string
 	path       string
 	file       string
@@ -207,6 +207,11 @@ func extractEntries(f *File, resolve func(from, spec string) string) ([]entry, [
 			}
 		}
 	}
+	if jsLangs[f.Lang] && strings.Contains(joined, "use server") {
+		for _, e := range serverActions(f) {
+			add(e)
+		}
+	}
 	for _, w := range workerRes {
 		if !strings.Contains(joined, w.needs) {
 			continue
@@ -228,6 +233,62 @@ func extractEntries(f *File, resolve func(from, spec string) string) ([]entry, [
 		}
 	}
 	return out, mounts
+}
+
+var (
+	useServerRe    = regexp.MustCompile(`^\s*(?:["'\x60])use server["'\x60]\s*;?\s*(?://.*)?$`)
+	actionExportRe = regexp.MustCompile(`^\s*export\s+(?:async\s+)?function\s+(\w+)|^\s*export\s+(?:const|let|var)\s+(\w+)\s*=\s*async\b`)
+	actionInlineRe = regexp.MustCompile(`(?:async\s+function\s+(\w+)|(?:const|let|var)\s+(\w+)\s*=\s*async\b|async\s+function\b|=\s*async\b)`)
+)
+
+// serverActions finds Next.js server actions: every export of a module whose
+// first statement is "use server", and every function whose body starts with
+// that directive. Both are public POST endpoints.
+func serverActions(f *File) []entry {
+	var out []entry
+	first := firstCodeLine(f)
+	if first >= 0 && useServerRe.MatchString(f.Lines[first]) {
+		for j := first + 1; j < len(f.Lines); j++ {
+			if m := actionExportRe.FindStringSubmatch(f.Lines[j]); m != nil {
+				out = append(out, entry{kind: "server_action", method: "POST", path: firstNonEmpty(m[1:]...), line: j + 1,
+					framework: "nextjs", confidence: "module-directive"})
+			}
+		}
+	}
+	for i, l := range f.Lines {
+		if i == first || !useServerRe.MatchString(l) {
+			continue
+		}
+		name := "anonymous"
+		for j := i - 1; j >= 0 && j >= i-3; j-- {
+			if m := actionInlineRe.FindStringSubmatch(f.Lines[j]); m != nil {
+				name = firstNonEmpty(m[1], m[2], "anonymous")
+				break
+			}
+		}
+		out = append(out, entry{kind: "server_action", method: "POST", path: name, line: i + 1, framework: "nextjs", confidence: "inline-directive"})
+	}
+	return out
+}
+
+// firstCodeLine returns the index of the first line that is not blank or a comment.
+func firstCodeLine(f *File) int {
+	inComment := false
+	for i, l := range f.Lines {
+		t := strings.TrimSpace(l)
+		switch {
+		case inComment:
+			if strings.Contains(t, "*/") {
+				inComment = false
+			}
+		case t == "" || strings.HasPrefix(t, "//"):
+		case strings.HasPrefix(t, "/*"):
+			inComment = !strings.Contains(t, "*/")
+		default:
+			return i
+		}
+	}
+	return -1
 }
 
 var nextGroupRe = regexp.MustCompile(`/\([^)]*\)`)
@@ -662,6 +723,8 @@ func (inv *Inventory) addEntrypoints(entries []entry, roots []string, nestGlobal
 		case "cron_job":
 			id = fmt.Sprintf("cron:%s@%s:%d", e.path, e.file, e.line)
 			domains = []string{"A", "D"}
+		case "server_action":
+			id = fmt.Sprintf("server_action:%s@%s:%d", e.path, e.file, e.line)
 		}
 		if seen[id] {
 			continue
@@ -674,9 +737,11 @@ func (inv *Inventory) addEntrypoints(entries []entry, roots []string, nestGlobal
 		inv.addAsset(model.Asset{ID: id, Kind: e.kind, Locator: e.file, Line: e.line, ContentHash: hash, Domains: domains,
 			Meta: map[string]string{"method": e.method, "path": e.path, "framework": e.framework, "confidence": e.confidence, "service": svc}})
 		switch e.kind {
-		case "route", "graphql_operation", "grpc_method":
+		case "route", "graphql_operation", "grpc_method", "server_action":
 			inv.feature("web", e.file)
 			switch e.kind {
+			case "server_action":
+				inv.feature("server_actions", id)
 			case "route":
 				inv.feature("routes", id)
 			case "graphql_operation":

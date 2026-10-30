@@ -16,7 +16,7 @@ func entrypoints(inv *inventory.Inventory) []string {
 	var out []string
 	for _, a := range inv.Assets {
 		switch a.Kind {
-		case "route", "graphql_operation", "grpc_method", "queue_consumer", "cron_job":
+		case "route", "graphql_operation", "grpc_method", "queue_consumer", "cron_job", "server_action":
 			out = append(out, a.ID)
 		}
 	}
@@ -185,4 +185,29 @@ func writeAndWalk(t *testing.T, files map[string]string) *inventory.Inventory {
 		t.Fatal(err)
 	}
 	return inv
+}
+
+func TestNextServerActions(t *testing.T) {
+	inv := writeAndWalk(t, map[string]string{
+		"package.json": `{"dependencies":{"next":"15"}}`,
+		"app/actions.ts": "// account actions\n'use server';\n\nexport async function renameUser(id: string) {}\n" +
+			"export const removeUser = async (id: string) => {};\nfunction helper() {}\n",
+		"app/page.tsx":  "export default function Page() {\n  async function save(data: FormData) {\n    \"use server\";\n    await db.save(data);\n  }\n  return null;\n}\n",
+		"app/client.ts": "const note = 'use server';\nexport function plain() {}\n",
+	})
+	got := entrypoints(inv)
+	want := []string{
+		"server_action:removeUser@app/actions.ts:5",
+		"server_action:renameUser@app/actions.ts:4",
+		"server_action:save@app/page.tsx:3",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("entrypoints = %q, want %q", got, want)
+	}
+	if n := len(inv.Features["server_actions"]); n != 3 {
+		t.Errorf("server_actions feature has %d entries", n)
+	}
+	if n := len(inv.Features["routes"]); n != 0 {
+		t.Errorf("server actions must not count as HTTP routes, got %d", n)
+	}
 }
