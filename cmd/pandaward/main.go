@@ -212,8 +212,19 @@ func parse(fs *flag.FlagSet, args []string) ([]string, error) {
 	}
 }
 
-func newFS(name string) (*flag.FlagSet, *string) {
+// seenFlags, when a test sets it, receives every flag set a command builds.
+var seenFlags func(*flag.FlagSet)
+
+func newFlagSet(name string) *flag.FlagSet {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	if seenFlags != nil {
+		seenFlags(fs)
+	}
+	return fs
+}
+
+func newFS(name string) (*flag.FlagSet, *string) {
+	fs := newFlagSet(name)
 	root := fs.String("root", "", "project directory")
 	return fs, root
 }
@@ -1331,7 +1342,7 @@ func cmdCapabilities(args []string, w io.Writer) error {
 const MaturityObserve = adapters.MaturityUnvalidated
 
 func cmdSelftest(ctx context.Context, args []string, w io.Writer) error {
-	fs := flag.NewFlagSet("selftest", flag.ContinueOnError)
+	fs := newFlagSet("selftest")
 	asJSON := fs.Bool("json", false, "JSON output")
 	if _, err := parse(fs, args); err != nil {
 		return err
@@ -1456,7 +1467,7 @@ func cmdExport(args []string, w io.Writer) error {
 }
 
 func cmdVerifyBundle(args []string, w io.Writer) error {
-	fs := flag.NewFlagSet("verify-bundle", flag.ContinueOnError)
+	fs := newFlagSet("verify-bundle")
 	pos, err := parse(fs, args)
 	if err != nil {
 		return err
@@ -1473,7 +1484,7 @@ func cmdVerifyBundle(args []string, w io.Writer) error {
 }
 
 func cmdBenchmark(ctx context.Context, args []string, w io.Writer) error {
-	fs := flag.NewFlagSet("benchmark", flag.ContinueOnError)
+	fs := newFlagSet("benchmark")
 	asJSON := fs.Bool("json", false, "JSON output")
 	strict := fs.Bool("strict", false, "exit 1 when any rule misses a vulnerable case or fires on a safe one")
 	if _, err := parse(fs, args); err != nil {

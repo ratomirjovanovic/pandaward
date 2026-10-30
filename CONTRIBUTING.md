@@ -11,6 +11,7 @@ Thanks for helping make PandaWard better.
 ## Changes
 
 - Run `gofmt -l .`, `go vet ./...`, `go test ./...` and `claude plugin validate .` before opening a pull request.
+- `go test ./cmd/pandaward` checks every `pandaward` command, subcommand and flag mentioned in the skills, agents, MCP descriptions, CLI messages, README, docs and site against the CLI. When you rename a command or flag, also check the wiki: clone `pandaward.wiki` and run `PANDAWARD_WIKI=<checkout> go test ./cmd/pandaward -run TestCommandReferences`.
 - Every new check needs a vulnerable fixture that triggers it and, where possible, a safe analog that does not.
 - Security fixes include a failing regression test.
 - Test data must be synthetic. Build secret-shaped values at runtime (see `internal/testfixture`), never commit real-looking credentials.
