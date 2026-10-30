@@ -34,7 +34,7 @@ Before filing, `pandaward feedback` prints a link to existing open reports about
 The `rule-quality` workflow runs on every report change and daily:
 
 1. It reads all open `false-positive` and `false-negative` issues through the REST API with pagination, so there is no cap on the number of reports.
-2. It groups them by rule (the form's rule field) and, inside a rule, by file type, so a rule that misfires only on one language shows up as one cluster.
+2. It groups them by rule (the form's rule field, else the Rule or Control row of the report table, else the issue title) and, inside a rule, by file type, so a rule that misfires only on one language shows up as one cluster.
 3. It scores each rule: `2 x missed + false positives + upvotes + (distinct reporters - 1)`. Missed issues weigh double because they can hide real vulnerabilities.
 4. It labels each report with `rule:<id>` and `priority:P1` (score 6 or more), `P2` (3 or more) or `P3`, and rewrites the pinned **Rule quality dashboard** issue with the ranked table (top 200 rules; the rest stay reachable by label).
 
