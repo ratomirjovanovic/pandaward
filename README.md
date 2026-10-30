@@ -238,10 +238,13 @@ Human decisions are explicit and recorded:
 ```sh
 pandaward findings false-positive PW-0007 --by "Jane" --note "constant input, not user controlled"
 pandaward findings accept-risk   PW-0003 --by "Jane" --note "internal tool" --expires 2027-03-01
+pandaward findings remediated    PW-0012 --by "Jane" --note "fixed in #42"
 pandaward findings apply --file decisions.json --by "Jane"   # many at once, all or nothing
 ```
 
-`decisions.json` is an array of `{"finding_id", "action", "note", "expires"}` with `action` one of `confirm`, `false-positive`, `accept-risk` (needs `expires`) or `reopen`. Every entry is checked before anything is written, so one bad entry rejects the batch. In Claude Code this is how the guided assessment records triage results: you see the whole list in one confirmation prompt instead of one prompt per finding.
+`remediated` is for a fix that no scanner can confirm, mostly findings from the specialist reviewers: a finding a rule reported becomes `REMEDIATED` by itself when the rule runs again and no longer sees it. If the rule still sees it, or a reviewer records the same issue again, the finding becomes `REOPENED`.
+
+`decisions.json` is an array of `{"finding_id", "action", "note", "expires"}` with `action` one of `confirm`, `false-positive`, `accept-risk` (needs `expires`), `remediated` or `reopen`. Every entry is checked before anything is written, so one bad entry rejects the batch. In Claude Code this is how the guided assessment records triage results: you see the whole list in one confirmation prompt instead of one prompt per finding.
 
 ## Network tests
 
