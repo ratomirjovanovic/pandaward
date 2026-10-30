@@ -160,3 +160,13 @@ func printPending(w io.Writer, gs []feedback.Group) {
 		fmt.Fprintf(w, "  %-50s %3d %-8s %-16s %s\n", g.Title(), g.Count, noun, g.FileType, strings.Join(ids, ", "))
 	}
 }
+
+// feedbackHint says, after triage, when reports for the project are ready,
+// unless the user turned feedback off.
+func feedbackHint(e *engine.Engine, w io.Writer) {
+	st, gs, err := e.PendingFeedback()
+	if err != nil || len(gs) == 0 || st.Mode == feedback.ModeOff {
+		return
+	}
+	fmt.Fprintf(w, "%d report(s) about wrong or missed findings can go to the PandaWard project: pandaward feedback pending\n", len(gs))
+}
