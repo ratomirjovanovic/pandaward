@@ -241,12 +241,21 @@ func gitleaks() Adapter {
 				if strings.HasPrefix(it.RuleID, "generic") {
 					sev, conf = model.SevMedium, model.Hypothesis
 				}
-				if IsTestPath(relPath(c.Root, it.File)) {
+				rel := relPath(c.Root, it.File)
+				if IsTestPath(rel) {
 					sev, conf = model.SevLow, model.Hypothesis
 				}
-				out = append(out, model.Signal{RuleID: "gitleaks." + it.RuleID, ControlID: "E-005", Title: "Secret detected: " + it.Description, Severity: sev, Confidence: conf, CWE: "CWE-798",
-					File: it.File, StartLine: it.StartLine, EndLine: it.EndLine, Snippet: it.Match, Message: "Gitleaks rule " + it.RuleID + " matched (value redacted by gitleaks and PandaWard).",
-					Fix: "Rotate the credential, remove it from code and history, load it at runtime from a secret manager.", Key: it.RuleID})
+				title, msg, fix := "Secret detected: "+it.Description, "Gitleaks rule "+it.RuleID+" matched (value redacted by gitleaks and PandaWard).", "Rotate the credential, remove it from code and history, load it at runtime from a secret manager."
+				// A file git ignores and does not track is where local
+				// secrets belong; it is listed, not counted against E-005.
+				if c.Inv.IgnoredLocal(rel) {
+					sev, conf = model.SevInfo, model.Hypothesis
+					title = "Secret in an untracked, git-ignored local file: " + it.Description
+					msg += " The file is ignored by git and not tracked, so it is not in the repository."
+					fix = "Nothing to do while the file stays ignored and untracked. Rotate the credential if the file was ever committed or shared."
+				}
+				out = append(out, model.Signal{RuleID: "gitleaks." + it.RuleID, ControlID: "E-005", Title: title, Severity: sev, Confidence: conf, CWE: "CWE-798",
+					File: it.File, StartLine: it.StartLine, EndLine: it.EndLine, Snippet: it.Match, Message: msg, Fix: fix, Key: it.RuleID})
 			}
 			return out, nil
 		},
