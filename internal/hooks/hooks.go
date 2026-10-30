@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/ratomirjovanovic/pandaward/internal/engine"
+	"github.com/ratomirjovanovic/pandaward/internal/feedback"
 	"github.com/ratomirjovanovic/pandaward/internal/progress"
 	"github.com/ratomirjovanovic/pandaward/internal/redact"
 	"github.com/ratomirjovanovic/pandaward/internal/telemetry"
@@ -166,6 +167,7 @@ func preCompact(in Input) int {
 
 var (
 	humanOnlyCmd = regexp.MustCompile(`(?i)\b(pandaward|pensec)(\.exe)?["']?\s+(scope\s+(approve|revoke)|test\b|findings\s+(false-positive|accept-risk|reopen|confirm|apply)\b|purge\b|init\s+--force)`)
+	feedbackSend = regexp.MustCompile(`(?i)\b(pandaward|pensec)(\.exe)?["']?\s+feedback\s+submit\b`)
 	applyFile    = regexp.MustCompile(`(?i)\bfindings\s+apply\b.*?--file[=\s]+(?:"([^"]+)"|'([^']+)'|(\S+))`)
 	privateRef   = regexp.MustCompile(`(?i)\.(pandaward|pensec)[\\/]+(private|reports)\b|state\.db`)
 	scopeRef     = regexp.MustCompile(`(?i)\.(pandaward|pensec)[\\/]+(scope|config)\.ya?ml`)
@@ -199,6 +201,9 @@ func GuardDecision(toolName string, toolInput json.RawMessage) (string, string) 
 		}
 		_ = json.Unmarshal(toolInput, &ti)
 		c := ti.Command
+		if feedbackSend.MatchString(c) {
+			return "ask", "PandaWard: this sends feedback reports to " + feedback.Repo + " as GitHub issues or comments under your account."
+		}
 		if humanOnlyCmd.MatchString(c) {
 			return "ask", "PandaWard: this command approves scope, sends network traffic, or changes a finding disposition. It must be confirmed by the human operator."
 		}
@@ -237,7 +242,36 @@ func preTool(in Input, w io.Writer) int {
 	if s := applySummary(ti.Command, projectDir(in)); s != "" {
 		reason += "\n" + s
 	}
+	if feedbackSend.MatchString(ti.Command) {
+		reason += "\n" + submitSummary(in)
+	}
 	return emit(w, d, reason)
+}
+
+// submitSummary lists the reports `pandaward feedback submit` would send.
+func submitSummary(in Input) string {
+	e := openEngine(in)
+	if e == nil {
+		return "The project could not be opened; the command will fail."
+	}
+	defer e.Close()
+	_, gs, err := e.PendingFeedback()
+	if err != nil {
+		return "The pending reports could not be read (" + redact.Line(err.Error()) + "); the command will fail."
+	}
+	if len(gs) == 0 {
+		return "There are no reports to send."
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Reports to send (%d), each with the rule, counts, file types and versions only:", len(gs))
+	for i, g := range gs {
+		if i == maxSummaryLines {
+			fmt.Fprintf(&b, "\n  and %d more", len(gs)-i)
+			break
+		}
+		fmt.Fprintf(&b, "\n  %s: %d finding(s), %s", redact.Line(g.Title()), g.Count, redact.Line(g.FileType))
+	}
+	return b.String()
 }
 
 // maxSummaryLines caps the decisions listed in a confirmation prompt.

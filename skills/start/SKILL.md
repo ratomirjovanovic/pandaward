@@ -27,6 +27,14 @@ Run `pandaward assess` in the project root (the plugin puts `pandaward` on PATH;
 
 If scanners are BLOCKED because they are not installed, note which optional scanners would raise coverage (from `pandaward doctor`) and keep going; offer to install them in the final question, never before.
 
+Then run `pandaward feedback mode`. If it says the mode is not chosen yet, ask the user once, as a single multiple-choice question, and explain in two sentences why: PandaWard is open source, its rules are fixed from reports of wrong findings (false positives) and missed problems (false negatives), and a report holds only the rule, counts, file types and versions, never paths or code. Options, recommended first:
+
+- Collect them and let me send them in one step after triage (`batch`).
+- Ask me about each one (`ask`).
+- Never ask (`off`).
+
+Run `pandaward feedback mode <choice>` with the answer and keep going. Do not ask again in later sessions; the choice is stored for this project.
+
 ## 2. Review undecided areas (deep, the default)
 
 1. Call `pandaward_list_coverage_gaps` and `pandaward_get_findings` with `confidence: HYPOTHESIS`.
@@ -72,7 +80,8 @@ Ask the user once, as a single multiple-choice question (use the question tool w
 Then carry out every chosen option without further prompts:
 
 - Fixing: one step at a time. Read the code, make the minimal change, call `pandaward_retest` and report the delta in one line before the next step. Secrets come first and need revoking and rotating at the provider, which only the user can do: say so and keep going with the rest. Stop and ask only when a fix needs a product decision, touches more than the files in the step, or the retest shows something reopened or new.
-- Triage results: write the chosen decisions to a temporary JSON file outside the project, as an array of `{"finding_id": "PW-0003", "action": "confirm" | "false-positive", "note": "<triage reason>"}`, and run `pandaward findings apply --file <that file> --by <user's name>` once. The PandaWard hook shows the user every decision in one confirmation prompt; that is the human decision. If the command rejects the batch, fix the entry it names and run it again. For each false positive, offer to prepare feedback (`pandaward feedback false-positive <ID>`) so the rule gets fixed for everyone.
+- Triage results: write the chosen decisions to a temporary JSON file outside the project, as an array of `{"finding_id": "PW-0003", "action": "confirm" | "false-positive", "note": "<triage reason>"}`, and run `pandaward findings apply --file <that file> --by <user's name>` once. The PandaWard hook shows the user every decision in one confirmation prompt; that is the human decision. If the command rejects the batch, fix the entry it names and run it again.
+- Feedback, right after the triage results are recorded: call `pandaward_pending_feedback`. It lists one report per rule for the false positives just closed, and one per control for confirmed reviewer findings that no rule caught, the misses that matter most. With mode `batch`, show the list in a few lines and run `pandaward feedback submit --yes`; the PandaWard hook shows the user every report in one confirmation prompt, and with the GitHub CLI signed in the reports are filed (or added to an open report about the same rule) without opening links. With mode `ask` or no mode, offer the same in one question. With mode `off`, say nothing. Never add `--include-path` or `--include-snippet` here.
 - Scanners: install only the ones the user chose, with the package manager already on their system (Homebrew, Scoop, winget, or pipx for semgrep), check them with `pandaward doctor`, then run `pandaward assess` again. Scanners that need network access for their advisory database stay BLOCKED until the user enables `scan.allow_tool_network` themselves; say so.
 
 Afterwards run `pandaward report` once more and finish with the updated summary block. Keep watching the project for the rest of the session: after any later code edit, call `pandaward_retest` yourself and mention new or reopened findings.

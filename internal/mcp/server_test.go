@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ratomirjovanovic/pandaward/internal/engine"
 	"github.com/ratomirjovanovic/pandaward/internal/testfixture"
@@ -213,5 +214,20 @@ func TestPrepareFeedbackTool(t *testing.T) {
 		if f.ID == id && strings.Contains(txt, f.File) {
 			t.Fatalf("default report must not contain the path %s", f.File)
 		}
+	}
+
+	// A finding closed as a false positive becomes a pending report.
+	e, err = engine.Open(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Triage(id, "false-positive", "tester", "constant value", time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	e.Close()
+	res := rpc(t, s, `{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"pandaward_pending_feedback","arguments":{}}}`)[0]["result"].(map[string]any)
+	txt = res["content"].([]any)[0].(map[string]any)["text"].(string)
+	if res["isError"] == true || !strings.Contains(txt, `"sent":false`) || !strings.Contains(txt, id) || !strings.Contains(txt, `"kind":"false-positive"`) {
+		t.Fatalf("pending feedback: %s", txt)
 	}
 }
