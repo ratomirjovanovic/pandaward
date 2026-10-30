@@ -51,22 +51,20 @@ type progressView struct {
 	w     io.Writer
 	tty   bool
 	ascii bool
-	done  int
-	total int
+	pct   int
 	last  string
 }
 
-func (p *progressView) step(label string) {
-	if p.done < p.total {
-		p.done++
-	}
-	line := fmt.Sprintf("  [%s] %3d%%  %s", bar(p.done, p.total, 28, p.ascii), p.done*100/p.total, label)
+// set moves the bar to pct (it never moves back) and shows label.
+func (p *progressView) set(pct int, label string) {
+	p.pct = min(max(p.pct, pct), 100)
+	line := fmt.Sprintf("  [%s] %3d%%  %s", bar(p.pct, 100, 28, p.ascii), p.pct, label)
 	if p.tty {
 		pad := ""
 		if n := len([]rune(p.last)) - len([]rune(line)); n > 0 {
 			pad = strings.Repeat(" ", n)
 		}
-		fmt.Fprint(p.w, "\r"+line+pad)
+		fmt.Fprint(p.w, ""+line+pad)
 	} else {
 		fmt.Fprintln(p.w, line)
 	}
@@ -120,23 +118,29 @@ func cmdAssess(ctx context.Context, args []string, w io.Writer) error {
 	}
 	defer e.Close()
 
-	view := &progressView{w: w, tty: isTerminal(w), ascii: *ascii, total: len(e.Adapters()) + 4}
+	view := &progressView{w: w, tty: isTerminal(w), ascii: *ascii}
 	if *asJSON {
 		view.w = io.Discard
 	}
 	if created {
-		view.step("initialized .pandaward/ (config, private ledger)")
+		view.set(0, "initialized .pandaward/ (config, private ledger)")
 	} else {
-		view.step("using existing .pandaward/")
+		view.set(0, "using existing .pandaward/")
+	}
+	// The scan fills the bar up to 96%; the reports take the rest.
+	e.OnProgress = func(p engine.Progress) {
+		label := p.Message
+		if i := strings.Index(label, "] "); strings.HasPrefix(label, "[") && i > 0 {
+			label = label[i+2:]
+		}
+		if p.Steps > 0 && p.Step > 0 {
+			label = fmt.Sprintf("%d/%d %s", p.Step, p.Steps, label)
+		}
+		view.set(p.Percent*96/100, label)
 	}
 	progress := func(m string) {
-		switch {
-		case strings.HasPrefix(m, "inventory:"):
-			view.step("inventory (read-only walk)")
-		case strings.HasPrefix(m, "adapter: "):
-			view.step(strings.TrimPrefix(m, "adapter: "))
-		case strings.HasPrefix(m, "findings:"):
-			view.step("findings, evidence and edges")
+		if strings.HasPrefix(m, "inventory:") {
+			view.set(0, "inventory (read-only walk)")
 		}
 	}
 	res, err := e.Scan(ctx, progress)
@@ -154,8 +158,7 @@ func cmdAssess(ctx context.Context, args []string, w io.Writer) error {
 		view.finish()
 		return err
 	}
-	view.done = view.total - 1
-	view.step("reports written")
+	view.set(100, "reports written")
 	view.finish()
 
 	if *asJSON {

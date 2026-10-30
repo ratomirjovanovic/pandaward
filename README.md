@@ -208,7 +208,7 @@ While the specialist reviewers run, you can see what each one is doing. Their ro
 | `pandaward assess` | The whole local assessment in one step: init if needed, scan with progress bars, reports and a summary |
 | `pandaward init` | Create `.pandaward/` with config and a private ledger |
 | `pandaward plan` | Applicable controls, gates, candidate edges, inventory gaps |
-| `pandaward scan [--fail-on high]` | Passive scan, including SARIF import from `.pandaward/sarif/`; exit code 4 when the gate is reached |
+| `pandaward scan [--fail-on high]` | Passive scan, including SARIF import from `.pandaward/sarif/`; exit code 4 when the gate is reached. Progress lines on stderr show the step, a percentage and the time left (see below) |
 | `pandaward retest [--changed]` | Files changed since the last scan, re-scan, delta; `--changed` re-runs only the adapters whose controls the changes affect |
 | `pandaward status` | Coverage, open findings, stale files, blockers, next action |
 | `pandaward findings [show ID]` | List or inspect findings; `apply --file` records many decisions at once |
@@ -232,6 +232,8 @@ While the specialist reviewers run, you can see what each one is doing. Their ro
 | `pandaward selftest` | Runs a hostile fixture repository (instructions in comments, README, OpenAPI, MCP descriptions and scanner output) through scan, reports, MCP and hooks and checks PandaWard was not steered by it; CI and every release run it and fail on any case |
 | `pandaward mcp` | Local stdio MCP server used by the plugin |
 | `pandaward telemetry [on \| off \| show]` | Opt-in usage counters, off by default; `on` needs an interactive terminal ([what is sent](docs/TELEMETRY.md)) |
+
+Scans show how far they got. The first line is the plan: files, adapters and the expected time. Every line after it has the step, a percentage and the time left, such as `[7/8  27%] semgrep: running; about 4 min left`, and an adapter that runs long reports every 20 seconds. The percentage is weighted by how long each adapter is expected to take: on the first scan of a project it is estimated from the size of the code each adapter reads, and later scans use the durations recorded in the ledger. `--quiet` and `--json` turn the lines off; the MCP scan and retest tools send them as progress notifications.
 
 Human decisions are explicit and recorded:
 
