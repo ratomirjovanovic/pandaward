@@ -57,7 +57,7 @@ Assessment (local, no target network traffic):
   retest          Show files changed since the last scan, re-scan, show the delta
                   (--changed re-runs only adapters for impacted controls)
   status          Resumable state, coverage, blockers and next action
-  findings        List/show findings; human triage: false-positive, accept-risk, reopen, confirm
+  findings        List/show findings; human triage: false-positive, accept-risk, reopen, confirm, remediated
   graph           Cross-domain edges (text or --format mermaid)
   routes          Discovered entrypoints (HTTP, GraphQL, gRPC, workers, cron) with file:line
   fix-plan        Ordered remediation plan from open findings
@@ -648,7 +648,7 @@ func cmdFindings(args []string, w io.Writer) error {
 		}
 		fmt.Fprintf(w, "Recorded %s as HYPOTHESIS (%s)\n", f.ID, f.Title)
 		return nil
-	case "false-positive", "accept-risk", "reopen", "confirm":
+	case "false-positive", "accept-risk", "reopen", "confirm", "remediated":
 		if len(pos) != 1 {
 			return exitErr{2, "usage: pandaward findings " + sub + " <PW-ID> --by <name> --note <text>"}
 		}
@@ -683,7 +683,7 @@ func cmdFindings(args []string, w io.Writer) error {
 		fmt.Fprintf(w, "Applied %d decision(s).\n", len(out))
 		return nil
 	}
-	return exitErr{2, "findings subcommands: list, show, add, apply, false-positive, accept-risk, reopen, confirm"}
+	return exitErr{2, "findings subcommands: list, show, add, apply, false-positive, accept-risk, reopen, confirm, remediated"}
 }
 
 func cmdRoutes(args []string, w io.Writer) error {

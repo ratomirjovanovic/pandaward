@@ -41,6 +41,7 @@ func TestGuardDecision(t *testing.T) {
 		{"Bash", cmd(`pandaward scope approve --by me`), "ask"},
 		{"Bash", cmd(`./bin/pandaward.exe test --profile production-observe`), "ask"},
 		{"Bash", cmd(`pandaward findings false-positive PW-0001 --by x --note y`), "ask"},
+		{"Bash", cmd(`pandaward findings remediated PW-0001 --by x --note "PR 12"`), "ask"},
 		{"Bash", cmd(`sqlite3 .pandaward/private/state.db "update findings set status='REMEDIATED'"`), "ask"},
 		{"Bash", cmd(`echo "acknowledged: true" >> .pandaward/scope.yaml`), "ask"},
 		{"Bash", cmd(`cat .pandaward/scope.yaml`), ""},

@@ -166,7 +166,7 @@ func preCompact(in Input) int {
 }
 
 var (
-	humanOnlyCmd = regexp.MustCompile(`(?i)\b(pandaward|pensec)(\.exe)?["']?\s+(scope\s+(approve|revoke)|test\b|findings\s+(false-positive|accept-risk|reopen|confirm|apply)\b|purge\b|init\s+--force)`)
+	humanOnlyCmd = regexp.MustCompile(`(?i)\b(pandaward|pensec)(\.exe)?["']?\s+(scope\s+(approve|revoke)|test\b|findings\s+(false-positive|accept-risk|reopen|confirm|remediated|apply)\b|purge\b|init\s+--force)`)
 	feedbackSend = regexp.MustCompile(`(?i)\b(pandaward|pensec)(\.exe)?["']?\s+feedback\s+submit\b`)
 	applyFile    = regexp.MustCompile(`(?i)\bfindings\s+apply\b.*?--file[=\s]+(?:"([^"]+)"|'([^']+)'|(\S+))`)
 	privateRef   = regexp.MustCompile(`(?i)\.(pandaward|pensec)[\\/]+(private|reports)\b|state\.db`)

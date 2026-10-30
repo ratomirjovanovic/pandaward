@@ -18,7 +18,7 @@ import (
 // subcommands are the words that may follow a command. Keep them in step
 // with the switch statements of the commands.
 var subcommands = map[string][]string{
-	"findings":  {"list", "show", "add", "false-positive", "accept-risk", "reopen", "confirm", "apply"},
+	"findings":  {"list", "show", "add", "false-positive", "accept-risk", "reopen", "confirm", "remediated", "apply"},
 	"evidence":  {"show", "verify"},
 	"scope":     {"init", "show", "validate", "approve", "revoke"},
 	"telemetry": {"status", "on", "off", "send", "show"},
