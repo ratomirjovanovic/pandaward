@@ -68,7 +68,9 @@ Assessment (local, no target network traffic):
   verify-bundle   <bundle.zip> recompute and check every hash in a bundle
   events          Recent audit events
   progress        What the reviewer subagents of a guided review are doing (--watch streams it)
-  feedback        Report a false positive or a missed issue to the project (prints a prefilled issue link; sends nothing)
+  feedback        Report false positives and missed issues to the project: false-positive <PW-ID>,
+                  false-negative --rule <id>, pending, submit (asks first; uses gh when signed in),
+                  mode ask|batch|off, summary
 
 Network-active (human authorization required):
   scope           init | show | validate | approve --by <name> | revoke
@@ -156,7 +158,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	case "progress":
 		err = cmdProgress(ctx, rest, stdin, stdout)
 	case "feedback":
-		err = cmdFeedback(rest, stdout)
+		err = cmdFeedback(rest, stdin, stdout)
 	case "scope":
 		err = cmdScope(rest, stdin, stdout)
 	case "test":
@@ -1522,7 +1524,7 @@ func cmdBenchmark(ctx context.Context, args []string, w io.Writer) error {
 	return nil
 }
 
-func cmdFeedback(args []string, w io.Writer) error {
+func cmdFeedback(args []string, stdin io.Reader, w io.Writer) error {
 	sub := ""
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		sub, args = args[0], args[1:]
@@ -1535,6 +1537,7 @@ func cmdFeedback(args []string, w io.Writer) error {
 	rule := fs.String("rule", "", "false-negative: rule or control that should have fired (e.g. D-003)")
 	file := fs.String("file", "", "false-negative: file with the missed issue")
 	line := fs.Int("line", 0, "false-negative: line of the missed issue")
+	yes := fs.Bool("yes", false, "submit: file the reports without asking (the Claude Code plugin asks you first)")
 	pos, err := parse(fs, args)
 	if err != nil {
 		return err
@@ -1568,6 +1571,8 @@ func cmdFeedback(args []string, w io.Writer) error {
 			return exitErr{2, "usage: pandaward feedback false-negative --rule <rule or control> [--file f --line n] --note text"}
 		}
 		r = feedback.Missed(e.Root, *rule, *file, *line, opts)
+	case "mode", "pending", "submit":
+		return feedbackFlow(e, sub, pos, *asJSON, *yes, stdin, w)
 	case "summary":
 		fsl, err := e.St.Findings(e.ProjectID)
 		if err != nil {
@@ -1588,7 +1593,7 @@ func cmdFeedback(args []string, w io.Writer) error {
 		fmt.Fprintln(w, "\nReport a rule with: pandaward feedback false-positive <PW-ID>")
 		return nil
 	default:
-		return exitErr{2, "feedback subcommands: false-positive <PW-ID>, false-negative --rule <id>, summary"}
+		return exitErr{2, "feedback subcommands: false-positive <PW-ID>, false-negative --rule <id>, summary, mode [ask|batch|off], pending, submit"}
 	}
 	if *asJSON {
 		return printJSON(w, map[string]any{"report": r, "issue_url": r.IssueURL()})

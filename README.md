@@ -226,6 +226,7 @@ While the specialist reviewers run, you can see what each one is doing. Their ro
 | `pandaward test --profile local-runtime` | Storage of the configured Android test build on a running emulator and the iOS test build in a booted simulator; real devices are refused |
 | `pandaward test --profile staging-active` | Authorization checks with test identities, then a ZAP spider and passive scan of approved staging origins, active scan when the manifest allows it |
 | `pandaward feedback false-positive ID \| false-negative \| summary` | Prepare a report about a wrong or missed finding; prints a prefilled issue link, sends nothing |
+| `pandaward feedback pending \| submit \| mode ask\|batch\|off` | Reports not sent yet, grouped by rule, including missed issues found from confirmed reviewer findings; `submit` asks, then files them with `gh` or prints links |
 | `pandaward doctor` | Optional scanners and their network needs |
 | `pandaward benchmark` | TP, FP, FN and TN per built-in rule on the bundled corpus |
 | `pandaward selftest` | Runs a hostile fixture repository (instructions in comments, README, OpenAPI, MCP descriptions and scanner output) through scan, reports, MCP and hooks and checks PandaWard was not steered by it; CI and every release run it and fail on any case |
@@ -364,7 +365,7 @@ CLI: `brew uninstall pensec && brew untap ratomirjovanovic/pensec`, then install
 
 ## Wrong or missed findings
 
-Tell us, and the rule gets fixed. `pandaward feedback false-positive <PW-ID>` or `pandaward feedback false-negative --rule <id>` (or `/pandaward:feedback` in Claude Code) prepares a report with rule metadata only and prints a prefilled issue link; nothing is sent unless you submit it. Reports are grouped by rule, prioritized automatically and every fix adds a benchmark case. See [docs/FEEDBACK.md](docs/FEEDBACK.md).
+Tell us, and the rule gets fixed. PandaWard is open source and its rules improve from these reports. The first `/pandaward:start` in a project asks once whether you want to send them; with `batch`, PandaWard collects them after triage and sends them in one step after you confirm. It groups the false positives you closed by rule and finds missed issues itself: problems a reviewer found and you confirmed that no rule caught. A report holds rule metadata, counts and file types only. With the GitHub CLI signed in, `pandaward feedback submit` files the reports (or adds to an open report about the same rule); without it, you get prefilled issue links. By hand: `pandaward feedback false-positive <PW-ID>`, `pandaward feedback false-negative --rule <id>` or `/pandaward:feedback`. Reports are prioritized automatically and every fix adds a benchmark case. See [docs/FEEDBACK.md](docs/FEEDBACK.md).
 
 ## Contributing and security
 

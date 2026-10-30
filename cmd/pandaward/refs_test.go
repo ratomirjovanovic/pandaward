@@ -22,7 +22,7 @@ var subcommands = map[string][]string{
 	"evidence":  {"show", "verify"},
 	"scope":     {"init", "show", "validate", "approve", "revoke"},
 	"telemetry": {"status", "on", "off", "send", "show"},
-	"feedback":  {"false-positive", "false-negative", "summary"},
+	"feedback":  {"false-positive", "false-negative", "summary", "mode", "pending", "submit"},
 	"hook":      {"session-start", "post-edit", "pre-tool", "pre-compact", "stop", "subagent-start", "subagent-stop", "reviewer-tool"},
 }
 
