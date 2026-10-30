@@ -35,9 +35,12 @@ type Config struct {
 		FailOnAdapterError bool `yaml:"fail_on_adapter_error"`
 		// AllowToolNetwork lets optional scanners download advisory
 		// databases or rule packs. It never allows requests to targets.
-		AllowToolNetwork bool     `yaml:"allow_tool_network"`
-		SemgrepConfig    string   `yaml:"semgrep_config"`
-		Adapters         []string `yaml:"adapters"`
+		AllowToolNetwork bool   `yaml:"allow_tool_network"`
+		SemgrepConfig    string `yaml:"semgrep_config"`
+		// SemgrepIncludeTests keeps results of non-bundled semgrep rules in
+		// test and fixture code, which are skipped by default.
+		SemgrepIncludeTests bool     `yaml:"semgrep_include_tests"`
+		Adapters            []string `yaml:"adapters"`
 		// SARIFFiles lists SARIF results to import, relative to the project
 		// root, in addition to .pandaward/sarif/*.sarif.
 		SARIFFiles []string `yaml:"sarif_files"`
