@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"math"
+
 	"github.com/ratomirjovanovic/pandaward/internal/feedback"
 	"github.com/ratomirjovanovic/pandaward/internal/model"
 )
@@ -25,5 +27,11 @@ func (e *Engine) PendingFeedback() (feedback.State, []feedback.Group, error) {
 		cache[id] = rs
 		return rs
 	}
-	return st, feedback.Pending(fs, runs, st), nil
+	var observed func(string) bool
+	if a, err := e.St.PreviousObserved(e.ProjectID, math.MaxInt32); err == nil && a != nil {
+		if obs, tracked, err := e.St.Observations(a.ID); err == nil && tracked {
+			observed = func(fp string) bool { _, ok := obs[fp]; return ok }
+		}
+	}
+	return st, feedback.Pending(fs, runs, observed, st), nil
 }

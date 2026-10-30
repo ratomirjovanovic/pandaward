@@ -92,14 +92,17 @@ const reviewCollector = "manual-assisted"
 //
 //   - false positives: rule findings a person closed as false positives,
 //     one report per rule. Reviewer hypotheses closed as false positives are
-//     not reports about a rule and are left out.
+//     not reports about a rule and are left out, and so are findings the
+//     latest scan no longer observed: that rule no longer fires there.
 //   - false negatives: reviewer findings a person confirmed (or fixed) where
 //     no rule reported the same control in the same file, one report per
 //     control. Those are problems the scanners missed.
 //
 // runs returns the adapter runs of an assessment, for tool versions and the
-// adapters that ran. Reports hold rule metadata, counts and file types only.
-func Pending(fs []model.Finding, runs func(assessmentID string) []model.Run, st State) []Group {
+// adapters that ran. observed reports whether the latest scan saw a
+// fingerprint; nil means it is not known and every finding counts. Reports
+// hold rule metadata, counts and file types only.
+func Pending(fs []model.Finding, runs func(assessmentID string) []model.Run, observed func(fingerprint string) bool, st State) []Group {
 	covered := map[string]bool{}
 	for _, f := range fs {
 		if f.Collector != reviewCollector {
@@ -128,7 +131,7 @@ func Pending(fs []model.Finding, runs func(assessmentID string) []model.Run, st 
 			continue
 		}
 		switch {
-		case f.Status == model.FindingFalsePositive && f.Collector != reviewCollector:
+		case f.Status == model.FindingFalsePositive && f.Collector != reviewCollector && (observed == nil || observed(f.Fingerprint)):
 			add(FalsePositive+"|"+f.RuleID, f, func() Report {
 				return FromFinding("", f, runs(f.AssessmentID), Options{})
 			})
