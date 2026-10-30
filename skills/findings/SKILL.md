@@ -8,7 +8,7 @@ argument-hint: "[PW-ID]"
 
 - Without an argument: `pandaward findings` (add `--all` for closed ones). Group by confirmed vs suspected.
 - With an ID: `pandaward findings show <ID>`, read the cited lines with the Read tool, and fetch evidence with `pandaward_get_evidence`. Explain the trust boundary, preconditions, impact and fix in the context of the actual code.
-- Disposition changes (`false-positive`, `accept-risk`, `reopen`, `confirm`) are human decisions. Run them only when the user explicitly asks and names the reviewer and justification; the PreToolUse hook asks the user to confirm.
+- Disposition changes (`false-positive`, `accept-risk`, `reopen`, `confirm`, `remediated`) are human decisions. Run them only when the user explicitly asks and names the reviewer and justification; the PreToolUse hook asks the user to confirm.
 
 ## Ground rules (always)
 
