@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ratomirjovanovic/pandaward/internal/config"
+	"github.com/ratomirjovanovic/pandaward/internal/inventory"
 	"github.com/ratomirjovanovic/pandaward/internal/model"
 )
 
@@ -185,5 +186,28 @@ func TestOSVNoPackagesIsUnsupported(t *testing.T) {
 	_, run := tool.Run(context.Background(), &Context{Root: dir, Cfg: cfg, RunDir: dir, ToolHome: filepath.Join(dir, "home"), Timeout: time.Minute})
 	if run.ExitClass != model.ExitUnsupported || !strings.Contains(run.Detail, "no lockfile") {
 		t.Errorf("exit 128 gave %s %q, want UNSUPPORTED with the reason", run.ExitClass, run.Detail)
+	}
+}
+
+func TestGitleaksIgnoredLocalFile(t *testing.T) {
+	root := t.TempDir()
+	item := func(file string, line int) string {
+		b, _ := json.Marshal(filepath.Join(root, filepath.FromSlash(file)))
+		return fmt.Sprintf(`{"RuleID":"stripe-access-token","Description":"Found a Stripe Access Token.","StartLine":%d,"EndLine":%d,"Match":"REDACTED","File":%s}`, line, line, b)
+	}
+	raw := []byte("[" + item(".env.local", 1) + "," + item("src/config.ts", 2) + "," + item(".env.staged", 3) + "]")
+	inv := &inventory.Inventory{Tracked: map[string]bool{"src/config.ts": true}, Ignored: []string{".env.local", "secrets/"}}
+	sigs, err := gitleaks().(*externalTool).normalize(&Context{Root: root, Inv: inv}, raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sev := map[int]model.Severity{}
+	for _, s := range sigs {
+		sev[s.StartLine] = s.Severity
+	}
+	// Ignored and untracked: listed only. Tracked, or untracked but not
+	// ignored (it may be committed next): a real finding.
+	if sev[1] != model.SevInfo || sev[2] != model.SevHigh || sev[3] != model.SevHigh {
+		t.Fatalf("severities %v", sev)
 	}
 }
