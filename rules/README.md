@@ -2,7 +2,7 @@
 
 ## Semgrep (`semgrep/`)
 
-PandaWard ships a small, reviewed set of Semgrep rules for JavaScript/TypeScript, Python, Go and Java. They are embedded in the `pandaward` binary and run automatically whenever `semgrep` is installed. They are local files, so they work with `scan.allow_tool_network: false`. Rules set in `scan.semgrep_config` or `.pandaward/semgrep/` run in addition to them.
+PandaWard ships a small, reviewed set of Semgrep rules for JavaScript/TypeScript, Python, Go and Java. They are embedded in the `pandaward` binary and run automatically whenever `semgrep` is installed. They are local files, so they work with `scan.allow_tool_network: false`. Rules set in `scan.semgrep_config` or `.pandaward/semgrep/` run in addition to them. Results in test and fixture files are skipped and counted in the adapter line, as in the built-in checks; set `scan.semgrep_include_tests: true` to keep them for rules other than the bundled ones.
 
 | File | Covers |
 |---|---|
