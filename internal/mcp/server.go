@@ -53,6 +53,9 @@ type rpcResp struct {
 type Server struct {
 	Root string
 	mu   sync.Mutex // one tool call at a time: the ledger has a single writer
+	// progress receives scan progress during one tool call whose request
+	// asked for progress notifications; nil otherwise.
+	progress func(engine.Progress)
 }
 
 type tool struct {
@@ -197,6 +200,9 @@ func (s *Server) handle(ctx context.Context, line []byte, send func(any)) {
 		var p struct {
 			Name      string          `json:"name"`
 			Arguments json.RawMessage `json:"arguments"`
+			Meta      struct {
+				ProgressToken json.RawMessage `json:"progressToken"`
+			} `json:"_meta"`
 		}
 		if err := json.Unmarshal(req.Params, &p); err != nil {
 			resp.Error = &rpcErr{-32602, "invalid params"}
@@ -207,7 +213,9 @@ func (s *Server) handle(ctx context.Context, line []byte, send func(any)) {
 			telemetry.Record("mcp", p.Name, root)
 		}
 		s.mu.Lock()
+		s.progress = progressSender(p.Meta.ProgressToken, send)
 		res, err := s.call(ctx, p.Name, p.Arguments)
+		s.progress = nil
 		s.mu.Unlock()
 		if err != nil {
 			resp.Result = map[string]any{"isError": true, "content": []any{map[string]any{"type": "text", "text": err.Error()}}}
@@ -267,6 +275,7 @@ func (s *Server) call(ctx context.Context, name string, raw json.RawMessage) (an
 		return nil, err
 	}
 	defer e.Close()
+	e.OnProgress = s.progress
 	switch name {
 	case "pandaward_get_status":
 		var a struct{}
@@ -538,3 +547,23 @@ func (s *Server) call(ctx context.Context, name string, raw json.RawMessage) (an
 // ToolsJSON returns the MCP tool definitions as served by tools/list, for
 // schema compatibility checks.
 func ToolsJSON() ([]byte, error) { return json.Marshal(tools()) }
+
+// progressSender turns scan progress into MCP progress notifications for a
+// request that carried a progress token. MCP requires the progress value to
+// grow with every notification, and a heartbeat can repeat a percentage, so
+// repeats add a thousandth.
+func progressSender(token json.RawMessage, send func(any)) func(engine.Progress) {
+	if len(token) == 0 || string(token) == "null" {
+		return nil
+	}
+	last, n := -1, 0
+	return func(p engine.Progress) {
+		if p.Percent > last {
+			last, n = p.Percent, 0
+		} else if n < 999 {
+			n++
+		}
+		send(map[string]any{"jsonrpc": "2.0", "method": "notifications/progress", "params": map[string]any{
+			"progressToken": token, "progress": float64(last) + float64(n)/1000, "total": 100, "message": p.Message}})
+	}
+}

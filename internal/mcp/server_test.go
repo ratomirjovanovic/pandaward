@@ -231,3 +231,46 @@ func TestPrepareFeedbackTool(t *testing.T) {
 		t.Fatalf("pending feedback: %s", txt)
 	}
 }
+
+func TestScanProgressNotifications(t *testing.T) {
+	root := testfixture.VulnerableRepo(t)
+	e, _, err := engine.Init(root, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	e.Close()
+	s := &Server{Root: root}
+	res := rpc(t, s,
+		`{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"pandaward_scan_passive","arguments":{},"_meta":{"progressToken":"tok-1"}}}`,
+		`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"pandaward_get_status","arguments":{}}}`,
+	)
+	last, notes := -1.0, 0
+	for i, m := range res {
+		if m["method"] != "notifications/progress" {
+			if m["id"] == nil {
+				t.Fatalf("message %d is neither a notification nor a response: %v", i, m)
+			}
+			continue
+		}
+		if res[len(res)-1]["method"] != nil {
+			t.Fatal("the last message must be a response")
+		}
+		p := m["params"].(map[string]any)
+		if p["progressToken"] != "tok-1" || p["total"] != 100.0 || p["message"] == "" {
+			t.Fatalf("bad progress notification: %v", p)
+		}
+		if v := p["progress"].(float64); v <= last {
+			t.Fatalf("progress must grow: %v after %v", v, last)
+		} else {
+			last = v
+		}
+		notes++
+	}
+	if notes < 3 || last < 100 {
+		t.Fatalf("expected progress up to 100, got %d notification(s), last %v", notes, last)
+	}
+	// Without a token, and for the call after it, nothing extra is sent.
+	if n := len(res) - notes; n != 2 {
+		t.Fatalf("expected 2 responses, got %d", n)
+	}
+}

@@ -36,6 +36,9 @@ type Engine struct {
 	// HashBudget bounds the time status-style reads spend hashing the
 	// working tree to find changes made outside Claude Code; 0 means none.
 	HashBudget time.Duration
+	// OnProgress, when set, receives every scan progress update next to the
+	// text passed to the progress function of Scan and Retest.
+	OnProgress func(Progress)
 }
 
 // ProjectID derives a stable local project ID from the absolute root.
@@ -397,6 +400,7 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 	if progress == nil {
 		progress = func(string) {}
 	}
+	scanBegan := time.Now()
 	if n, _ := e.St.MarkInterrupted(e.ProjectID); n > 0 {
 		progress(fmt.Sprintf("recovered %d interrupted assessment(s); they are kept as INTERRUPTED and not used", n))
 	}
@@ -447,21 +451,33 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 	carried := map[string]bool{} // adapter -> decisions carried over
 	var foreign []model.Signal   // signals for controls owned by another adapter
 	ctrlEvidence := map[string][]string{}
+	var todo []adapters.Adapter
 	for _, ad := range adapters.Registry() {
 		if !enabled[ad.Name()] {
 			continue
 		}
-		applicable := false
 		for _, cid := range ad.Controls() {
 			if r := results[cid]; r != nil && r.Status != model.StatusNotApplicable {
-				applicable = true
+				todo = append(todo, ad)
+				break
 			}
 		}
-		if !applicable {
-			continue
+	}
+	want, estimated := e.expected(todo, actx)
+	m := newMeter(func(p Progress) {
+		progress(p.Message)
+		if e.OnProgress != nil {
+			e.OnProgress(p)
 		}
+	}, names(todo), want, estimated)
+	var size int64
+	for _, f := range inv.Files {
+		size += f.Size
+	}
+	m.plan(len(inv.Files), float64(size)/(1<<20))
+	for i, ad := range todo {
 		if run, ok := cy.carry(ad, results, ctrlEvidence); ok {
-			progress("adapter: " + ad.Name() + " (inputs unchanged, carried over)")
+			m.carried(i)
 			if err := e.St.PutRun(asmt.ID, run); err != nil {
 				return nil, err
 			}
@@ -469,8 +485,11 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 			carried[ad.Name()] = true
 			continue
 		}
-		progress("adapter: " + ad.Name())
+		stop := m.start(i)
+		began := time.Now()
 		out, run := safeRun(ctx, ad, actx)
+		stop()
+		m.finish(i, run, time.Since(began))
 		if n := e.dropExcluded(&out); n > 0 {
 			run.SignalsCount -= n
 			run.Detail += fmt.Sprintf("; %d signal(s) in excluded paths dropped", n)
@@ -521,7 +540,8 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 	raise(results, foreign)
 
 	// Persist findings with evidence.
-	progress("findings: normalizing, fingerprinting and writing redacted evidence")
+	stopFindings := m.findings()
+	defer stopFindings()
 	seen := map[string]bool{}
 	ledger, err := e.St.Findings(e.ProjectID)
 	if err != nil {
@@ -668,6 +688,8 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 	if err := e.St.FinishAssessment(e.ProjectID, asmt.ID, status, string(manifest)); err != nil {
 		return nil, err
 	}
+	stopFindings()
+	m.end(time.Since(scanBegan))
 	return res, nil
 }
 
