@@ -664,6 +664,7 @@ func cmdFindings(args []string, w io.Writer) error {
 			return err
 		}
 		fmt.Fprintf(w, "%s is now %s / %s (reviewer %s)\n", f.ID, f.Status, f.Confidence, f.Reviewer)
+		feedbackHint(e, w)
 		return nil
 	case "apply":
 		if *file == "" || len(pos) != 0 {
@@ -681,6 +682,7 @@ func cmdFindings(args []string, w io.Writer) error {
 			fmt.Fprintf(w, "%s is now %s / %s (reviewer %s)\n", f.ID, f.Status, f.Confidence, f.Reviewer)
 		}
 		fmt.Fprintf(w, "Applied %d decision(s).\n", len(out))
+		feedbackHint(e, w)
 		return nil
 	}
 	return exitErr{2, "findings subcommands: list, show, add, apply, false-positive, accept-risk, reopen, confirm, remediated"}
