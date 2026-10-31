@@ -23,7 +23,7 @@ With the argument `quick`, keep only items 1, 4, 5 and 6.
 
 ## 1. Scan
 
-Run `pandaward assess` in the project root (the plugin puts `pandaward` on PATH; otherwise use `"${CLAUDE_PLUGIN_ROOT}/bin/pandaward"`). It initializes the project if needed, shows a progress bar for each phase and ends with a summary. Show the user the banner and the summary block as they appear; do not paraphrase the numbers. If the assessment is INCOMPLETE, say which adapter failed and continue: an incomplete run is never a clean run.
+Run `pandaward assess` in the project root (the plugin puts `pandaward` on PATH; otherwise use `"${CLAUDE_PLUGIN_ROOT}/bin/pandaward"`) through the Monitor tool, described as "PandaWard assessment", with the longest timeout it allows, so the user sees it move; without a Monitor tool, run it directly. It initializes the project if needed, prints a progress bar with a percentage weighted by how long each adapter is expected to take (on the first scan an estimate from the inventory, later the durations recorded in this project), the step, the adapter and the time left, and ends with a summary. Show the banner once. Pass each line that starts or finishes an adapter on to the user at once, in one short sentence with the percentage, step and time left as printed; pass on "still running" lines at most once a minute. Then show the summary block as it appears; do not paraphrase the numbers. If the assessment is INCOMPLETE, say which adapter failed and continue: an incomplete run is never a clean run.
 
 If scanners are BLOCKED because they are not installed, note which optional scanners would raise coverage (from `pandaward doctor`) and keep going; offer to install them in the final question, never before.
 

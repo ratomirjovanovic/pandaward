@@ -9,6 +9,7 @@ argument-hint: "[PW-ID]"
 - Without an argument: `pandaward findings` (add `--all` for closed ones). Group by confirmed vs suspected.
 - With an ID: `pandaward findings show <ID>`, read the cited lines with the Read tool, and fetch evidence with `pandaward_get_evidence`. Explain the trust boundary, preconditions, impact and fix in the context of the actual code.
 - Disposition changes (`false-positive`, `accept-risk`, `reopen`, `confirm`, `remediated`) are human decisions. Run them only when the user explicitly asks and names the reviewer and justification; the PreToolUse hook asks the user to confirm.
+- After decisions are recorded, report wrong and missed findings to the project. Run `pandaward feedback mode`. If no mode is chosen yet, ask the user once, as a single multiple-choice question, and explain in two sentences why: PandaWard is open source, its rules are fixed from reports of false positives and missed problems, and a report holds only the rule, counts, file types and versions, never paths or code. Options, recommended first: collect them and send them in one step (`batch`), ask about each one (`ask`), never ask (`off`); run `pandaward feedback mode <choice>` with the answer. Then call `pandaward_pending_feedback`. With mode `batch`, show the list in a few lines and run `pandaward feedback submit --yes`; the PandaWard hook shows the user every report in one confirmation prompt. With mode `ask`, offer the same in one question. With mode `off`, say nothing. Never add `--include-path` or `--include-snippet` here.
 
 ## Ground rules (always)
 
