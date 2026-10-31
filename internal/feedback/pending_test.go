@@ -37,7 +37,7 @@ func TestPending(t *testing.T) {
 		// Already sent.
 		fnd("PW-0010", "code.cors", "G-004", "builtin-code", "srv.go", model.FindingFalsePositive, model.Confirmed),
 	}
-	gs := Pending(fs, runsOf, State{Sent: map[string]string{"fp-PW-0010": "https://github.com/x/y/issues/1"}})
+	gs := Pending(fs, runsOf, nil, State{Sent: map[string]string{"fp-PW-0010": "https://github.com/x/y/issues/1"}})
 	var got []string
 	for _, g := range gs {
 		got = append(got, g.Title()+" "+strings.Join(g.Findings, ",")+" "+g.FileType)
@@ -79,7 +79,7 @@ func TestStateRoundTrip(t *testing.T) {
 	if err := st.SetMode(ModeBatch, time.Date(2026, 10, 30, 9, 0, 0, 0, time.UTC)); err != nil {
 		t.Fatal(err)
 	}
-	g := Pending([]model.Finding{fnd("PW-0001", "r", "D-003", "semgrep", "a.ts", model.FindingFalsePositive, model.Confirmed)}, runsOf, st)[0]
+	g := Pending([]model.Finding{fnd("PW-0001", "r", "D-003", "semgrep", "a.ts", model.FindingFalsePositive, model.Confirmed)}, runsOf, nil, st)[0]
 	st.MarkSent(g, "https://github.com/x/y/issues/7")
 	if err := SaveState(dir, st); err != nil {
 		t.Fatal(err)
@@ -113,7 +113,7 @@ func TestSubmit(t *testing.T) {
 	gs := Pending([]model.Finding{
 		fnd("PW-0001", "code.webhook", "G-002", "builtin-code", "a.py", model.FindingFalsePositive, model.Confirmed),
 		fnd("PW-0002", "code.webhook-extra", "G-002", "builtin-code", "a.py", model.FindingFalsePositive, model.Confirmed),
-	}, runsOf, State{})
+	}, runsOf, nil, State{})
 	// An open report exists for code.webhook; "code.webhook-extra" must not
 	// be mistaken for it.
 	gh := &fakeGH{open: `[{"number":158,"title":"[false-positive] code.webhook: fires on OAuth callbacks","url":"https://github.com/ratomirjovanovic/pandaward/issues/158"}]`}
@@ -133,5 +133,24 @@ func TestSubmit(t *testing.T) {
 		if !strings.Contains(joined, want) {
 			t.Errorf("gh calls %q lack %q", joined, want)
 		}
+	}
+}
+
+func TestPendingOnlyStillObserved(t *testing.T) {
+	fs := []model.Finding{
+		fnd("PW-0001", "semgrep.js-sql", "D-003", "semgrep", "a.ts", model.FindingFalsePositive, model.StronglySupported),
+		// Closed earlier; the latest scan no longer sees it.
+		fnd("PW-0002", "semgrep.old-rule", "D-003", "semgrep", "b.ts", model.FindingFalsePositive, model.StronglySupported),
+		// A confirmed miss is reported whether or not a scan saw it.
+		fnd("PW-0003", "review.B-002", "B-002", "manual-assisted", "c.ts", model.FindingRemediated, model.StronglySupported),
+	}
+	seen := func(fp string) bool { return fp == "fp-PW-0001" }
+	var got []string
+	for _, g := range Pending(fs, runsOf, seen, State{}) {
+		got = append(got, g.Title())
+	}
+	want := "[false-negative] B-002,[false-positive] semgrep.js-sql"
+	if strings.Join(got, ",") != want {
+		t.Fatalf("Pending = %v, want %s", got, want)
 	}
 }
