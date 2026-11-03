@@ -23,6 +23,14 @@ func TestLineRedactsSecrets(t *testing.T) {
 			t.Errorf("not redacted: %q -> %q", c, out)
 		}
 	}
+	// The prefixes are specific enough without a word boundary, so a token
+	// glued to the text around it is still masked.
+	pat := "github_pat_" + strings.Repeat("a1B2_", 13)
+	for _, c := range []string{"0" + gh, "x_" + gh + "_y", "id" + pat} {
+		if out := Line(c); strings.Contains(out, gh) || strings.Contains(out, pat) {
+			t.Errorf("glued token not redacted: %q -> %q", c, out)
+		}
+	}
 	if got := Line("user email jane.doe@example.org"); strings.Contains(got, "jane.doe") {
 		t.Errorf("email not masked: %s", got)
 	}
