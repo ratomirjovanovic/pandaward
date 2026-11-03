@@ -49,11 +49,11 @@ func (a inventoryAdapter) Run(_ context.Context, c *Context) (Result, model.Run)
 		res.Decisions["A-001"] = Decision{model.StatusInconclusive, fmt.Sprintf("%d files analyzed, %d skipped (e.g. %s)", len(inv.Files), len(inv.Skipped), strings.Join(ex, "; "))}
 	}
 	n := len(inv.Features["routes"])
-	if n == 0 {
+	if n+len(inv.Features["server_actions"]) == 0 {
 		res.Decisions["A-002"] = Decision{model.StatusInconclusive, "web stack detected but no routes recognized by the heuristic extractors; review routing manually"}
 	} else {
-		res.Decisions["A-002"] = Decision{model.StatusInconclusive, fmt.Sprintf("%d HTTP routes, %d GraphQL operations, %d gRPC methods, %d queue consumers and %d cron jobs extracted heuristically with file and line (`pandaward routes`); completeness is not proven without a contract or runtime crawl",
-			n, len(inv.Features["graphql_operations"]), len(inv.Features["grpc_methods"]), len(inv.Features["queue_consumers"]), len(inv.Features["cron_jobs"]))}
+		res.Decisions["A-002"] = Decision{model.StatusInconclusive, fmt.Sprintf("%d HTTP routes, %d GraphQL operations, %d gRPC methods, %d queue consumers, %d cron jobs and %d server actions extracted heuristically with file and line (`pandaward routes`); completeness is not proven without a contract or runtime crawl",
+			n, len(inv.Features["graphql_operations"]), len(inv.Features["grpc_methods"]), len(inv.Features["queue_consumers"]), len(inv.Features["cron_jobs"]), len(inv.Features["server_actions"]))}
 	}
 	// A-003: compare OpenAPI paths with discovered routes.
 	declared := map[string]bool{}
