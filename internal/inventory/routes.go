@@ -237,7 +237,7 @@ func extractEntries(f *File, resolve func(from, spec string) string) ([]entry, [
 
 var (
 	useServerRe    = regexp.MustCompile(`^\s*(?:["'\x60])use server["'\x60]\s*;?\s*(?://.*)?$`)
-	actionExportRe = regexp.MustCompile(`^\s*export\s+(?:async\s+)?function\s+(\w+)|^\s*export\s+(?:const|let|var)\s+(\w+)\s*=\s*async\b`)
+	actionExportRe = regexp.MustCompile(`^\s*export\s+(?:default\s+)?(?:async\s+)?function\b\s*(\w*)|^\s*export\s+(?:const|let|var)\s+(\w+)\s*=\s*async\b`)
 	actionInlineRe = regexp.MustCompile(`(?:async\s+function\s+(\w+)|(?:const|let|var)\s+(\w+)\s*=\s*async\b|async\s+function\b|=\s*async\b)`)
 )
 
@@ -250,7 +250,7 @@ func serverActions(f *File) []entry {
 	if first >= 0 && useServerRe.MatchString(f.Lines[first]) {
 		for j := first + 1; j < len(f.Lines); j++ {
 			if m := actionExportRe.FindStringSubmatch(f.Lines[j]); m != nil {
-				out = append(out, entry{kind: "server_action", method: "POST", path: firstNonEmpty(m[1:]...), line: j + 1,
+				out = append(out, entry{kind: "server_action", method: "POST", path: firstNonEmpty(m[1], m[2], "default"), line: j + 1,
 					framework: "nextjs", confidence: "module-directive"})
 			}
 		}

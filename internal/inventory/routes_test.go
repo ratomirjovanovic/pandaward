@@ -194,17 +194,21 @@ func TestNextServerActions(t *testing.T) {
 			"export const removeUser = async (id: string) => {};\nfunction helper() {}\n",
 		"app/page.tsx":  "export default function Page() {\n  async function save(data: FormData) {\n    \"use server\";\n    await db.save(data);\n  }\n  return null;\n}\n",
 		"app/client.ts": "const note = 'use server';\nexport function plain() {}\n",
+		"app/admin.ts":  "\"use server\"\nexport default async function wipeAll() {}\n",
+		"app/other.ts":  "'use server'\nexport default async function () {}\n",
 	})
 	got := entrypoints(inv)
 	want := []string{
+		"server_action:default@app/other.ts:2",
 		"server_action:removeUser@app/actions.ts:5",
 		"server_action:renameUser@app/actions.ts:4",
 		"server_action:save@app/page.tsx:3",
+		"server_action:wipeAll@app/admin.ts:2",
 	}
 	if !slices.Equal(got, want) {
 		t.Fatalf("entrypoints = %q, want %q", got, want)
 	}
-	if n := len(inv.Features["server_actions"]); n != 3 {
+	if n := len(inv.Features["server_actions"]); n != 5 {
 		t.Errorf("server_actions feature has %d entries", n)
 	}
 	if n := len(inv.Features["routes"]); n != 0 {
