@@ -20,8 +20,31 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # `pandaward feedback submit` files reports with gh, which cannot apply the
+  # issue form's labels for people without write access. Label them by the
+  # title prefix PandaWard writes, so they reach the dashboard. Labels added
+  # with GITHUB_TOKEN do not start a new run, so update runs after this job.
+  label:
+    if: github.event_name == 'issues' && github.event.action == 'opened' && (startsWith(github.event.issue.title, '[false-positive]') || startsWith(github.event.issue.title, '[false-negative]'))
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      NUMBER: ${{ github.event.issue.number }}
+      KIND: ${{ startsWith(github.event.issue.title, '[false-positive]') && 'false-positive' || 'false-negative' }}
+    steps:
+      - name: Label the report
+        run: gh issue edit "$NUMBER" --add-label "$KIND" --add-label needs-triage
+
   update:
-    if: github.event_name != 'issues' || contains(join(github.event.issue.labels.*.name, ','), 'false-')
+    needs: label
+    if: >-
+      always() && (github.event_name != 'issues' ||
+      contains(join(github.event.issue.labels.*.name, ','), 'false-') ||
+      startsWith(github.event.issue.title, '[false-positive]') ||
+      startsWith(github.event.issue.title, '[false-negative]'))
     runs-on: ubuntu-latest
     permissions:
       contents: read

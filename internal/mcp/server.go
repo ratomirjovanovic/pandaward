@@ -53,6 +53,9 @@ type rpcResp struct {
 type Server struct {
 	Root string
 	mu   sync.Mutex // one tool call at a time: the ledger has a single writer
+	// progress receives scan progress during one tool call whose request
+	// asked for progress notifications; nil otherwise.
+	progress func(engine.Progress)
 }
 
 type tool struct {
@@ -120,7 +123,7 @@ func tools() []tool {
 		}, "control_id", "title", "severity", "file", "start_line", "rationale"), localWrite},
 		{"pandaward_prepare_feedback", "Prepare a false positive or false negative report for the PandaWard project. Returns the report and a prefilled GitHub issue link for the human to review and submit; nothing is sent. By default the report holds only rule metadata and the file type; include_path and include_snippet add redacted location and code and need the user's consent.", obj(map[string]any{
 			"kind":            map[string]any{"type": "string", "enum": []string{"false-positive", "false-negative"}},
-			"finding_id":      str("false-positive: the PSEC finding ID"),
+			"finding_id":      str("false-positive: the PandaWard finding ID, e.g. PW-0007"),
 			"rule":            str("false-negative: rule or control that should have fired, e.g. D-003"),
 			"file":            str("false-negative: file with the missed issue, relative to the project root"),
 			"line":            map[string]any{"type": "integer", "minimum": 1},
@@ -128,6 +131,7 @@ func tools() []tool {
 			"include_path":    map[string]any{"type": "boolean", "description": "add the redacted file path and line (needs the user's consent)"},
 			"include_snippet": map[string]any{"type": "boolean", "description": "add up to 12 redacted lines of code (needs the user's consent)"},
 		}, "kind"), readOnly},
+		{"pandaward_pending_feedback", "List the feedback reports this project has not sent yet, one per rule: rule findings a person closed as false positives, and reviewer findings a person confirmed where no rule reported the same control in the same file (missed issues). Also returns the user's feedback mode (ask, batch, off, or empty when not chosen yet). Nothing is sent: the user sends them with `pandaward feedback submit`, which asks for confirmation.", obj(map[string]any{}), readOnly},
 		{"pandaward_request_active_test", "Explains how network-active testing is authorized. It never sends traffic and cannot approve scope.", obj(map[string]any{}), readOnly},
 	}
 }
@@ -196,6 +200,9 @@ func (s *Server) handle(ctx context.Context, line []byte, send func(any)) {
 		var p struct {
 			Name      string          `json:"name"`
 			Arguments json.RawMessage `json:"arguments"`
+			Meta      struct {
+				ProgressToken json.RawMessage `json:"progressToken"`
+			} `json:"_meta"`
 		}
 		if err := json.Unmarshal(req.Params, &p); err != nil {
 			resp.Error = &rpcErr{-32602, "invalid params"}
@@ -206,7 +213,9 @@ func (s *Server) handle(ctx context.Context, line []byte, send func(any)) {
 			telemetry.Record("mcp", p.Name, root)
 		}
 		s.mu.Lock()
+		s.progress = progressSender(p.Meta.ProgressToken, send)
 		res, err := s.call(ctx, p.Name, p.Arguments)
+		s.progress = nil
 		s.mu.Unlock()
 		if err != nil {
 			resp.Result = map[string]any{"isError": true, "content": []any{map[string]any{"type": "text", "text": err.Error()}}}
@@ -266,6 +275,7 @@ func (s *Server) call(ctx context.Context, name string, raw json.RawMessage) (an
 		return nil, err
 	}
 	defer e.Close()
+	e.OnProgress = s.progress
 	switch name {
 	case "pandaward_get_status":
 		var a struct{}
@@ -426,6 +436,17 @@ func (s *Server) call(ctx context.Context, name string, raw json.RawMessage) (an
 		}
 		return map[string]any{"assessment_id": asmt.ID, "total": total, "entrypoints": eps,
 			"note": "Heuristic extraction from source; completeness is not proven. Each entry has the defining file and line."}, nil
+	case "pandaward_pending_feedback":
+		var a struct{}
+		if err := strictArgs(raw, &a); err != nil {
+			return nil, err
+		}
+		st, gs, err := e.PendingFeedback()
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"sent": false, "mode": st.Mode, "reports": gs,
+			"note": "Nothing was sent. Reports hold the rule, counts, file types and versions only. With mode batch, show the list and run `pandaward feedback submit --yes`; the PandaWard hook asks the user to confirm. With mode ask or empty, offer it. With mode off, do not offer."}, nil
 	case "pandaward_prepare_feedback":
 		var a struct {
 			Kind           string `json:"kind"`
@@ -526,3 +547,23 @@ func (s *Server) call(ctx context.Context, name string, raw json.RawMessage) (an
 // ToolsJSON returns the MCP tool definitions as served by tools/list, for
 // schema compatibility checks.
 func ToolsJSON() ([]byte, error) { return json.Marshal(tools()) }
+
+// progressSender turns scan progress into MCP progress notifications for a
+// request that carried a progress token. MCP requires the progress value to
+// grow with every notification, and a heartbeat can repeat a percentage, so
+// repeats add a thousandth.
+func progressSender(token json.RawMessage, send func(any)) func(engine.Progress) {
+	if len(token) == 0 || string(token) == "null" {
+		return nil
+	}
+	last, n := -1, 0
+	return func(p engine.Progress) {
+		if p.Percent > last {
+			last, n = p.Percent, 0
+		} else if n < 999 {
+			n++
+		}
+		send(map[string]any{"jsonrpc": "2.0", "method": "notifications/progress", "params": map[string]any{
+			"progressToken": token, "progress": float64(last) + float64(n)/1000, "total": 100, "message": p.Message}})
+	}
+}

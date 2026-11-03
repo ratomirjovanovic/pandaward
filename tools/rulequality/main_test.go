@@ -29,6 +29,25 @@ func TestRuleFromBody(t *testing.T) {
 	}
 }
 
+func TestRuleOf(t *testing.T) {
+	table := "| | |\n|---|---|\n| Kind | false-positive |\n| Rule | semgrep.pandaward-js-sql-string |\n| Control | D-003 |\n"
+	for _, c := range []struct{ title, body, want string }{
+		{"[false-positive] x", form("Rule ID", "code.sql-concat") + table, "code.sql-concat"},
+		{"[false-positive] x", form("Rule ID", "_No response_") + table, "semgrep.pandaward-js-sql-string"},
+		{"[false-positive] semgrep.pandaward-js-sql-string", table, "semgrep.pandaward-js-sql-string"},
+		{"", "| Kind | false-negative |\n| Control | A-002 |\n", "a-002"},
+		{"", "| Rule | `Code.Webhook` |\n", "code.webhook"},
+		{"[false-negative] A-002: Next.js server actions are not listed", "free text", "a-002"},
+		{"[false-positive] ", "free text", "unknown"},
+		{"[false-positive] $(id)", "", "id"},
+		{"Something else", "free text", "unknown"},
+	} {
+		if got := RuleOf(c.title, c.body); got != c.want {
+			t.Errorf("RuleOf(%q, %q) = %q, want %q", c.title, c.body, got, c.want)
+		}
+	}
+}
+
 func TestFileTypeFromBody(t *testing.T) {
 	for body, want := range map[string]string{
 		"| | |\n|---|---|\n| Rule | x |\n| File type | .py |\n": ".py",

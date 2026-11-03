@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/ratomirjovanovic/pandaward/internal/config"
+	"github.com/ratomirjovanovic/pandaward/internal/inventory"
 	"github.com/ratomirjovanovic/pandaward/internal/model"
 )
 
@@ -42,10 +43,11 @@ func TestSemgrepNormalizeMapsControlsAndStableIDs(t *testing.T) {
 	}
 }
 
-// Bundled rules skip test code like the built-in checks; user rules do not.
-// The check uses the project-relative path, so a project that lives under a
-// directory named fixture is still scanned.
-func TestSemgrepBundledRulesSkipTestPaths(t *testing.T) {
+// Results in test code are skipped like in the built-in checks, and counted;
+// scan.semgrep_include_tests keeps them for rules other than the bundled
+// ones. The check uses the project-relative path, so a project that lives
+// under a directory named fixture is still scanned.
+func TestSemgrepSkipsTestPaths(t *testing.T) {
 	root := filepath.Join(t.TempDir(), "fixture", "app")
 	abs := func(p string) string {
 		b, _ := json.Marshal(filepath.Join(root, filepath.FromSlash(p)))
@@ -56,17 +58,27 @@ func TestSemgrepBundledRulesSkipTestPaths(t *testing.T) {
 	 {"check_id":"h.pandaward-semgrep-rules.pandaward-js-sql-string","path":` + abs("src/db.ts") + `,"start":{"line":2},"end":{"line":2},"extra":{"severity":"ERROR","metadata":{"pandaward-control":"D-003"}}},
 	 {"check_id":"local.no-raw-sql","path":` + abs("test/unit/a.test.ts") + `,"start":{"line":3},"end":{"line":3},"extra":{"severity":"WARNING","metadata":{}}}
 	],"errors":[]}`)
-	sigs, err := semgrep().(*externalTool).normalize(&Context{Root: root}, raw)
-	if err != nil {
-		t.Fatal(err)
+	run := func(include bool) ([]string, string) {
+		cfg := config.Default("fx")
+		cfg.Scan.SemgrepIncludeTests = include
+		tool := semgrep().(*externalTool)
+		sigs, err := tool.normalize(&Context{Root: root, Cfg: cfg}, raw)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var got []string
+		for _, s := range sigs {
+			got = append(got, fmt.Sprintf("%s@%d", s.RuleID, s.StartLine))
+		}
+		return got, tool.note
 	}
-	var got []string
-	for _, s := range sigs {
-		got = append(got, fmt.Sprintf("%s@%d", s.RuleID, s.StartLine))
+	got, note := run(false)
+	if strings.Join(got, ",") != "semgrep.pandaward-js-sql-string@2" || note != "; 2 result(s) in test/fixture files skipped by policy" {
+		t.Errorf("default: signals %v, note %q", got, note)
 	}
-	want := []string{"semgrep.pandaward-js-sql-string@2", "semgrep.no-raw-sql@3"}
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Errorf("signals %v, want %v", got, want)
+	got, note = run(true)
+	if strings.Join(got, ",") != "semgrep.pandaward-js-sql-string@2,semgrep.no-raw-sql@3" || note != "; 1 result(s) in test/fixture files skipped by policy" {
+		t.Errorf("semgrep_include_tests: signals %v, note %q", got, note)
 	}
 }
 
@@ -174,5 +186,28 @@ func TestOSVNoPackagesIsUnsupported(t *testing.T) {
 	_, run := tool.Run(context.Background(), &Context{Root: dir, Cfg: cfg, RunDir: dir, ToolHome: filepath.Join(dir, "home"), Timeout: time.Minute})
 	if run.ExitClass != model.ExitUnsupported || !strings.Contains(run.Detail, "no lockfile") {
 		t.Errorf("exit 128 gave %s %q, want UNSUPPORTED with the reason", run.ExitClass, run.Detail)
+	}
+}
+
+func TestGitleaksIgnoredLocalFile(t *testing.T) {
+	root := t.TempDir()
+	item := func(file string, line int) string {
+		b, _ := json.Marshal(filepath.Join(root, filepath.FromSlash(file)))
+		return fmt.Sprintf(`{"RuleID":"stripe-access-token","Description":"Found a Stripe Access Token.","StartLine":%d,"EndLine":%d,"Match":"REDACTED","File":%s}`, line, line, b)
+	}
+	raw := []byte("[" + item(".env.local", 1) + "," + item("src/config.ts", 2) + "," + item(".env.staged", 3) + "]")
+	inv := &inventory.Inventory{Tracked: map[string]bool{"src/config.ts": true}, Ignored: []string{".env.local", "secrets/"}}
+	sigs, err := gitleaks().(*externalTool).normalize(&Context{Root: root, Inv: inv}, raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sev := map[int]model.Severity{}
+	for _, s := range sigs {
+		sev[s.StartLine] = s.Severity
+	}
+	// Ignored and untracked: listed only. Tracked, or untracked but not
+	// ignored (it may be committed next): a real finding.
+	if sev[1] != model.SevInfo || sev[2] != model.SevHigh || sev[3] != model.SevHigh {
+		t.Fatalf("severities %v", sev)
 	}
 }

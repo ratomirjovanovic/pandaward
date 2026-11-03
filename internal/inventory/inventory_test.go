@@ -3,6 +3,7 @@ package inventory_test
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -243,5 +244,41 @@ func TestExcluded(t *testing.T) {
 		if got := inventory.Excluded(rel, ex); got != want {
 			t.Errorf("Excluded(%q) = %v, want %v", rel, got, want)
 		}
+	}
+}
+
+func TestIgnoredLocal(t *testing.T) {
+	git, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git not installed")
+	}
+	root := t.TempDir()
+	files := map[string]string{".gitignore": ".env.local\nsecrets/\n", ".env.local": "K=1\n", "secrets/a.json": "{}\n", "src/app.ts": "x\n", "new.ts": "y\n"}
+	for rel, content := range files {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, args := range [][]string{{"init", "-q"}, {"add", ".gitignore", "src/app.ts"}} {
+		cmd := exec.Command(git, append([]string{"-C", root}, args...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	inv, err := inventory.Walk(root, inventory.Options{MaxFileBytes: 1 << 20, MaxFiles: 1000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for p, want := range map[string]bool{".env.local": true, "secrets/a.json": true, "src/app.ts": false, "new.ts": false, ".gitignore": false} {
+		if got := inv.IgnoredLocal(p); got != want {
+			t.Errorf("IgnoredLocal(%s) = %v, want %v (ignored %v)", p, got, want, inv.Ignored)
+		}
+	}
+	if (&inventory.Inventory{}).IgnoredLocal(".env.local") {
+		t.Error("outside git nothing counts as ignored")
 	}
 }

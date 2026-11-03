@@ -8,13 +8,13 @@
     "source": "github"
   },
   "websiteUrl": "https://pandaward.dev/",
-  "version": "0.2.7",
+  "version": "0.2.9",
   "packages": [
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.7/pandaward-mcp.mcpb",
-      "version": "0.2.7",
-      "fileSha256": "58e8a8071d03e3f179c3f7bc512303ccd7552ee8ad6dd5ae17a91b8a57b8413c",
+      "identifier": "https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.9/pandaward-mcp.mcpb",
+      "version": "0.2.9",
+      "fileSha256": "b8cb2b8f1530050ec9dc2f6039bc209916567d6f2954bd18ddad22ce28385280",
       "transport": {
         "type": "stdio"
       }

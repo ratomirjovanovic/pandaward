@@ -8,7 +8,7 @@ description: Build an ordered remediation plan from open PandaWard findings, the
 1. Run `pandaward fix-plan`. Present steps in order with locations and what each fix does.
 2. For each step, read the affected code and describe the minimal change, plus a regression test suggestion and rollout risks.
 3. Ask once, as a single question, which steps to apply: all of them, the first N, or none. Do not ask again per step.
-4. Apply the chosen steps one at a time: make the change, call `pandaward_retest` yourself and report the delta in one line before the next step. A finding becomes REMEDIATED only when its collector runs again and no longer observes it. Stop and ask only when a fix needs a product decision, reaches beyond the files in the step, or the retest shows something reopened or new.
+4. Apply the chosen steps one at a time: make the change, call `pandaward_retest` yourself and report the delta in one line before the next step. A finding becomes REMEDIATED only when its collector runs again and no longer observes it. Reviewer findings (`review.*`) are not re-checked by any collector: after fixing one, include it in the triage batch as `"action": "remediated"` with a note saying what changed, so the user confirms the fix. Stop and ask only when a fix needs a product decision, reaches beyond the files in the step, or the retest shows something reopened or new.
 5. Secrets: the first step is always to revoke and rotate at the provider, which only the user can do. Say so, remove the value from code if chosen, and continue with the other steps. Removing the line from code does not undo the exposure.
 6. End with the updated counts and offer the next step (regenerating the reports, or the remaining steps), running it yourself after a yes.
 

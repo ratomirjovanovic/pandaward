@@ -224,7 +224,16 @@ func (e *Engine) RecordHypothesis(in HypothesisInput) (*model.Finding, error) {
 	fpSum := sha256.Sum256([]byte("review|" + in.ControlID + "|" + clean + "|" + strings.ToLower(in.Title)))
 	fp := hex.EncodeToString(fpSum[:])[:32]
 	if old, _ := e.St.FindingByFingerprint(e.ProjectID, fp); old != nil {
-		return old, nil
+		if old.Status != model.FindingRemediated {
+			return old, nil
+		}
+		// A reviewer found a fixed issue again: it is back.
+		old.Status, old.AssessmentID, old.LastSeen = model.FindingReopened, a.ID, store.Now()
+		old.EvidenceIDs = append(old.EvidenceIDs, evID)
+		if err := e.St.UpsertFinding(e.ProjectID, *old); err != nil {
+			return nil, err
+		}
+		return old, e.St.Event(e.ProjectID, old.ID, string(model.FindingRemediated), string(old.Status), "recorded again by "+proposer)
 	}
 	id, err := e.St.NextFindingID(e.ProjectID)
 	if err != nil {
@@ -234,7 +243,7 @@ func (e *Engine) RecordHypothesis(in HypothesisInput) (*model.Finding, error) {
 	f := model.Finding{ID: id, Fingerprint: fp, RuleID: "review." + in.ControlID, ControlID: in.ControlID, Title: in.Title, Severity: sev, Confidence: model.Hypothesis, Status: model.FindingOpen,
 		File: clean, StartLine: in.StartLine, EndLine: in.EndLine, Message: redact.Text(in.Rationale), Fix: redact.Text(in.Fix), Collector: "manual-assisted", FirstSeen: now, LastSeen: now,
 		EvidenceIDs: []string{evID}, Note: "Proposed by " + proposer + "; requires human verification before it may be treated as confirmed.", AssessmentID: a.ID,
-		Retest: "Verify manually or with a deterministic test; then mark false-positive, or fix and re-review."}
+		Retest: "Verify manually or with a deterministic test; then mark it false-positive, or fix it and mark it remediated."}
 	if err := e.St.UpsertFinding(e.ProjectID, f); err != nil {
 		return nil, err
 	}
@@ -359,6 +368,18 @@ func (e *Engine) triage(id, action, reviewer, note string, expires time.Time) (s
 		if f.Confidence == model.Hypothesis {
 			f.Confidence = model.StronglySupported
 		}
+	case "remediated":
+		// For findings no collector re-checks, mostly reviewer findings. A
+		// collector that runs again and still observes the finding reopens it.
+		if !f.Status.Active() && f.Status != model.FindingRiskAccepted {
+			return u, fmt.Errorf("%s is %s; only an open, reopened or risk-accepted finding can be marked remediated", f.ID, f.Status)
+		}
+		// Fixing it says it was real.
+		if f.Confidence == model.Hypothesis {
+			f.Confidence = model.StronglySupported
+		}
+		f.Status = model.FindingRemediated
+		f.ExpiresAt = ""
 	default:
 		return u, fmt.Errorf("unknown triage action %q", action)
 	}

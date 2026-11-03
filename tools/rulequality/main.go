@@ -118,7 +118,7 @@ func Build(issues []issue) Plan {
 		if _, dup := ruleOf[is.Number]; dup {
 			continue
 		}
-		rule := RuleFromBody(is.Body)
+		rule := RuleOf(is.Title, is.Body)
 		ruleOf[is.Number] = rule
 		kept = append(kept, is)
 		a := by[rule]
@@ -202,6 +202,9 @@ func Priority(score int) string {
 var (
 	heading  = regexp.MustCompile(`(?m)^###\s+(Rule ID|Rule or control)\s*$`)
 	fileType = regexp.MustCompile(`(?m)^\|\s*File type\s*\|\s*([^|\n]{1,40}?)\s*\|`)
+	ruleRow  = regexp.MustCompile(`(?m)^\|\s*Rule\s*\|\s*([^|\n]{1,80}?)\s*\|`)
+	ctrlRow  = regexp.MustCompile(`(?m)^\|\s*Control\s*\|\s*([^|\n]{1,80}?)\s*\|`)
+	title    = regexp.MustCompile(`^\s*\[(?:false-positive|false-negative)\]\s*([^\s:]{1,80})`)
 	safe     = regexp.MustCompile(`[^a-z0-9._-]+`)
 	dashes   = regexp.MustCompile(`-{2,}`)
 )
@@ -217,6 +220,27 @@ func label(s, trim string) string {
 		return unknown
 	}
 	return r
+}
+
+// RuleOf finds the rule a report is about: the issue form's field, else the
+// Rule or Control row of the table pandaward feedback writes (reports filed
+// without the form have only that), else the title, "[kind] <rule>" or
+// "[kind] <control>: summary".
+func RuleOf(issueTitle, body string) string {
+	if r := RuleFromBody(body); r != unknown {
+		return r
+	}
+	for _, re := range []*regexp.Regexp{ruleRow, ctrlRow} {
+		if m := re.FindStringSubmatch(body); m != nil {
+			if r := label(strings.Trim(m[1], "`"), "-."); r != unknown {
+				return r
+			}
+		}
+	}
+	if m := title.FindStringSubmatch(issueTitle); m != nil {
+		return label(strings.Trim(m[1], "`"), "-.")
+	}
+	return unknown
 }
 
 // RuleFromBody reads the rule field of an issue form. Missing or empty

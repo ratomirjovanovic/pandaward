@@ -57,7 +57,7 @@ Assessment (local, no target network traffic):
   retest          Show files changed since the last scan, re-scan, show the delta
                   (--changed re-runs only adapters for impacted controls)
   status          Resumable state, coverage, blockers and next action
-  findings        List/show findings; human triage: false-positive, accept-risk, reopen, confirm
+  findings        List/show findings; human triage: false-positive, accept-risk, reopen, confirm, remediated
   graph           Cross-domain edges (text or --format mermaid)
   routes          Discovered entrypoints (HTTP, GraphQL, gRPC, workers, cron) with file:line
   fix-plan        Ordered remediation plan from open findings
@@ -68,7 +68,9 @@ Assessment (local, no target network traffic):
   verify-bundle   <bundle.zip> recompute and check every hash in a bundle
   events          Recent audit events
   progress        What the reviewer subagents of a guided review are doing (--watch streams it)
-  feedback        Report a false positive or a missed issue to the project (prints a prefilled issue link; sends nothing)
+  feedback        Report false positives and missed issues to the project: false-positive <PW-ID>,
+                  false-negative --rule <id>, pending, submit (asks first; uses gh when signed in),
+                  mode ask|batch|off, summary
 
 Network-active (human authorization required):
   scope           init | show | validate | approve --by <name> | revoke
@@ -156,7 +158,7 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	case "progress":
 		err = cmdProgress(ctx, rest, stdin, stdout)
 	case "feedback":
-		err = cmdFeedback(rest, stdout)
+		err = cmdFeedback(rest, stdin, stdout)
 	case "scope":
 		err = cmdScope(rest, stdin, stdout)
 	case "test":
@@ -212,8 +214,19 @@ func parse(fs *flag.FlagSet, args []string) ([]string, error) {
 	}
 }
 
-func newFS(name string) (*flag.FlagSet, *string) {
+// seenFlags, when a test sets it, receives every flag set a command builds.
+var seenFlags func(*flag.FlagSet)
+
+func newFlagSet(name string) *flag.FlagSet {
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	if seenFlags != nil {
+		seenFlags(fs)
+	}
+	return fs
+}
+
+func newFS(name string) (*flag.FlagSet, *string) {
+	fs := newFlagSet(name)
 	root := fs.String("root", "", "project directory")
 	return fs, root
 }
@@ -635,7 +648,7 @@ func cmdFindings(args []string, w io.Writer) error {
 		}
 		fmt.Fprintf(w, "Recorded %s as HYPOTHESIS (%s)\n", f.ID, f.Title)
 		return nil
-	case "false-positive", "accept-risk", "reopen", "confirm":
+	case "false-positive", "accept-risk", "reopen", "confirm", "remediated":
 		if len(pos) != 1 {
 			return exitErr{2, "usage: pandaward findings " + sub + " <PW-ID> --by <name> --note <text>"}
 		}
@@ -651,6 +664,7 @@ func cmdFindings(args []string, w io.Writer) error {
 			return err
 		}
 		fmt.Fprintf(w, "%s is now %s / %s (reviewer %s)\n", f.ID, f.Status, f.Confidence, f.Reviewer)
+		feedbackHint(e, w)
 		return nil
 	case "apply":
 		if *file == "" || len(pos) != 0 {
@@ -668,9 +682,10 @@ func cmdFindings(args []string, w io.Writer) error {
 			fmt.Fprintf(w, "%s is now %s / %s (reviewer %s)\n", f.ID, f.Status, f.Confidence, f.Reviewer)
 		}
 		fmt.Fprintf(w, "Applied %d decision(s).\n", len(out))
+		feedbackHint(e, w)
 		return nil
 	}
-	return exitErr{2, "findings subcommands: list, show, add, apply, false-positive, accept-risk, reopen, confirm"}
+	return exitErr{2, "findings subcommands: list, show, add, apply, false-positive, accept-risk, reopen, confirm, remediated"}
 }
 
 func cmdRoutes(args []string, w io.Writer) error {
@@ -1331,7 +1346,7 @@ func cmdCapabilities(args []string, w io.Writer) error {
 const MaturityObserve = adapters.MaturityUnvalidated
 
 func cmdSelftest(ctx context.Context, args []string, w io.Writer) error {
-	fs := flag.NewFlagSet("selftest", flag.ContinueOnError)
+	fs := newFlagSet("selftest")
 	asJSON := fs.Bool("json", false, "JSON output")
 	if _, err := parse(fs, args); err != nil {
 		return err
@@ -1456,7 +1471,7 @@ func cmdExport(args []string, w io.Writer) error {
 }
 
 func cmdVerifyBundle(args []string, w io.Writer) error {
-	fs := flag.NewFlagSet("verify-bundle", flag.ContinueOnError)
+	fs := newFlagSet("verify-bundle")
 	pos, err := parse(fs, args)
 	if err != nil {
 		return err
@@ -1473,7 +1488,7 @@ func cmdVerifyBundle(args []string, w io.Writer) error {
 }
 
 func cmdBenchmark(ctx context.Context, args []string, w io.Writer) error {
-	fs := flag.NewFlagSet("benchmark", flag.ContinueOnError)
+	fs := newFlagSet("benchmark")
 	asJSON := fs.Bool("json", false, "JSON output")
 	strict := fs.Bool("strict", false, "exit 1 when any rule misses a vulnerable case or fires on a safe one")
 	if _, err := parse(fs, args); err != nil {
@@ -1511,7 +1526,7 @@ func cmdBenchmark(ctx context.Context, args []string, w io.Writer) error {
 	return nil
 }
 
-func cmdFeedback(args []string, w io.Writer) error {
+func cmdFeedback(args []string, stdin io.Reader, w io.Writer) error {
 	sub := ""
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
 		sub, args = args[0], args[1:]
@@ -1524,6 +1539,7 @@ func cmdFeedback(args []string, w io.Writer) error {
 	rule := fs.String("rule", "", "false-negative: rule or control that should have fired (e.g. D-003)")
 	file := fs.String("file", "", "false-negative: file with the missed issue")
 	line := fs.Int("line", 0, "false-negative: line of the missed issue")
+	yes := fs.Bool("yes", false, "submit: file the reports without asking (the Claude Code plugin asks you first)")
 	pos, err := parse(fs, args)
 	if err != nil {
 		return err
@@ -1557,6 +1573,8 @@ func cmdFeedback(args []string, w io.Writer) error {
 			return exitErr{2, "usage: pandaward feedback false-negative --rule <rule or control> [--file f --line n] --note text"}
 		}
 		r = feedback.Missed(e.Root, *rule, *file, *line, opts)
+	case "mode", "pending", "submit":
+		return feedbackFlow(e, sub, pos, *asJSON, *yes, stdin, w)
 	case "summary":
 		fsl, err := e.St.Findings(e.ProjectID)
 		if err != nil {
@@ -1577,7 +1595,7 @@ func cmdFeedback(args []string, w io.Writer) error {
 		fmt.Fprintln(w, "\nReport a rule with: pandaward feedback false-positive <PW-ID>")
 		return nil
 	default:
-		return exitErr{2, "feedback subcommands: false-positive <PW-ID>, false-negative --rule <id>, summary"}
+		return exitErr{2, "feedback subcommands: false-positive <PW-ID>, false-negative --rule <id>, summary, mode [ask|batch|off], pending, submit"}
 	}
 	if *asJSON {
 		return printJSON(w, map[string]any{"report": r, "issue_url": r.IssueURL()})

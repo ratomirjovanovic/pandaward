@@ -45,10 +45,15 @@ type Report struct {
 	PandaWard   string `json:"pandaward_version"`
 	Catalog     string `json:"catalog_version"`
 	FileType    string `json:"file_type,omitempty"`
-	Path        string `json:"path,omitempty"`
-	Line        int    `json:"line,omitempty"`
-	Snippet     string `json:"snippet,omitempty"`
-	Note        string `json:"note,omitempty"`
+	// Count is the number of findings a grouped report stands for.
+	Count int `json:"count,omitempty"`
+	// Adapters lists the adapters that ran, so a missed issue shows which
+	// scanners had a chance to catch it.
+	Adapters string `json:"adapters_run,omitempty"`
+	Path     string `json:"path,omitempty"`
+	Line     int    `json:"line,omitempty"`
+	Snippet  string `json:"snippet,omitempty"`
+	Note     string `json:"note,omitempty"`
 }
 
 // Options choose what leaves the machine beyond the rule metadata.
@@ -180,6 +185,12 @@ func (r Report) Markdown() string {
 		{"Kind", r.Kind}, {"Rule", r.RuleID}, {"Control", r.ControlID}, {"Severity", r.Severity},
 		{"Confidence", r.Confidence}, {"Adapter", r.Adapter}, {"Tool version", r.ToolVersion},
 		{"PandaWard", r.PandaWard}, {"Catalog", r.Catalog}, {"File type", r.FileType},
+	}
+	if r.Count > 0 {
+		rows = append(rows, [2]string{"Findings", fmt.Sprint(r.Count)})
+	}
+	if r.Adapters != "" {
+		rows = append(rows, [2]string{"Adapters run", r.Adapters})
 	}
 	if r.Path != "" {
 		rows = append(rows, [2]string{"Location", fmt.Sprintf("%s:%d", r.Path, r.Line)})

@@ -6,10 +6,12 @@ argument-hint: "[PW-ID | missed]"
 
 # PandaWard feedback
 
-PandaWard improves its rules from these reports. Nothing is sent automatically: PandaWard prints a prefilled GitHub issue link and the user decides whether to open and submit it.
+PandaWard improves its rules from these reports. Nothing is sent without the user's confirmation: PandaWard prepares the reports, and the user either confirms `pandaward feedback submit` or opens a prefilled GitHub issue link and submits it.
 
 - **False positive** (a finding that is not a real problem): run `pandaward feedback false-positive <PW-ID> --note "<why, in the user's words>"`. First explain to the user in one or two sentences why the finding looks wrong, based on the cited code. Then show the report and the link.
 - **False negative** (a real problem PandaWard did not report): ask which rule or control should have caught it if it is not obvious (`pandaward capabilities` lists controls), then run `pandaward feedback false-negative --rule <rule or control> --note "<what was missed>"`.
+- **Everything not sent yet**: call `pandaward_pending_feedback` (or run `pandaward feedback pending`). It groups closed false positives by rule and finds missed issues itself: reviewer findings a person confirmed where no rule reported the same control in the same file. Show the list, and after the user agrees run `pandaward feedback submit --yes`. The PandaWard hook asks the user to confirm the exact reports; with the GitHub CLI (`gh`) signed in they are filed as issues, or as a comment and a thumbs up on an open report about the same rule, and without it PandaWard prints the prefilled links. Sent findings are not offered again.
+- **How often to ask**: `pandaward feedback mode ask|batch|off` stores the user's choice for this project in its private directory. Change it only when the user asks.
 - **Which rules are noisy here**: `pandaward feedback summary` lists rules whose findings this project closed as false positives.
 - By default the report contains only rule metadata and the file type. Add `--include-path` or `--include-snippet` only if the user agrees after you tell them what would be shared; the lines are redacted, but they are still their code. Never add code from private repositories without that agreement.
 - Remind the user that the GitHub form asks them to confirm the report has no secrets or private data, and that they can upvote an existing report with a thumbs up instead of filing a duplicate.

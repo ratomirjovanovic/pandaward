@@ -37,13 +37,15 @@ type File struct {
 
 // Inventory is the result of a walk.
 type Inventory struct {
-	Root           string
-	Files          []*File
-	Assets         []model.Asset
-	Features       map[string][]string // feature -> provenance (asset IDs or paths)
-	Skipped        []string            // path: reason
-	Languages      map[string]int
-	Tracked        map[string]bool // git-tracked paths (nil when not a git repo)
+	Root      string
+	Files     []*File
+	Assets    []model.Asset
+	Features  map[string][]string // feature -> provenance (asset IDs or paths)
+	Skipped   []string            // path: reason
+	Languages map[string]int
+	Tracked   map[string]bool // git-tracked paths (nil when not a git repo)
+	// Ignored lists untracked paths git ignores; a directory ends in "/".
+	Ignored        []string
 	GitCommit      string
 	GitDirty       bool
 	SensitiveNames []string // .env-like files found (content not read)
@@ -94,7 +96,7 @@ func Walk(root string, opt Options) (*Inventory, error) {
 		return nil, err
 	}
 	inv := &Inventory{Root: absRoot, Features: map[string][]string{}, Languages: map[string]int{}}
-	inv.Tracked, inv.GitCommit, inv.GitDirty = gitInfo(absRoot)
+	inv.Tracked, inv.Ignored, inv.GitCommit, inv.GitDirty = gitInfo(absRoot)
 	err = walkFiles(context.Background(), absRoot, opt, true, func(f *File) {
 		inv.Files = append(inv.Files, f)
 		inv.Languages[f.Lang]++
@@ -341,15 +343,16 @@ func readText(p string, max int64, withLines bool) (*File, error) {
 	return f, nil
 }
 
-// gitInfo reads tracked files and HEAD using git with fixed arguments.
-// Repository hooks are disabled and no repository command is executed.
-func gitInfo(root string) (map[string]bool, string, bool) {
+// gitInfo reads tracked files, ignored untracked paths and HEAD using git
+// with fixed arguments. Repository hooks are disabled and no repository
+// command is executed.
+func gitInfo(root string) (map[string]bool, []string, string, bool) {
 	if _, err := os.Stat(filepath.Join(root, ".git")); err != nil {
-		return nil, "", false
+		return nil, nil, "", false
 	}
 	git, err := exec.LookPath("git")
 	if err != nil {
-		return nil, "", false
+		return nil, nil, "", false
 	}
 	run := func(args ...string) ([]byte, error) {
 		base := []string{"-C", root, "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "safe.directory=" + filepath.ToSlash(root)}
@@ -377,7 +380,17 @@ func gitInfo(root string) (map[string]bool, string, bool) {
 			}
 		}
 	} else {
-		return nil, "", false
+		return nil, nil, "", false
+	}
+	// --directory lists an ignored directory once instead of every file in
+	// it, so node_modules stays one line.
+	var ignored []string
+	if out, err := run("ls-files", "-z", "--others", "--ignored", "--exclude-standard", "--directory"); err == nil {
+		for _, p := range bytes.Split(out, []byte{0}) {
+			if len(p) > 0 {
+				ignored = append(ignored, string(p))
+			}
+		}
 	}
 	commit := ""
 	if out, err := run("rev-parse", "HEAD"); err == nil {
@@ -387,7 +400,22 @@ func gitInfo(root string) (map[string]bool, string, bool) {
 	if out, err := run("status", "--porcelain", "--untracked-files=no"); err == nil {
 		dirty = len(bytes.TrimSpace(out)) > 0
 	}
-	return tracked, commit, dirty
+	return tracked, ignored, commit, dirty
+}
+
+// IgnoredLocal reports whether a project-relative path is a file git
+// ignores and does not track: it exists only on this machine.
+func (inv *Inventory) IgnoredLocal(p string) bool {
+	p = filepath.ToSlash(p)
+	if inv == nil || inv.Tracked == nil || inv.Tracked[p] {
+		return false
+	}
+	for _, ig := range inv.Ignored {
+		if p == ig || (strings.HasSuffix(ig, "/") && strings.HasPrefix(p, ig)) {
+			return true
+		}
+	}
+	return false
 }
 
 // minimalEnv returns a scrubbed environment with no cloud or VCS tokens.
