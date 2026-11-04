@@ -125,13 +125,13 @@ func (a inventoryAdapter) Run(_ context.Context, c *Context) (Result, model.Run)
 	return res, finish(run, model.ExitOK, fmt.Sprintf("%d assets", len(inv.Assets)), len(res.Signals))
 }
 
-// ---- code heuristics: B-001 B-002 D-001..D-004 E-003 E-004 H-001 H-002 O-002 P-001 G-001 ----
+// ---- code heuristics: B-001 B-002 D-001..D-004 E-003 E-004 H-001 H-002 O-002 P-001 G-001, and C-004 from SQL migrations ----
 
 type codeAdapter struct{}
 
 func (codeAdapter) Name() string { return "builtin-code" }
 func (codeAdapter) Controls() []string {
-	return []string{"B-001", "B-002", "D-001", "D-002", "D-003", "D-004", "E-003", "E-004", "H-001", "H-002", "H-004", "O-002", "P-001", "G-001"}
+	return []string{"B-001", "B-002", "D-001", "D-002", "D-003", "D-004", "E-003", "E-004", "H-001", "H-002", "H-004", "O-002", "P-001", "G-001", "C-004"}
 }
 func (codeAdapter) Maturity() string { return MaturityUnvalidated }
 func (codeAdapter) Network() bool    { return false }
@@ -322,6 +322,8 @@ func (a codeAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 			Fix:       "Verify the provider signature over the raw request body with a constant-time compare before parsing or acting; reject replays by timestamp/event ID.",
 			Collector: a.Name()})
 	}
+	// C-004: RLS update policies on privileged columns.
+	res.Signals = append(res.Signals, rlsSignals(c.Inv, a.Name())...)
 	detail := "code heuristics"
 	if skippedTests > 0 {
 		detail = fmt.Sprintf("code heuristics; %d test/fixture/example files excluded by policy", skippedTests)
