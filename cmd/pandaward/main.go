@@ -58,6 +58,8 @@ Assessment (local, no target network traffic):
                   (--changed re-runs only adapters for impacted controls)
   status          Resumable state, coverage, blockers and next action
   findings        List/show findings; human triage: false-positive, accept-risk, reopen, confirm, remediated
+  attest          Manual controls: --list, <control> --show, <control> --propose --file proposal.json;
+                  a person decides with <control> --accept|--reject --by <name> [--note text]
   graph           Cross-domain edges (text or --format mermaid)
   routes          Discovered entrypoints (HTTP, Next.js pages, layouts and middleware, GraphQL, gRPC,
                   workers, cron) with file:line
@@ -140,6 +142,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		err = cmdStatus(rest, stdout)
 	case "findings":
 		err = cmdFindings(rest, stdout)
+	case "attest":
+		err = cmdAttest(rest, stdout)
 	case "graph":
 		err = cmdGraph(rest, stdout)
 	case "routes":
@@ -693,6 +697,145 @@ func cmdFindings(args []string, w io.Writer) error {
 		return nil
 	}
 	return exitErr{2, "findings subcommands: list, show, add, apply, false-positive, accept-risk, reopen, confirm, remediated"}
+}
+
+// cmdAttest lists, shows, proposes and decides attestations of manual
+// controls. Proposing decides nothing; accepting and rejecting are human
+// decisions, and the PreToolUse hook asks the user when an agent runs them.
+func cmdAttest(args []string, w io.Writer) error {
+	fs, root := newFS("attest")
+	list := fs.Bool("list", false, "list pending and accepted attestations")
+	show := fs.Bool("show", false, "show the attestations of a control with their evidence")
+	propose := fs.Bool("propose", false, "record a proposal from --file (decides nothing)")
+	accept := fs.Bool("accept", false, "accept the pending proposal of a control (human decision)")
+	reject := fs.Bool("reject", false, "reject the pending proposal of a control (human decision)")
+	by := fs.String("by", "", "name of the person who decides")
+	note := fs.String("note", "", "why the person decided so")
+	file := fs.String("file", "", "JSON proposal: {control_id, verdict, evidence: [{file, line, why}], command, proposer}")
+	asJSON := fs.Bool("json", false, "JSON output")
+	pos, err := parse(fs, args)
+	if err != nil {
+		return err
+	}
+	modes := 0
+	for _, b := range []bool{*list, *show, *propose, *accept, *reject} {
+		if b {
+			modes++
+		}
+	}
+	const use = "usage: pandaward attest --list | <control> --show | --propose --file proposal.json | <control> --accept|--reject --by <name> [--note text]"
+	if modes != 1 || (*list && len(pos) != 0) || (*propose && (len(pos) > 1 || *file == "")) || (!*list && !*propose && len(pos) != 1) {
+		return exitErr{2, use}
+	}
+	e, err := openProject(*root)
+	if err != nil {
+		return err
+	}
+	defer e.Close()
+	switch {
+	case *list:
+		as, err := e.ReportAttestations()
+		if err != nil {
+			return err
+		}
+		if *asJSON {
+			return printJSON(w, as)
+		}
+		if len(as) == 0 {
+			fmt.Fprintln(w, "No attestations. Manual controls that can be attested: "+strings.Join(engine.ManualControls(), ", ")+". A reviewer proposes one with /pandaward:review.")
+			return nil
+		}
+		for _, a := range as {
+			fmt.Fprintf(w, "%s  %-4s  %-8s  %s  %s\n", a.ControlID, a.Verdict, a.Status, a.ID, attestLine(a))
+		}
+		return nil
+	case *show:
+		cid := strings.ToUpper(pos[0])
+		var out []store.Attestation
+		as, err := e.ReportAttestations()
+		if err != nil {
+			return err
+		}
+		for _, a := range as {
+			if a.ControlID == cid {
+				out = append(out, a)
+			}
+		}
+		if *asJSON {
+			return printJSON(w, out)
+		}
+		if len(out) == 0 {
+			fmt.Fprintf(w, "No pending or accepted attestation for %s.\n", cid)
+			return nil
+		}
+		for _, a := range out {
+			fmt.Fprintf(w, "%s %s %s (%s)\n  %s\n", a.ID, a.ControlID, a.Verdict, a.Status, attestLine(a))
+			for _, c := range a.Citations {
+				fmt.Fprintf(w, "  %s:%d  %s\n      %s\n", c.File, c.Line, c.Why, c.Snippet)
+			}
+			if a.Command != "" {
+				fmt.Fprintf(w, "  shown by: %s\n", a.Command)
+			}
+		}
+		return nil
+	case *propose:
+		b, err := os.ReadFile(*file)
+		if err != nil {
+			return err
+		}
+		var in engine.AttestationInput
+		dec := json.NewDecoder(strings.NewReader(string(b)))
+		dec.DisallowUnknownFields()
+		if err := dec.Decode(&in); err != nil {
+			return fmt.Errorf("%s: %w", *file, err)
+		}
+		if len(pos) == 1 {
+			if in.ControlID != "" && !strings.EqualFold(in.ControlID, pos[0]) {
+				return exitErr{2, "the control in the file and on the command line differ"}
+			}
+			in.ControlID = pos[0]
+		}
+		in.ControlID = strings.ToUpper(in.ControlID)
+		a, err := e.ProposeAttestation(in)
+		if err != nil {
+			return err
+		}
+		fmt.Fprintf(w, "Recorded proposal %s: %s %s with %d citation(s). It decides nothing until a person runs `pandaward attest %s --accept --by <name>` or `--reject`.\n", a.ID, a.ControlID, a.Verdict, len(a.Citations), a.ControlID)
+		return nil
+	}
+	a, err := e.DecideAttestation(strings.ToUpper(pos[0]), *accept, *by, *note)
+	if err != nil {
+		return err
+	}
+	if *accept {
+		fmt.Fprintf(w, "Accepted %s: %s is %s (decided_by attested) from the next scan; valid until %s or until a cited file changes.\n", a.ID, a.ControlID, a.Verdict, dateOf(a.ExpiresAt))
+		fmt.Fprintln(w, "Run `pandaward retest` to record it in a new assessment and its reports.")
+		return nil
+	}
+	fmt.Fprintf(w, "Rejected %s for %s; the control stays undecided.\n", a.ID, a.ControlID)
+	return nil
+}
+
+// dateOf is the date part of an RFC 3339 time.
+func dateOf(ts string) string {
+	if len(ts) >= 10 {
+		return ts[:10]
+	}
+	return ts
+}
+
+func attestLine(a store.Attestation) string {
+	switch a.Status {
+	case store.AttestPending:
+		return fmt.Sprintf("proposed by %s on %s with %d citation(s); waits for a person", a.ProposedBy, dateOf(a.CreatedAt), len(a.Citations))
+	case store.AttestStale:
+		return fmt.Sprintf("accepted by %s on %s, now STALE: %s", a.DecidedBy, dateOf(a.DecidedAt), a.StaleReason)
+	}
+	l := fmt.Sprintf("accepted by %s on %s, valid until %s, %d citation(s), proposed by %s", a.DecidedBy, dateOf(a.DecidedAt), dateOf(a.ExpiresAt), len(a.Citations), a.ProposedBy)
+	if a.Note != "" {
+		l += ": " + a.Note
+	}
+	return l
 }
 
 // rescanHint names the controls a rescan would decide again after findings

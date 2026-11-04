@@ -13,6 +13,25 @@ assessment.started_at string
 assessment.status string
 assessment_manifest raw
 attestation string
+attestations[].catalog_version string
+attestations[].citations[].accepted_sha256 string
+attestations[].citations[].file string
+attestations[].citations[].line int
+attestations[].citations[].sha256 string
+attestations[].citations[].snippet string
+attestations[].citations[].why string
+attestations[].command string
+attestations[].control_id string
+attestations[].created_at string
+attestations[].decided_at string
+attestations[].decided_by string
+attestations[].expires_at string
+attestations[].id string
+attestations[].note string
+attestations[].proposed_by string
+attestations[].stale_reason string
+attestations[].status string
+attestations[].verdict string
 controls[].adapter string
 controls[].decided_by string
 controls[].domain string
@@ -201,12 +220,14 @@ pandaward_list_coverage_gaps {"annotations":{"openWorldHint":false,"readOnlyHint
 pandaward_list_entrypoints {"annotations":{"openWorldHint":false,"readOnlyHint":true},"input":{"additionalProperties":false,"properties":{"kind":{"enum":["route","graphql_operation","grpc_method","queue_consumer","cron_job"],"type":"string"},"limit":{"maximum":500,"minimum":1,"type":"integer"},"service":{"type":"string"}},"type":"object"}}
 pandaward_pending_feedback {"annotations":{"openWorldHint":false,"readOnlyHint":true},"input":{"additionalProperties":false,"properties":{},"type":"object"}}
 pandaward_prepare_feedback {"annotations":{"openWorldHint":false,"readOnlyHint":true},"input":{"additionalProperties":false,"properties":{"file":{"type":"string"},"finding_id":{"type":"string"},"include_path":{"type":"boolean"},"include_snippet":{"type":"boolean"},"kind":{"enum":["false-positive","false-negative"],"type":"string"},"line":{"minimum":1,"type":"integer"},"note":{"type":"string"},"rule":{"type":"string"}},"required":["kind"],"type":"object"}}
+pandaward_propose_attestation {"annotations":{"destructiveHint":false,"openWorldHint":false,"readOnlyHint":false},"input":{"additionalProperties":false,"properties":{"command":{"type":"string"},"control_id":{"type":"string"},"evidence":{"items":{"additionalProperties":false,"properties":{"file":{"type":"string"},"line":{"minimum":1,"type":"integer"},"why":{"type":"string"}},"required":["file","line","why"],"type":"object"},"maxItems":20,"minItems":1,"type":"array"},"proposer":{"type":"string"},"verdict":{"enum":["PASS","FAIL"],"type":"string"}},"required":["control_id","verdict","evidence"],"type":"object"}}
 pandaward_record_hypothesis {"annotations":{"destructiveHint":false,"openWorldHint":false,"readOnlyHint":false},"input":{"additionalProperties":false,"properties":{"control_id":{"type":"string"},"end_line":{"minimum":1,"type":"integer"},"file":{"type":"string"},"fix":{"type":"string"},"proposer":{"type":"string"},"rationale":{"type":"string"},"severity":{"enum":["critical","high","medium","low","info"],"type":"string"},"start_line":{"minimum":1,"type":"integer"},"title":{"type":"string"}},"required":["control_id","title","severity","file","start_line","rationale"],"type":"object"}}
 pandaward_request_active_test {"annotations":{"openWorldHint":false,"readOnlyHint":true},"input":{"additionalProperties":false,"properties":{},"type":"object"}}
 pandaward_retest {"annotations":{"destructiveHint":false,"openWorldHint":false,"readOnlyHint":false},"input":{"additionalProperties":false,"properties":{"changed_only":{"type":"boolean"}},"type":"object"}}
 pandaward_scan_passive {"annotations":{"destructiveHint":false,"openWorldHint":false,"readOnlyHint":false},"input":{"additionalProperties":false,"properties":{},"type":"object"}}
 
 ## config-yaml version 1
+attest.max_age_days int
 hooks.auto_retest bool
 inventory.exclude[] string
 inventory.max_file_bytes int64
@@ -261,7 +282,8 @@ window.start string
 zap.active_scan bool
 zap.max_duration_minutes int
 
-## ledger version 3
+## ledger version 4
 migration 1 49a96cfafaf80b086bcf887f1f6bd214b4951f26cf375fe73c7c44c0a7e75f75
 migration 2 cc5b1751a8f49e4fab63385ae8b5f9f544e68eca69c214ab11aec407d8e9ab82
 migration 3 539947f84b5dc93aee6a2811efee2d492579f564625fcc885c6c59d726022fc4
+migration 4 1135ff68990cdc6931276d180625dd9f311883cf9e6cec4bf6553e54acca4d31

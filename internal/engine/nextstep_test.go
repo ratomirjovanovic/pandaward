@@ -21,14 +21,15 @@ func ctl(t *testing.T, id string, st model.Status, reason string) model.ControlR
 
 func TestNextStep(t *testing.T) {
 	for _, tc := range []struct {
-		name    string
-		id      string
-		status  model.Status
-		reason  string
-		susp    int
-		want    string // exact Text
-		group   string // exact Group; "" means equal to want
-		noGroup bool   // zero Step expected
+		name      string
+		id        string
+		status    model.Status
+		reason    string
+		susp      int
+		decidedBy string
+		want      string // exact Text
+		group     string // exact Group; "" means equal to want
+		noGroup   bool   // zero Step expected
 	}{
 		// Decided and not applicable controls have no next step.
 		{name: "pass", id: "D-001", status: model.StatusPass, reason: "check completed", noGroup: true},
@@ -135,12 +136,19 @@ func TestNextStep(t *testing.T) {
 
 		// manual
 		{name: "manual blocked", id: "A-004", status: model.StatusBlocked, reason: "manual-assisted review required (/pandaward:review); not decided by automation",
-			want: reviewManually},
+			want:  "review it with /pandaward:review: the reviewer proposes an attestation with file:line evidence, then a person accepts or rejects it with `pandaward attest A-004 --accept --by <name>` or `--reject`",
+			group: reviewManually},
 		{name: "manual stale", id: "C-003", status: model.StatusStale, reason: "was BLOCKED",
-			want: "run `pandaward retest --changed` (a file the decision depends on changed)"},
+			want:  "review it with /pandaward:review: the reviewer proposes an attestation with file:line evidence, then a person accepts or rejects it with `pandaward attest C-003 --accept --by <name>` or `--reject`",
+			group: reviewManually},
+		{name: "manual attestation stale", id: "C-003", status: model.StatusStale, reason: "was PASS", decidedBy: model.DecidedAttested,
+			want:  "a cited file changed, the catalog changed or the attestation expired: a reviewer proposes a fresh attestation (/pandaward:review), then a person accepts it with `pandaward attest C-003 --accept --by <name>`",
+			group: reattest},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got := NextStep(ctl(t, tc.id, tc.status, tc.reason), tc.susp)
+			c := ctl(t, tc.id, tc.status, tc.reason)
+			c.DecidedBy = tc.decidedBy
+			got := NextStep(c, tc.susp)
 			if tc.noGroup {
 				if got != (Step{}) {
 					t.Fatalf("want no step, got %+v", got)

@@ -1,7 +1,9 @@
 // Package mcp is a minimal Model Context Protocol server over stdio. Tools
 // are read/query-biased; the only state-changing tools are the local passive
-// scan, report rendering and recording a HYPOTHESIS. Nothing exposed here can
-// approve scope, send network traffic to a target or confirm a finding.
+// scan, report rendering, recording a HYPOTHESIS and proposing an
+// attestation. Nothing exposed here can approve scope, send network traffic
+// to a target, confirm a finding or accept an attestation: proposals are
+// made by agents, decisions by a person.
 package mcp
 
 import (
@@ -121,6 +123,17 @@ func tools() []tool {
 			"fix":        str("proposed remediation; max 4000 chars"),
 			"proposer":   str("agent or reviewer name"),
 		}, "control_id", "title", "severity", "file", "start_line", "rationale"), localWrite},
+		{"pandaward_propose_attestation", "Propose a PASS or FAIL verdict for a manual control (" + strings.Join(engine.ManualControls(), ", ") + ") after reviewing it. Evidence is required: file and line citations inside the project, each with why it shows the verdict; PandaWard reads, hashes and redacts the cited lines itself. The proposal is stored as pending and decides nothing: only a person accepts or rejects it with `pandaward attest <control> --accept|--reject --by <name>`, outside MCP. A FAIL verdict creates no finding; record the concrete problem with pandaward_record_hypothesis.", obj(map[string]any{
+			"control_id": str("manual control, e.g. C-003"),
+			"verdict":    map[string]any{"type": "string", "enum": []string{"PASS", "FAIL"}},
+			"evidence": map[string]any{"type": "array", "minItems": 1, "maxItems": 20, "items": obj(map[string]any{
+				"file": str("path relative to the project root"),
+				"line": map[string]any{"type": "integer", "minimum": 1},
+				"why":  str("what this line shows for the verdict; max 1000 chars"),
+			}, "file", "line", "why")},
+			"command":  str("optional test or command that shows the verdict; max 500 chars"),
+			"proposer": str("agent or reviewer name"),
+		}, "control_id", "verdict", "evidence"), localWrite},
 		{"pandaward_prepare_feedback", "Prepare a false positive or false negative report for the PandaWard project. Returns the report and a prefilled GitHub issue link for the human to review and submit; nothing is sent. By default the report holds only rule metadata and the file type; include_path and include_snippet add redacted location and code and need the user's consent.", obj(map[string]any{
 			"kind":            map[string]any{"type": "string", "enum": []string{"false-positive", "false-negative"}},
 			"finding_id":      str("false-positive: the PandaWard finding ID, e.g. PW-0007"),
@@ -190,7 +203,7 @@ func (s *Server) handle(ctx context.Context, line []byte, send func(any)) {
 			"protocolVersion": pv,
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
 			"serverInfo":      map[string]any{"name": "pandaward", "version": version.Version},
-			"instructions":    "PandaWard local assessment ledger. The ledger, not the conversation, is the source of truth. " + untrustedNotice + " Network-active tests, scope approval and finding confirmation are human-only actions outside MCP.",
+			"instructions":    "PandaWard local assessment ledger. The ledger, not the conversation, is the source of truth. " + untrustedNotice + " Network-active tests, scope approval, finding confirmation and accepting attestations are human-only actions outside MCP.",
 		}
 	case "ping":
 		resp.Result = map[string]any{}
@@ -530,6 +543,20 @@ func (s *Server) call(ctx context.Context, name string, raw json.RawMessage) (an
 			return nil, err
 		}
 		return map[string]any{"written": paths}, nil
+	case "pandaward_propose_attestation":
+		var a engine.AttestationInput
+		if err := strictArgs(raw, &a); err != nil {
+			return nil, err
+		}
+		if !ctrlRe.MatchString(a.ControlID) {
+			return nil, errors.New("control_id must look like C-003")
+		}
+		at, err := e.ProposeAttestation(a)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"attestation": at, "decided": false,
+			"note": "Stored as pending; it decides nothing. Tell the user the proposal and its evidence. Only the user decides: they accept it with `pandaward attest " + at.ControlID + " --accept --by <name>` or reject it with `--reject`, and the PandaWard hook asks them to confirm when it is run for them."}, nil
 	case "pandaward_record_hypothesis":
 		var a engine.HypothesisInput
 		if err := strictArgs(raw, &a); err != nil {

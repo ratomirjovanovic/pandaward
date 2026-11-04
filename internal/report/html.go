@@ -14,6 +14,9 @@ var funcs = template.FuncMap{
 	"join":      strings.Join,
 	"ctrl":      ctrlTitle,
 	"breakdown": Breakdown,
+	"astate":    AttestState,
+	"aby":       AttestReviewer,
+	"adate":     AttestDate,
 	"sum": func(m map[string]int) int {
 		n := 0
 		for _, v := range m {
@@ -103,6 +106,13 @@ code{font:12.5px ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:an
 <div class="wrap"><table><tr><th>Controls</th><th>Next step</th><th>Which</th></tr>
 {{range .R.PathTo100}}<tr><td>{{.Count}}</td><td>{{.Step}}</td><td>{{join .Controls ", "}}</td></tr>{{end}}
 </table></div>{{else}}<p>Every applicable control is decided.</p>{{end}}
+{{if .R.Attestations}}
+<h2>Attested controls</h2>
+<p class="mut">Manual controls are decided only when a person accepts a reviewer's proposal with <code>pandaward attest</code>. A pending proposal decides nothing; a stale attestation no longer decides its control.</p>
+<div class="wrap"><table><tr><th>Control</th><th>Verdict</th><th>State</th><th>Reviewer</th><th>Date</th><th>Evidence</th></tr>
+{{range .R.Attestations}}<tr><td><b>{{.ControlID}}</b><br><span class="mut">{{ctrl .ControlID}}</span></td><td><span class="b {{.Verdict}}">{{.Verdict}}</span></td><td>{{astate .}}</td><td>{{aby .}}</td><td>{{adate .}}</td><td>{{range .Citations}}<code>{{.File}}:{{.Line}}</code> {{.Why}}<br>{{end}}{{if .Command}}shown by: <code>{{.Command}}</code>{{end}}</td></tr>{{end}}
+</table></div>
+{{end}}
 {{with .R.Delta}}
 <h2>Changes since {{.From}}</h2>
 <p>New {{len .New}}, reopened {{len .Reopened}}, remediated {{len .Remediated}}, moved {{len .Moved}}, stale {{len .Stale}}, waived {{len .Waived}}, unchanged {{.Unchanged}}.</p>
