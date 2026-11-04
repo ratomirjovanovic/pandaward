@@ -14,7 +14,7 @@ import (
 )
 
 // CorpusVersion changes whenever cases are added, removed or edited.
-const CorpusVersion = "2026.10.4"
+const CorpusVersion = "2026.11.1"
 
 // Case is one repository that a rule must fire on (Vulnerable) or must not
 // fire on (Safe).
@@ -114,6 +114,19 @@ func Corpus() []Case {
 	add(code("code.cookie-flags-off", "a.js", "res.cookie('sid', v, { httpOnly: false });\n", "res.cookie('sid', v, { httpOnly: true, secure: true });\n"))
 	add(code("code.html-sink", "a.js", "el.innerHTML = msg;\n", "el.innerHTML = DOMPurify.sanitize(msg);\n"))
 	add(code("code.secret-logged", "a.js", "console.log(\"login\", password);\n", "console.log(\"invalid password\");\n"))
+	// Known false positives that structural checks rule out.
+	safe := func(rule, file, src, note string) {
+		cs = append(cs, Case{Rule: rule, Adapter: "builtin-code", Files: map[string]string{"src/" + file: src}, Note: note})
+	}
+	cs = append(cs, Case{Rule: "code.js-shell", Adapter: "builtin-code", Vulnerable: true, Files: map[string]string{"src/a.ts": "import { exec } from \"node:child_process\";\nexec(`git log ${ref}`);\n"},
+		Note: "child_process exec with an interpolated argument"})
+	safe("code.js-shell", "a.ts", "async function exec(box, cmd, args) { return box.run(cmd, args); }\nawait exec(box, \"git\", [\"status\"]);\n", "the file defines its own exec and never uses child_process")
+	safe("code.html-sink", "a.ts", "const res = await post({ body: 'not valid json{{{' });\n", "template tokens in a TypeScript string")
+	safe("code.secret-logged", "a.js", "console.log(`secret saved to ${file}`);\n", "the word is message prose, the value is a path")
+	safe("code.sql-concat", "a.ts", "await sql(`select count(*) from t where e like '%x.test'`);\n", "a quote inside a template literal")
+	safe("code.weak-hash-password", "a.ts", "const ok = [\"sha1\", \"sha256\"].some(a => verify(sig, sign(id, password, a)));\n", "algorithm names without a hashing call")
+	cs = append(cs, Case{Rule: "code.llm-output-exec", Adapter: "builtin-code", Files: map[string]string{"src/agent.ts": "import OpenAI from \"openai\";\nconst o = (await exec(box, \"git\", [\"ls\", p])).output;\n"},
+		Note: "the keyword is read from the result, not passed to the sink"})
 	// Comments and test files are out of scope for code rules.
 	cs = append(cs, Case{Rule: "code.js-eval", Adapter: "builtin-code", Files: map[string]string{"src/a.js": "// eval(userInput);\n", "test/a.test.js": "eval(userInput);\n"},
 		Note: "commented out and in a test file"})

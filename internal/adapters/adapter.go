@@ -97,17 +97,29 @@ func finish(r model.Run, class, detail string, n int) model.Run {
 
 // lineRule is a single-line regular expression check.
 type lineRule struct {
-	ID         string
-	Control    string
-	Title      string
-	Langs      map[string]bool // nil = all code languages
-	Re         *regexp.Regexp
-	Not        *regexp.Regexp // skip the line if it matches
-	Severity   model.Severity
-	Confidence model.Confidence
-	CWE        string
-	Message    string
-	Fix        string
+	ID      string
+	Control string
+	Title   string
+	Langs   map[string]bool // nil = all code languages
+	Re      *regexp.Regexp
+	Not     *regexp.Regexp // skip the line if it matches
+	// Prep, when set, rewrites the line before Re is applied (Not still
+	// sees the original line).
+	Prep func(line string) string
+	// Post, when set, runs after Re and Not with the line and the whole file
+	// text; returning false drops the match.
+	Post func(line, text string) bool
+	// SkipFile, when set, drops the rule for a whole file when it returns
+	// true for the file's text.
+	SkipFile func(text string) bool
+	// SupersededBy names a rule that, when it fired on the same line, makes
+	// this one redundant. It must come earlier in the rule table.
+	SupersededBy string
+	Severity     model.Severity
+	Confidence   model.Confidence
+	CWE          string
+	Message      string
+	Fix          string
 }
 
 func langs(ls ...string) map[string]bool {
