@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -429,7 +430,9 @@ func lastSegment(s string) string {
 }
 
 func osvScanner() Adapter {
-	return &externalTool{
+	// normalize records a note on t, so t exists before its fields.
+	t := &externalTool{}
+	*t = externalTool{
 		name: "osv-scanner", binary: "osv-scanner", controls: []string{"I-003"}, network: true, sends: "sends the package names and versions from your lockfiles to api.osv.dev to look up advisories", verArgs: []string{"--version"},
 		okExit:  map[int]bool{0: true, 1: true},
 		noInput: map[int]string{128: "osv-scanner found no lockfile or SBOM it can read (exit 128); commit a lockfile to check dependencies against advisories"},
@@ -467,8 +470,31 @@ func osvScanner() Adapter {
 				return nil, err
 			}
 			var out []model.Signal
+			var dropped, kept []string
+			nDropped, nKept := 0, 0
+			overrides := map[string][]override{}
 			for _, r := range doc.Results {
+				// Overrides live in the workspace root, next to the lockfile.
+				lock := relPath(c.Root, r.Source.Path)
+				lockDir := path.Dir(lock)
+				ovs, ok := overrides[lockDir]
+				if !ok && lock != "(outside-root)" && lock != "" {
+					ovs = readOverrides(c.Root, lockDir)
+					overrides[lockDir] = ovs
+				}
 				for _, p := range r.Packages {
+					if len(p.Vulnerabilities) > 0 {
+						drop, keep := overrideVerdict(c.Root, lockDir, p.Package.Name, p.Package.Version, ovs)
+						if drop != nil {
+							nDropped += len(p.Vulnerabilities)
+							dropped = appendOnce(dropped, fmt.Sprintf("%s %s in %s", drop.key, drop.value, drop.file))
+							continue
+						}
+						if keep != nil {
+							nKept += len(p.Vulnerabilities)
+							kept = appendOnce(kept, fmt.Sprintf("%s %s (override %s %s in %s)", p.Package.Name, p.Package.Version, keep.key, keep.value, keep.file))
+						}
+					}
 					for _, v := range p.Vulnerabilities {
 						sev := sevFrom(v.DatabaseSpecific.Severity)
 						out = append(out, model.Signal{RuleID: "osv." + v.ID, ControlID: "I-003", Title: fmt.Sprintf("%s %s: %s", p.Package.Name, p.Package.Version, v.ID), Severity: sev, Confidence: model.StronglySupported, CWE: "CWE-1395",
@@ -477,9 +503,26 @@ func osvScanner() Adapter {
 					}
 				}
 			}
+			t.note = ""
+			if nDropped > 0 {
+				t.note = fmt.Sprintf("; %d result(s) dropped for packages an override replaces with a local package (%s)", nDropped, redact.Line(strings.Join(dropped, "; ")))
+			}
+			if nKept > 0 {
+				t.note += fmt.Sprintf("; %d result(s) kept although an override names the package, because the lockfile lists a registry version or another local package, or the override is an npm: alias: %s", nKept, redact.Line(strings.Join(kept, "; ")))
+			}
 			return out, nil
 		},
 	}
+	return t
+}
+
+func appendOnce(ss []string, s string) []string {
+	for _, x := range ss {
+		if x == s {
+			return ss
+		}
+	}
+	return append(ss, s)
 }
 
 func trivy() Adapter {
