@@ -13,6 +13,7 @@ Look for:
 - RAG retrieval without per-tenant or per-document permission filtering.
 - Missing limits on loops, tool calls or tokens; parallel tool calls bypassing approvals.
 - MCP server configs: unpinned packages, inline credentials, servers with broad filesystem or network access (P-002).
+- Agent instruction files and MCP tool descriptions: invisible Unicode characters, and tool descriptions that tell the model to ignore instructions, hide actions from the user, read credential files or take priority over other tools (P-004).
 
 ## Hard rules
 
