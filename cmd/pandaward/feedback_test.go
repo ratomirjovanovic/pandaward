@@ -44,3 +44,42 @@ func TestTriageFeedbackHint(t *testing.T) {
 		t.Fatalf("hint shown with feedback off:\n%s", out)
 	}
 }
+
+// Dismissing every signal of a control names the control a rescan decides
+// again; triage itself changes no control.
+func TestTriageRescanHint(t *testing.T) {
+	root := testfixture.VulnerableRepo(t)
+	e, _, err := engine.Init(root, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := e.Scan(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fs, _ := e.St.Findings(e.ProjectID)
+	e.Close()
+	var ids []string
+	for _, f := range fs {
+		if f.ControlID == "A-003" {
+			ids = append(ids, f.ID)
+		}
+	}
+	if len(ids) < 2 {
+		t.Fatalf("fixture has %d A-003 findings, need 2 or more", len(ids))
+	}
+	cli := func(args ...string) string {
+		var out, errb bytes.Buffer
+		if code := run(context.Background(), append(args, "--root", root), strings.NewReader(""), &out, &errb); code != 0 {
+			t.Fatalf("%v: exit %d: %s", args, code, errb.String())
+		}
+		return out.String()
+	}
+	hint := "Every signal of A-003 in " + res.AssessmentID + " is now dismissed as false positive"
+	for i, id := range ids {
+		out := cli("findings", "false-positive", id, "--by", "tester", "--note", "declared in the gateway")
+		if last := i == len(ids)-1; strings.Contains(out, hint) != last {
+			t.Fatalf("after %d of %d dismissals, hint shown=%v:\n%s", i+1, len(ids), !last, out)
+		}
+	}
+}

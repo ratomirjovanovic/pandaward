@@ -447,9 +447,10 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 	}
 	res := &ScanResult{AssessmentID: asmt.ID, Controls: map[string]int{}}
 	var allSignals []model.Signal
-	ranOK := map[string]bool{}   // adapter -> completed OK
-	carried := map[string]bool{} // adapter -> decisions carried over
-	var foreign []model.Signal   // signals for controls owned by another adapter
+	ranOK := map[string]bool{}          // adapter -> completed OK
+	carried := map[string]bool{}        // adapter -> decisions carried over
+	var foreign []int                   // allSignals indexes of signals for controls owned by another adapter
+	decided := map[string]signalRange{} // control -> signals decide() used for it
 	ctrlEvidence := map[string][]string{}
 	var todo []adapters.Adapter
 	for _, ad := range adapters.Registry() {
@@ -509,6 +510,7 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 			for _, cid := range ad.Controls() {
 				if r := results[cid]; r != nil && r.Status != model.StatusNotApplicable {
 					r.Status, r.Reason = st, run.Detail
+					delete(decided, cid)
 				}
 			}
 			if run.ExitClass == model.ExitError || run.ExitClass == model.ExitTimeout {
@@ -517,7 +519,10 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 			continue
 		}
 		ranOK[ad.Name()] = true
-		foreign = append(foreign, routeForeign(ad, out.Signals, results)...)
+		base := len(allSignals)
+		for _, k := range routeForeign(ad, out.Signals, results) {
+			foreign = append(foreign, base+k)
+		}
 		allSignals = append(allSignals, out.Signals...)
 		for _, cid := range ad.Controls() {
 			r := results[cid]
@@ -526,18 +531,19 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 			}
 			if d, ok := out.Decisions[cid]; ok {
 				r.Status, r.Reason = d.Status, d.Reason
+				delete(decided, cid)
 				continue
 			}
 			r.Status, r.Reason = decide(out.Signals, cid, run.Detail)
+			decided[cid] = signalRange{from: base, to: len(allSignals), detail: run.Detail}
 		}
 		for cid, d := range out.Decisions {
 			if r := results[cid]; r != nil && r.Status != model.StatusNotApplicable {
 				r.Status, r.Reason = d.Status, d.Reason
+				delete(decided, cid)
 			}
 		}
 	}
-
-	raise(results, foreign)
 
 	// Persist findings with evidence.
 	stopFindings := m.findings()
@@ -558,6 +564,11 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 			return f != nil && f.SHA256 != "" && pastHashes[old][oldPath] == f.SHA256
 		},
 	})
+	// Signals a person dismissed as false positive no longer count. Controls
+	// are decided again here, now that every signal has its finding.
+	gone := dismissedSignals(allSignals, ids, ledger)
+	redecide(results, allSignals, decided, gone)
+	raise(results, allSignals, foreign, gone)
 	for i, s := range allSignals {
 		fp := ids.FP[i]
 		if seen[fp] {
@@ -693,15 +704,16 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 	return res, nil
 }
 
-// routeForeign returns the signals an adapter reports for controls it does
-// not own. A signal whose control is not applicable or cannot be decided is
-// moved to the adapter's first control so it still counts somewhere.
-func routeForeign(ad adapters.Adapter, sigs []model.Signal, results map[string]*model.ControlResult) []model.Signal {
+// routeForeign returns the indexes of the signals an adapter reports for
+// controls it does not own. A signal whose control is not applicable or
+// cannot be decided is moved to the adapter's first control so it still
+// counts somewhere.
+func routeForeign(ad adapters.Adapter, sigs []model.Signal, results map[string]*model.ControlResult) []int {
 	own := map[string]bool{}
 	for _, cid := range ad.Controls() {
 		own[cid] = true
 	}
-	var out []model.Signal
+	var out []int
 	for i := range sigs {
 		s := &sigs[i]
 		if own[s.ControlID] {
@@ -714,28 +726,46 @@ func routeForeign(ad adapters.Adapter, sigs []model.Signal, results map[string]*
 			}
 			continue
 		}
-		out = append(out, *s)
+		out = append(out, i)
 	}
 	return out
 }
 
-// raise applies foreign signals after all adapters ran. They can move a
-// control from PASS to SUSPECTED or FAIL, or from SUSPECTED to FAIL, but never
-// lower a status, so adapter order cannot hide a FAIL.
-func raise(results map[string]*model.ControlResult, foreign []model.Signal) {
+// raise applies foreign signals (indexes into sigs) after all adapters ran.
+// They can move a control from PASS to SUSPECTED or FAIL, or from SUSPECTED
+// to FAIL, but never lower a status, so adapter order cannot hide a FAIL.
+// Signals in gone were dismissed as false positives and do not count; the
+// reason still says they were there.
+func raise(results map[string]*model.ControlResult, sigs []model.Signal, foreign []int, gone map[int]model.Finding) {
 	rank := map[model.Status]int{model.StatusPass: 1, model.StatusInconclusive: 1, model.StatusSuspected: 2, model.StatusFail: 3}
 	by := map[string][]model.Signal{}
-	for _, s := range foreign {
-		by[s.ControlID] = append(by[s.ControlID], s)
+	dismissed := map[string][]model.Finding{}
+	var order []string
+	for _, i := range foreign {
+		cid := sigs[i].ControlID
+		if _, ok := by[cid]; !ok {
+			order = append(order, cid)
+			by[cid] = nil
+		}
+		if f, ok := gone[i]; ok {
+			dismissed[cid] = append(dismissed[cid], f)
+			continue
+		}
+		by[cid] = append(by[cid], sigs[i])
 	}
-	for cid, sigs := range by {
+	for _, cid := range order {
 		r := results[cid]
 		if r == nil || rank[r.Status] == 0 {
 			continue
 		}
-		st, why := decide(sigs, cid, "")
-		if rank[st] > rank[r.Status] {
-			r.Status, r.Reason = st, why+" from "+sigs[0].Collector+" (was "+string(r.Status)+": "+r.Reason+")"
+		if sigs := by[cid]; len(sigs) > 0 {
+			st, why := decide(sigs, cid, "")
+			if rank[st] > rank[r.Status] {
+				r.Status, r.Reason = st, why+" from "+sigs[0].Collector+" (was "+string(r.Status)+": "+r.Reason+")"
+			}
+		}
+		if fs := dismissed[cid]; len(fs) > 0 {
+			r.Reason += "; " + dismissedNote(fs) + " from another collector"
 		}
 	}
 }
@@ -778,6 +808,98 @@ func decide(sigs []model.Signal, cid, detail string) (model.Status, string) {
 		return model.StatusPass, fmt.Sprintf("check completed; %d item(s) listed for review", info)
 	}
 	return model.StatusPass, "check completed with no signal (" + detail + "); PASS applies to this check only"
+}
+
+// signalRange is the part of a scan's signals one adapter reported, kept
+// for the controls decide() decided from them.
+type signalRange struct {
+	from, to int
+	detail   string
+}
+
+// dismissedSignals returns the signals, by index, whose finding a person
+// marked FALSE_POSITIVE, each with that finding. The match uses the identity
+// the scan already uses (assignFingerprints): same rule, file, key and code
+// snippet, or the same finding carried to a moved file. A signal without a
+// snippet is never dismissed: its fingerprint does not change when the code
+// does, so the review would not be bound to the code that was reviewed.
+func dismissedSignals(sigs []model.Signal, ids assignment, ledger []model.Finding) map[int]model.Finding {
+	byFP := map[string]model.Finding{}
+	for _, f := range ledger {
+		byFP[f.Fingerprint] = f
+	}
+	gone := map[int]model.Finding{}
+	for i, s := range sigs {
+		if normalizeSnippet(s.Snippet) == "" {
+			continue
+		}
+		f, ok := ids.Moved[i]
+		if !ok {
+			f, ok = byFP[ids.FP[i]]
+		}
+		if ok && dismissedByPerson(f) && f.RuleID == s.RuleID && f.ControlID == s.ControlID {
+			gone[i] = f
+		}
+	}
+	return gone
+}
+
+// dismissedByPerson reports whether a person closed f as a false positive.
+// Triage requires a reviewer name, no MCP tool can triage, and the plugin
+// hooks make every triage command an agent runs wait for the human
+// operator's confirmation.
+func dismissedByPerson(f model.Finding) bool {
+	return f.Status == model.FindingFalsePositive && strings.TrimSpace(f.Reviewer) != ""
+}
+
+// redecide decides again the controls decide() decided during the scan,
+// without the signals in gone. Controls an adapter decided explicitly, or
+// whose adapter did not complete, are not in decided and keep their status.
+func redecide(results map[string]*model.ControlResult, sigs []model.Signal, decided map[string]signalRange, gone map[int]model.Finding) {
+	if len(gone) == 0 {
+		return
+	}
+	for cid, rg := range decided {
+		r := results[cid]
+		if r == nil {
+			continue
+		}
+		var kept []model.Signal
+		var dismissed []model.Finding
+		for i := rg.from; i < rg.to; i++ {
+			if sigs[i].ControlID != cid {
+				continue
+			}
+			if f, ok := gone[i]; ok {
+				dismissed = append(dismissed, f)
+			} else {
+				kept = append(kept, sigs[i])
+			}
+		}
+		if len(dismissed) == 0 {
+			continue
+		}
+		if len(kept) == 0 {
+			r.Status, r.Reason = model.StatusPass, "check completed; "+dismissedNote(dismissed)+"; PASS applies to this check only"
+			continue
+		}
+		r.Status, r.Reason = decide(kept, cid, rg.detail)
+		r.Reason += "; " + dismissedNote(dismissed)
+	}
+}
+
+// dismissedNote says how many signals were dismissed and by whom.
+func dismissedNote(fs []model.Finding) string {
+	seen := map[string]bool{}
+	var who []string
+	for _, f := range fs {
+		if n := strings.TrimSpace(f.Reviewer); !seen[n] {
+			seen[n] = true
+			who = append(who, n)
+		}
+	}
+	sort.Strings(who)
+	return fmt.Sprintf("%d signal(s) dismissed as false positive by %s", len(fs), strings.Join(who, ", "))
 }
 
 func plus(n int, s string) string {

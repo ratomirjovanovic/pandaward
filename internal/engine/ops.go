@@ -388,6 +388,82 @@ func (e *Engine) triage(id, action, reviewer, note string, expires time.Time) (s
 	return store.TriageUpdate{Finding: *f, OldStatus: string(old), Reason: action + " by " + reviewer}, nil
 }
 
+// RescanHint returns one line naming the controls of the given findings
+// whose every signal in the latest assessment is now dismissed as a false
+// positive, so that a rescan decides them again, or "" when there are none.
+// Triage never changes a control status itself; only a scan does.
+func (e *Engine) RescanHint(changed []model.Finding) (string, error) {
+	want := map[string]bool{}
+	for _, f := range changed {
+		if dismissedByPerson(f) {
+			want[f.ControlID] = true
+		}
+	}
+	if len(want) == 0 {
+		return "", nil
+	}
+	a, err := e.St.LatestAssessment(e.ProjectID)
+	if err != nil || a == nil {
+		return "", err
+	}
+	obs, tracked, err := e.St.Observations(a.ID)
+	if err != nil || !tracked {
+		return "", err
+	}
+	cs, err := e.St.Controls(a.ID)
+	if err != nil {
+		return "", err
+	}
+	fs, err := e.St.Findings(e.ProjectID)
+	if err != nil {
+		return "", err
+	}
+	byID := map[string]model.Finding{}
+	for _, f := range fs {
+		byID[f.ID] = f
+	}
+	dismissed, counts := map[string]int{}, map[string]int{}
+	for _, o := range obs {
+		f, ok := byID[o.FindingID]
+		if !ok || !want[f.ControlID] || f.Severity == model.SevInfo {
+			continue
+		}
+		counts[f.ControlID]++
+		if dismissedByPerson(f) && e.hasSnippet(f) {
+			dismissed[f.ControlID]++
+		}
+	}
+	var ids []string
+	for _, c := range cs {
+		if want[c.ID] && counts[c.ID] > 0 && dismissed[c.ID] == counts[c.ID] && (c.Status == model.StatusSuspected || c.Status == model.StatusFail) {
+			ids = append(ids, c.ID)
+		}
+	}
+	if len(ids) == 0 {
+		return "", nil
+	}
+	sort.Strings(ids)
+	return fmt.Sprintf("Every signal of %s in %s is now dismissed as false positive; the status changes only when a scan decides it again: pandaward retest", strings.Join(ids, ", "), a.ID), nil
+}
+
+// hasSnippet reports whether the latest evidence of f holds a code snippet,
+// which a scan needs before it may dismiss the signal.
+func (e *Engine) hasSnippet(f model.Finding) bool {
+	if len(f.EvidenceIDs) == 0 {
+		return false
+	}
+	row, err := e.St.Evidence(f.EvidenceIDs[len(f.EvidenceIDs)-1])
+	if err != nil || row == nil {
+		return false
+	}
+	b, err := evidence.Read(e.Private(), row)
+	if err != nil {
+		return false
+	}
+	var r evidence.Record
+	return json.Unmarshal(b, &r) == nil && normalizeSnippet(r.Snippet) != ""
+}
+
 // ChangedSinceLast compares the working tree to the last assessment hashes.
 func (e *Engine) ChangedSinceLast(inv *inventory.Inventory) ([]string, error) {
 	a, err := e.St.LatestAssessment(e.ProjectID)
