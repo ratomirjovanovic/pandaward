@@ -1,7 +1,7 @@
 ---
 name: test
-description: Run a network-active PandaWard profile against human-approved targets (production-observe for header and cookie review, staging-active for authorization checks with test identities and a ZAP spider and passive scan). Requires a scope manifest approved by the user in their own terminal.
-argument-hint: "production-observe | staging-active"
+description: Run a PandaWard runtime profile - production-observe for header and cookie review of approved origins, staging-active for permission checks with test identities and ZAP against approved staging or local targets, local-runtime for mobile test build storage on an emulator or simulator. Network profiles require a scope manifest approved by the user in their own terminal.
+argument-hint: "production-observe | staging-active | local-runtime"
 disable-model-invocation: true
 ---
 
@@ -9,8 +9,17 @@ disable-model-invocation: true
 
 This is the only PandaWard action that sends traffic. Follow every step.
 
+Pick the profile from what the user wants tested; `pandaward test --help` prints the same overview with the current controls:
+
+- `production-observe`: one GET per approved origin, then headers, CSP and cookie flags. Decides H-003. Needs an approved scope manifest; any environment. A local target only with `allow_private_addresses: true`.
+- `staging-active`: permission checks with test identities and ZAP. Decides C-001 (object checks), C-002 (function checks), B-004 (an identity marked `revoked`), M-001 (ZAP spider and passive scan) and D-005 (ZAP active scan, only with `zap.active_scan: true`). B-003, F-002, G-002, P-003 and Q-002 are not automated and stay UNSUPPORTED. Needs an approved scope manifest with identities and `authorization_checks`, the credentials in the user's environment and ZAP for M-001 and D-005. Refuses `environment: production`; accepts `staging` and `local`, so this is the profile for permission checks against an app on the user's machine (with `allow_private_addresses: true`).
+- `local-runtime`: mobile apps only. Decides K-003 (Android emulator) and L-002 (iOS simulator, macOS). Needs `runtime.android_package` or `runtime.ios_bundle_id` in the config and a running emulator or booted simulator; no scope manifest and no network traffic. It is not for web apps on localhost.
+- `manual-assisted` is not a runtime profile in this release; use /pandaward:review.
+
+The profile names stay as they are because manifests and scripts use them.
+
 1. Run `pandaward scope validate`. If `.pandaward/scope.yaml` is missing, run `pandaward scope init` and ask the user to fill it in themselves (owner, written permission reference, purpose, targets, limits, `acknowledged: true`). Never fill in authorization fields for the user and never add targets they did not name.
-2. Approval must come from the user: they run `pandaward scope approve --by "<their name>"` in their own interactive terminal. It refuses to run from an agent.
+2. Approval must come from the user: they run `pandaward scope approve --by "<their name>"` in their own interactive terminal. It refuses to run from an agent. The prompt shows the exact line to type, `APPROVE` and an 8-character code from the manifest hash (for example `APPROVE ab26dcf2`); a bare `APPROVE` is rejected with a message saying what was expected. Never type it for them.
 3. After approval, confirm the exact targets and profile with the user, then run it:
    - `pandaward test --profile production-observe` sends one GET per listed origin, at most `max_requests_total`, and never follows redirects.
    - `pandaward test --profile staging-active` (only for `environment: staging` or `local`) first runs the manifest's `authorization_checks`: each read-only request is sent as every listed identity and without credentials, and only the allowed identities may get a 2xx (C-001 object level, C-002 function level, B-004 for identities marked `revoked`). The credentials come from the environment variables named in `value_env`; the user sets them in their own terminal. Never ask for a credential, never put one in the manifest, a command line or a file, and never read those variables yourself. If one is missing, the run stops before any request and says which variable to set. It then runs the user's installed ZAP: spider and passive scan for M-001, and the active scan for D-005 only when the manifest sets `zap.active_scan: true`. Every ZAP request goes through the PandaWard scope guard, which refuses anything outside the manifest's origins, paths and methods, and stops at the request budget or after repeated 429/5xx answers. If ZAP is missing, `pandaward doctor` says so; offer to install it (it needs Java 17+) and do not substitute another tool.
