@@ -60,7 +60,7 @@ func credentials(m *scope.Manifest) (map[string]authzCred, error) {
 
 // runAuthz sends every authorization check as each identity and without
 // credentials and decides C-001, C-002 and B-004 from the differences.
-func (e *Engine) runAuthz(ctx context.Context, a *store.Assessment, m *scope.Manifest, ap *store.Approval, g *scope.Guard, creds map[string]authzCred, res *StagingResult, progress func(string)) error {
+func (e *Engine) runAuthz(ctx context.Context, a *store.Assessment, m *scope.Manifest, ap *store.Approval, rr runtimeRun, g *scope.Guard, creds map[string]authzCred, res *StagingResult, progress func(string)) error {
 	client := g.Client()
 	type outcome struct{ fail, suspect, unclear, passed int }
 	out := map[string]*outcome{}
@@ -217,7 +217,7 @@ func (e *Engine) runAuthz(ctx context.Context, a *store.Assessment, m *scope.Man
 			}
 		}
 		res.Controls[cid] = string(st)
-		if err := e.St.SetControlStatus(e.ProjectID, a.ID, cid, st, reason); err != nil {
+		if err := e.setRuntime(a, rr, cid, st, reason); err != nil {
 			return err
 		}
 	}

@@ -70,12 +70,13 @@ func (e *Engine) LocalRuntime(ctx context.Context, progress func(string)) (*Loca
 		return nil, errors.New("run `pandaward scan` first; runtime results attach to the latest assessment")
 	}
 	res := &LocalRuntimeResult{AssessmentID: a.ID, Controls: map[string]string{}}
+	rr := e.newRuntimeRun("local-runtime", nil, nil)
 	set := func(cid string, st model.Status, reason string) error {
 		res.Controls[cid] = string(st)
 		if st == model.StatusBlocked {
 			res.Notes = append(res.Notes, cid+": "+reason)
 		}
-		return e.St.SetControlStatus(e.ProjectID, a.ID, cid, st, reason)
+		return e.setRuntime(a, rr, cid, st, reason)
 	}
 	_ = e.St.Event(e.ProjectID, a.ID, "", "LOCAL_RUNTIME_STARTED", "local-runtime on emulator/simulator")
 	for _, p := range []struct {

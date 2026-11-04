@@ -67,23 +67,24 @@ func (e *Engine) StagingActive(ctx context.Context, progress func(string)) (*Sta
 			return nil, err
 		}
 	}
+	rr := e.newRuntimeRun("staging-active", m, ap)
 	g := scope.NewGuard(m, guardRoots)
 	res := &StagingResult{AssessmentID: a.ID, Budget: m.Limits.MaxRequestsTotal, Controls: map[string]string{}, ActiveScan: m.ZAP.ActiveScan}
 	_ = e.St.Event(e.ProjectID, a.ID, "", "NETWORK_TEST_STARTED", fmt.Sprintf("staging-active under approval %s by %s", ap.ID, ap.ApprovedBy))
 	if len(m.AuthorizationChecks) > 0 {
-		err = e.runAuthz(ctx, a, m, ap, g, creds, res, progress)
+		err = e.runAuthz(ctx, a, m, ap, rr, g, creds, res, progress)
 	}
 	if err == nil {
-		err = e.runZAP(ctx, a, m, ap, g, res, progress)
+		err = e.runZAP(ctx, a, m, ap, rr, g, res, progress)
 	}
 	res.Requests, res.Refused = g.Sent(), g.Refused()
 	_ = e.St.Event(e.ProjectID, a.ID, "NETWORK_TEST_STARTED", "NETWORK_TEST_FINISHED", fmt.Sprintf("%d requests of budget %d", res.Requests, res.Budget))
 	if err != nil {
 		return nil, err
 	}
-	if inv, err := e.Inventory(); err == nil {
+	if rr.inv != nil {
 		if cs, err := e.St.Controls(a.ID); err == nil {
-			_ = e.St.PutEdges(a.ID, BuildEdges(inv, cs))
+			_ = e.St.PutEdges(a.ID, BuildEdges(rr.inv, cs))
 		}
 	}
 	return res, nil
@@ -93,10 +94,10 @@ func (e *Engine) StagingActive(ctx context.Context, progress func(string)) (*Sta
 // nil means the system pool.
 var guardRoots *x509.CertPool
 
-func (e *Engine) runZAP(ctx context.Context, a *store.Assessment, m *scope.Manifest, ap *store.Approval, g *scope.Guard, res *StagingResult, progress func(string)) error {
+func (e *Engine) runZAP(ctx context.Context, a *store.Assessment, m *scope.Manifest, ap *store.Approval, rr runtimeRun, g *scope.Guard, res *StagingResult, progress func(string)) error {
 	set := func(cid string, st model.Status, reason string) error {
 		res.Controls[cid] = string(st)
-		return e.St.SetControlStatus(e.ProjectID, a.ID, cid, st, reason)
+		return e.setRuntime(a, rr, cid, st, reason)
 	}
 	decided := []string{"M-001"}
 	if m.ZAP.ActiveScan {

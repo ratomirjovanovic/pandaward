@@ -7,6 +7,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/ratomirjovanovic/pandaward/internal/catalog"
 	"github.com/ratomirjovanovic/pandaward/internal/inventory"
@@ -160,15 +161,21 @@ type Changes struct {
 // results. It only reads; nothing is written to the ledger.
 func (e *Engine) StaleView(asmt string, cs []model.ControlResult, es []model.Edge) ([]model.ControlResult, []model.Edge, Changes, error) {
 	ch, err := e.changes(asmt)
-	if err != nil || len(ch.Files) == 0 {
+	if err != nil {
 		return cs, es, ch, err
 	}
-	affected, err := e.affected(asmt, ch.Files)
+	if len(ch.Files) > 0 {
+		affected, err := e.affected(asmt, ch.Files)
+		if err != nil {
+			return nil, nil, Changes{}, err
+		}
+		cs, es = ApplyStale(cs, es, affected, ch.Files)
+	}
+	cs, es, err = e.runtimeStaleView(cs, es, ch.Files, time.Now())
 	if err != nil {
 		return nil, nil, Changes{}, err
 	}
-	cs2, es2 := ApplyStale(cs, es, affected, ch.Files)
-	return cs2, es2, ch, nil
+	return cs, es, ch, nil
 }
 
 // changes merges the files recorded by the edit hook with the files whose

@@ -121,7 +121,14 @@ type ControlResult struct {
 	Adapter     string   `json:"adapter,omitempty"`
 	EvidenceIDs []string `json:"evidence_ids,omitempty"`
 	Refs        []string `json:"refs,omitempty"`
+	// DecidedBy says how the status was reached: DecidedRuntime when a
+	// runtime profile decided it (in this assessment or carried over from
+	// an earlier one); empty for the passive scan.
+	DecidedBy string `json:"decided_by,omitempty"`
 }
+
+// DecidedRuntime marks a control result written by a runtime profile.
+const DecidedRuntime = "runtime"
 
 // Edge is an instantiated cross-domain dependency (AB1, CG1, ...).
 type Edge struct {

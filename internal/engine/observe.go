@@ -82,6 +82,7 @@ func (e *Engine) Observe(ctx context.Context, progress func(string)) (*ObserveRe
 	}
 	// The guard enforces scope, methods, the budget, the rate limit and
 	// address checks, and never follows redirects.
+	rr := e.newRuntimeRun("production-observe", m, ap)
 	g := scope.NewGuard(m, guardRoots)
 	client := g.Client()
 	res := &ObserveResult{AssessmentID: a.ID, Budget: m.Limits.MaxRequestsTotal}
@@ -182,12 +183,12 @@ func (e *Engine) Observe(ctx context.Context, progress func(string)) (*ObserveRe
 		}
 	}
 	res.Status = string(status)
-	if err := e.St.SetControlStatus(e.ProjectID, a.ID, "H-003", status, reason); err != nil {
+	if err := e.setRuntime(a, rr, "H-003", status, reason); err != nil {
 		return nil, err
 	}
-	if inv, err := e.Inventory(); err == nil {
+	if rr.inv != nil {
 		if cs, err := e.St.Controls(a.ID); err == nil {
-			_ = e.St.PutEdges(a.ID, BuildEdges(inv, cs))
+			_ = e.St.PutEdges(a.ID, BuildEdges(rr.inv, cs))
 		}
 	}
 	return res, nil
