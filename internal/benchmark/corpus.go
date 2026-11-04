@@ -159,6 +159,16 @@ func Corpus() []Case {
 	add(pair("cicd.no-permissions", "builtin-cicd",
 		map[string]string{".github/workflows/ci.yml": workflow("push", "      - run: make\n", false)},
 		map[string]string{".github/workflows/ci.yml": workflow("push", "      - run: make\n", true)}))
+	release := func(perms, run string) string {
+		return "on: [push]\npermissions:\n  contents: read\njobs:\n  publish:\n    runs-on: ubuntu-latest\n    permissions:\n" + perms +
+			"    steps:\n      - run: " + run + "\n"
+	}
+	add(pair("cicd.unpinned-tool-install", "builtin-cicd",
+		map[string]string{".github/workflows/release.yml": release("      id-token: write\n", "npm install -g npm@11")},
+		map[string]string{".github/workflows/release.yml": release("      id-token: write\n", "npm install -g npm@11.21.1")}))
+	add(pair("cicd.image-not-pinned", "builtin-cicd",
+		map[string]string{".github/workflows/ci.yml": workflow("push", "      - run: docker run --rm -v \"$PWD:/src\" ghcr.io/org/tool:v1 scan\n", true)},
+		map[string]string{".github/workflows/ci.yml": workflow("push", "      - run: docker run --rm -v \"$PWD:/src\" ghcr.io/org/tool:v1@sha256:"+strings.Repeat("0a", 32)+" scan\n", true)}))
 
 	add(pair("infra.unpinned-base-image", "builtin-infra",
 		map[string]string{"Dockerfile": "FROM node:latest\nUSER node\n"},

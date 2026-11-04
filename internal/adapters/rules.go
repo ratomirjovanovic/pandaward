@@ -14,6 +14,7 @@ var fileRuleIDs = []string{
 	"code.llm-output-exec", "code.cors-wildcard-credentials", "code.webhook-no-signature", "code.weak-csp",
 	"secret.tracked-sensitive-file",
 	"cicd.unpinned-action", "cicd.script-injection", "cicd.prt-untrusted-checkout", "cicd.no-permissions",
+	"cicd.unpinned-tool-install", "cicd.image-not-pinned",
 	"infra.unpinned-base-image", "infra.container-root", "infra.privileged-container", "infra.public-storage", "infra.world-open-admin-port",
 	"supply.missing-lockfile", "supply.install-script", "supply.unpinned-requirements", "supply.mcp-unpinned", "supply.mcp-inline-credential",
 	"mobile.android-debuggable", "mobile.android-allow-backup", "mobile.android-cleartext", "mobile.android-exported-component", "mobile.ios-ats-arbitrary-loads", "mobile.ios-get-task-allow",
