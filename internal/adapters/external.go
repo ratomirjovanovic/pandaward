@@ -216,7 +216,9 @@ func sevFrom(s string) model.Severity {
 }
 
 func gitleaks() Adapter {
-	return &externalTool{
+	// normalize records a note on t, so t exists before its fields.
+	t := &externalTool{}
+	*t = externalTool{
 		name: "gitleaks", binary: "gitleaks", controls: []string{"E-005"}, verArgs: []string{"version"},
 		okExit: map[int]bool{0: true},
 		args: func(c *Context, out string) ([]string, error) {
@@ -229,6 +231,8 @@ func gitleaks() Adapter {
 				File        string `json:"File"`
 				StartLine   int    `json:"StartLine"`
 				EndLine     int    `json:"EndLine"`
+				StartColumn int    `json:"StartColumn"`
+				EndColumn   int    `json:"EndColumn"`
 				Match       string `json:"Match"`
 				Fingerprint string `json:"Fingerprint"`
 			}
@@ -236,6 +240,7 @@ func gitleaks() Adapter {
 				return nil, err
 			}
 			var out []model.Signal
+			placeholders := 0
 			for _, it := range items {
 				// Specific formats are strong signals. Generic rules match on
 				// entropy, and test fixtures hold fake values in real formats,
@@ -256,13 +261,36 @@ func gitleaks() Adapter {
 					title = "Secret in an untracked, git-ignored local file: " + it.Description
 					msg += " The file is ignored by git and not tracked, so it is not in the repository."
 					fix = "Nothing to do while the file stays ignored and untracked. Rotate the credential if the file was ever committed or shared."
+				} else if placeholderHit(c.Root, rel, it.RuleID, it.StartLine, it.EndLine, it.StartColumn, it.EndColumn) {
+					// A placeholder in one project can be a live value in
+					// another, so it is listed for review, never dropped.
+					placeholders++
+					sev, conf = model.SevInfo, model.Hypothesis
+					title = "Placeholder-shaped value matched a secret rule: " + it.Description
+					msg += " The value is shaped like a placeholder (sequential or repeated characters, a placeholder word, a dummy JWT or a workflow secrets fallback), so it is listed for review and not counted against E-005."
+					fix = "Confirm the value is not a real credential. If it is real, rotate it and load it at runtime from a secret manager."
 				}
 				out = append(out, model.Signal{RuleID: "gitleaks." + it.RuleID, ControlID: "E-005", Title: title, Severity: sev, Confidence: conf, CWE: "CWE-798",
 					File: it.File, StartLine: it.StartLine, EndLine: it.EndLine, Snippet: it.Match, Message: msg, Fix: fix, Key: it.RuleID})
 			}
+			if placeholders > 0 {
+				t.note = fmt.Sprintf("; %d placeholder-shaped value(s) listed as info", placeholders)
+			}
 			return out, nil
 		},
 	}
+	return t
+}
+
+// placeholderHit re-reads a single-line gitleaks match and reports whether
+// the value is placeholder-shaped. Private keys are not judged: their
+// encoding legitimately holds long runs of repeated characters.
+func placeholderHit(root, rel, rule string, startLine, endLine, startCol, endCol int) bool {
+	if startLine != endLine || strings.Contains(rule, "private-key") {
+		return false
+	}
+	value, line, ok := matchedValue(root, rel, startLine, startCol, endCol)
+	return ok && placeholderSecret(value, rel, line)
 }
 
 func semgrep() Adapter {
@@ -309,8 +337,10 @@ func semgrep() Adapter {
 						Severity string `json:"severity"`
 						Lines    string `json:"lines"`
 						Metadata struct {
-							CWE     any    `json:"cwe"`
-							Control string `json:"pandaward-control"`
+							CWE         any    `json:"cwe"`
+							Control     string `json:"pandaward-control"`
+							Confidence  string `json:"confidence"`
+							Subcategory any    `json:"subcategory"`
 						} `json:"metadata"`
 					} `json:"extra"`
 				} `json:"results"`
@@ -320,7 +350,7 @@ func semgrep() Adapter {
 				return nil, err
 			}
 			var out []model.Signal
-			skipped := 0
+			skipped, audit := 0, 0
 			for _, r := range doc.Results {
 				// Results in test and fixture code are skipped, as in the
 				// built-in checks: registry rules match the fake keys and
@@ -332,6 +362,21 @@ func semgrep() Adapter {
 					if bundled := strings.HasPrefix(lastSegment(r.CheckID), "pandaward-"); bundled || c.Cfg == nil || !c.Cfg.Scan.SemgrepIncludeTests {
 						skipped++
 						continue
+					}
+				}
+				// Registry rules rate their own precision. A low-confidence
+				// audit rule only points at code worth a look: it is listed as
+				// info and does not decide the control. A low-confidence vuln
+				// rule still counts, as low at most. Nothing is dropped, since a
+				// hint that is noise in one project can be real in another.
+				sev := sevFrom(r.Extra.Severity)
+				if !strings.HasPrefix(lastSegment(r.CheckID), "pandaward-") && strings.EqualFold(r.Extra.Metadata.Confidence, "low") {
+					switch {
+					case hasValue(r.Extra.Metadata.Subcategory, "audit"):
+						sev = model.SevInfo
+						audit++
+					case model.SeverityRank(sev) > model.SeverityRank(model.SevLow):
+						sev = model.SevLow
 					}
 				}
 				cwe := ""
@@ -357,11 +402,15 @@ func semgrep() Adapter {
 				}
 				// check_id is prefixed with the rule file's directory, which
 				// differs per machine; keep only the rule id for stable fingerprints.
-				out = append(out, model.Signal{RuleID: "semgrep." + lastSegment(r.CheckID), ControlID: cid, Title: lastSegment(r.CheckID), Severity: sevFrom(r.Extra.Severity), Confidence: model.Hypothesis, CWE: cwe,
+				out = append(out, model.Signal{RuleID: "semgrep." + lastSegment(r.CheckID), ControlID: cid, Title: lastSegment(r.CheckID), Severity: sev, Confidence: model.Hypothesis, CWE: cwe,
 					File: r.Path, StartLine: r.Start.Line, EndLine: r.End.Line, Snippet: snippet, Message: r.Extra.Message, Fix: "See rule " + lastSegment(r.CheckID) + " guidance."})
 			}
+			t.note = ""
 			if skipped > 0 {
 				t.note = fmt.Sprintf("; %d result(s) in test/fixture files skipped by policy", skipped)
+			}
+			if audit > 0 {
+				t.note += fmt.Sprintf("; %d low-confidence audit result(s) listed as info", audit)
 			}
 			return out, nil
 		},
@@ -512,4 +561,20 @@ func Tools(ctx context.Context) []ToolInfo {
 		ti.Path, ti.Version = p, (apktoolAdapter{}).version(ctx, p)
 	}
 	return append(out, ti)
+}
+
+// hasValue reports whether a metadata field, a string or a list of strings,
+// holds v.
+func hasValue(field any, v string) bool {
+	switch x := field.(type) {
+	case string:
+		return strings.EqualFold(x, v)
+	case []any:
+		for _, e := range x {
+			if s, ok := e.(string); ok && strings.EqualFold(s, v) {
+				return true
+			}
+		}
+	}
+	return false
 }

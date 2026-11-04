@@ -84,3 +84,55 @@ func TestGitleaksConfidence(t *testing.T) {
 		}
 	}
 }
+
+func firedOn(sigs []model.Signal, rule, file string) bool {
+	for _, s := range sigs {
+		if s.RuleID == rule && s.File == file {
+			return true
+		}
+	}
+	return false
+}
+
+// A database URL whose host is a reserved documentation or test name
+// (RFC 2606, RFC 6761) is a sample, not a credential. localhost is not
+// treated as one and still fires.
+func TestDBURLExampleHost(t *testing.T) {
+	pw := "s3cr3t" + "Pw"
+	sigs := runOn(t, &secretsAdapter{}, map[string]string{
+		"src/real.js":       "const u = \"postgres" + "://app:" + pw + "@db.internal:5432/app\";\n",
+		"src/local.js":      "const u = \"postgres" + "://app:" + pw + "@localhost:5432/app\";\n",
+		"src/lookalike.js":  "const u = \"postgres" + "://app:" + pw + "@example.company.io/app\";\n",
+		"src/invalid.js":    "const u = \"postgresql" + "://user:" + pw + "@example.invalid/db\";\n",
+		"src/dotexample.js": "const u = \"mysql" + "://user:" + pw + "@db.example\";\n",
+		"src/excom.js":      "const u = \"postgres" + "://user:" + pw + "@db.example.com:5432/db\";\n",
+		"src/test.js":       "const u = \"redis" + "://user:" + pw + "@cache.test:6379\";\n",
+	})
+	for file, want := range map[string]bool{
+		"src/real.js": true, "src/local.js": true, "src/lookalike.js": true,
+		"src/invalid.js": false, "src/dotexample.js": false, "src/excom.js": false, "src/test.js": false,
+	} {
+		if got := firedOn(sigs, "secret.db-url-password", file); got != want {
+			t.Errorf("db-url-password on %s: fired=%v, want %v", file, got, want)
+		}
+	}
+}
+
+// A whole PEM block on one line with a stub body is not a key; one with a
+// body of real length is.
+func TestPrivateKeyOneLineStub(t *testing.T) {
+	sigs := runOn(t, &secretsAdapter{}, map[string]string{
+		"src/stub.js": "const k = \"-----BEGIN " + `PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----";` + "\n",
+		"src/real.js": "const k = \"-----BEGIN " + `PRIVATE KEY-----\n` + fakeKeyBody + `\n-----END PRIVATE KEY-----";` + "\n",
+		"src/open.js": "const k = \"-----BEGIN " + `PRIVATE KEY-----\nabc";` + "\n",
+	})
+	if firedOn(sigs, "secret.private-key", "src/stub.js") {
+		t.Errorf("one-line stub PEM fired: %+v", sigs)
+	}
+	if conf, sev := confidenceOf(t, sigs, "secret.private-key", "src/real.js"); conf != model.Confirmed || sev != model.SevCritical {
+		t.Errorf("one-line real PEM: %s %s", conf, sev)
+	}
+	if conf, _ := confidenceOf(t, sigs, "secret.private-key", "src/open.js"); conf != model.Hypothesis {
+		t.Errorf("header without END: %s, want hypothesis", conf)
+	}
+}

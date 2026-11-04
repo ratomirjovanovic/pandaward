@@ -1,6 +1,7 @@
 package adapters
 
 import (
+	"slices"
 	"sort"
 
 	"github.com/ratomirjovanovic/pandaward/internal/redact"
@@ -34,5 +35,6 @@ func RuleIDs() []string {
 		out = append(out, "secret."+r.ID)
 	}
 	sort.Strings(out)
-	return out
+	// A rule may span several table entries (same ID, different languages).
+	return slices.Compact(out)
 }

@@ -62,7 +62,10 @@ rules:
       cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
     # A value that is an UPPER_CASE module constant (or a property of one),
     # a list built from one with .map(...).join(...), or a number cannot
-    # carry request data, so it is not reported on its own (#160).
+    # carry request data, so it is not reported on its own (#160). The
+    # constant may be followed by a property chain before .map (#221). A
+    # template interpolation that is a ternary choosing between two string
+    # literals only selects fixed SQL text, so it is not reported (#221).
     patterns:
       - pattern-either:
           - patterns:
@@ -71,17 +74,17 @@ rules:
                   - pattern: $DB.$Q(`...${$X}...`, ...)
               - metavariable-regex:
                   metavariable: $X
-                  regex: (?s)^(?!(?:[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*|[A-Z][A-Z0-9_]*\.map\(.*\)\.join\([^()]*\)|(Math\.(trunc|floor|ceil|round)|Number|parseInt|parseFloat)\([^()]*\)|\d+(\.\d+)?)$)
+                  regex: (?s)^(?!(?:[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*|[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*\.map\(.*\)\.join\([^()]*\)|(Math\.(trunc|floor|ceil|round)|Number|parseInt|parseFloat)\([^()]*\)|\d+(\.\d+)?|[^'"\x60]*\?\s*(?:"[^"]*"|'[^']*')\s*:\s*(?:"[^"]*"|'[^']*'))$)
           - patterns:
               - pattern: $DB.$Q($A + $B, ...)
               - metavariable-regex:
                   metavariable: $B
-                  regex: (?s)^(?!(?:[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*|[A-Z][A-Z0-9_]*\.map\(.*\)\.join\([^()]*\)|(Math\.(trunc|floor|ceil|round)|Number|parseInt|parseFloat)\([^()]*\)|\d+(\.\d+)?|"[^"]*"|'[^']*')$)
+                  regex: (?s)^(?!(?:[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*|[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*\.map\(.*\)\.join\([^()]*\)|(Math\.(trunc|floor|ceil|round)|Number|parseInt|parseFloat)\([^()]*\)|\d+(\.\d+)?|"[^"]*"|'[^']*')$)
           - patterns:
               - pattern: $DB.$Q($A + $B, ...)
               - metavariable-regex:
                   metavariable: $A
-                  regex: (?s)^(?!(?:(?:[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*|[A-Z][A-Z0-9_]*\.map\(.*\)\.join\([^()]*\)|(Math\.(trunc|floor|ceil|round)|Number|parseInt|parseFloat)\([^()]*\)|\d+(\.\d+)?|"[^"]*"|'[^']*')(?:\s*\+\s*(?:[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*|[A-Z][A-Z0-9_]*\.map\(.*\)\.join\([^()]*\)|(Math\.(trunc|floor|ceil|round)|Number|parseInt|parseFloat)\([^()]*\)|\d+(\.\d+)?|"[^"]*"|'[^']*'))*)$)
+                  regex: (?s)^(?!(?:(?:[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*|[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*\.map\(.*\)\.join\([^()]*\)|(Math\.(trunc|floor|ceil|round)|Number|parseInt|parseFloat)\([^()]*\)|\d+(\.\d+)?|"[^"]*"|'[^']*')(?:\s*\+\s*(?:[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*|[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*\.map\(.*\)\.join\([^()]*\)|(Math\.(trunc|floor|ceil|round)|Number|parseInt|parseFloat)\([^()]*\)|\d+(\.\d+)?|"[^"]*"|'[^']*'))*)$)
       - metavariable-regex:
           metavariable: $Q
           regex: ^(query|execute|raw|run|all|prepare|\$queryRawUnsafe|\$executeRawUnsafe)$
@@ -104,6 +107,11 @@ rules:
       - pattern-not: $EL.outerHTML = "..."
       - pattern-not: $EL.insertAdjacentHTML($POS, "...")
       - pattern-not: document.write("...")
+      # A bare UPPER_CASE module constant (or a property of one) is fixed
+      # markup, such as an inline SVG icon (#220).
+      - metavariable-regex:
+          metavariable: $X
+          regex: ^(?![A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*$)
 
   - id: pandaward-js-jwt-none-alg
     languages: [javascript, typescript]

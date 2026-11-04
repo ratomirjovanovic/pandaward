@@ -703,7 +703,20 @@ func applyMounts(entries []entry, mounts []mount) []entry {
 // (more than one service root) each service is also an asset.
 func (inv *Inventory) addEntrypoints(entries []entry, roots []string, nestGlobal map[string]string) {
 	seen := map[string]bool{}
+	// Methods each file defines per route path, so a GET-only route can be
+	// told apart from one that also accepts POST.
+	routeMethods := map[string]map[string]bool{}
 	for _, e := range entries {
+		if e.kind == "route" {
+			k := e.file + "\x00" + e.path
+			if routeMethods[k] == nil {
+				routeMethods[k] = map[string]bool{}
+			}
+			routeMethods[k][strings.ToUpper(e.method)] = true
+		}
+	}
+	for _, e := range entries {
+		methodsKey := e.file + "\x00" + e.path
 		svc := serviceOf(roots, e.file)
 		if e.framework == "nestjs" && nestGlobal[svc] != "" {
 			e.path = joinRoute(nestGlobal[svc], e.path)
@@ -759,7 +772,7 @@ func (inv *Inventory) addEntrypoints(entries []entry, roots []string, nestGlobal
 			if adminPathRe.MatchString(e.path) {
 				inv.feature("admin_routes", id)
 			}
-			if e.kind == "route" && isWebhookPath(e.path) {
+			if e.kind == "route" && isWebhookPath(e.path) && !oauthRedirectRoute(e.path, routeMethods[methodsKey], inv.FileByPath(e.file)) {
 				inv.feature("webhooks", id)
 			}
 		case "queue_consumer":
