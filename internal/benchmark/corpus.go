@@ -101,6 +101,17 @@ func Corpus() []Case {
 	// Drizzle and other typed tagged templates bind ${...} as parameters.
 	add(code("code.sql-template", "b.ts", "await db.query(`select * from users where name = '${name}'`);\n", "const n = sql<number>`select count(*) from ${users} where ${eq(users.id, id)}`;\n"))
 	add(code("code.sql-unsafe-raw", "a.js", "prisma.$queryRawUnsafe(q);\n", "prisma.$queryRaw(q);\n"))
+	const profiles = "create table public.profiles (id uuid primary key, display_name text, is_admin boolean default false);\n"
+	const ownUpdate = "create policy p on public.profiles for update using (id = auth.uid());\n"
+	rls := func(vuln bool, sql, note string) Case {
+		return Case{Rule: "sql.rls-update-privileged-column", Adapter: "builtin-code", Vulnerable: vuln, Note: note,
+			Files: map[string]string{"supabase/migrations/0001_init.sql": sql, "src/app.js": "export const x = 1;\n"}}
+	}
+	cs = append(cs,
+		rls(true, profiles+ownUpdate, ""),
+		rls(false, profiles+ownUpdate+"revoke update on profiles from authenticated;\ngrant update (display_name) on profiles to authenticated;\n", "updates limited to display_name"),
+		rls(false, "create table public.notes (id uuid, owner uuid, body text);\ncreate policy p on public.notes for update using (owner = auth.uid());\n", "no privileged column"),
+		rls(false, profiles+"create policy p on public.profiles for select using (id = auth.uid());\n", "select-only policy"))
 	add(code("code.py-deserialize", "a.py", "obj = pickle.loads(data)\n", "cfg = yaml.load(text, Loader=yaml.SafeLoader)\n"))
 	add(code("code.java-deserialize", "A.java", "ObjectInputStream in = new ObjectInputStream(s);\n", "ObjectMapper m = new ObjectMapper();\n"))
 	add(code("code.php-unserialize", "a.php", "<?php $o = unserialize($data);\n", "<?php $o = json_decode($data);\n"))
