@@ -181,6 +181,7 @@ func printSummary(w io.Writer, res *engine.ScanResult, rep *report.Report, paths
 	c := res.Coverage
 	fmt.Fprintf(w, "\n  Decisive coverage  [%s] %3.0f%%  (%d of %d applicable controls PASS or FAIL)\n",
 		bar(c.Decisive, c.Applicable, 24, ascii), c.Ratio*100, c.Decisive, c.Applicable)
+	fmt.Fprintf(w, "  %s\n", report.Breakdown(rep.Coverage))
 	fmt.Fprintf(w, "  Cross-domain edges  %d (%d verified, %d failed, %d open)\n", c.EdgesTotal, c.EdgesVerified, c.EdgesFailed, c.EdgesOpen)
 
 	conf, susp := rep.Confirmed(), rep.Suspected()
@@ -223,6 +224,8 @@ func printSummary(w io.Writer, res *engine.ScanResult, rep *report.Report, paths
 	sort.Strings(gs)
 	if len(gs) > 0 {
 		fmt.Fprintf(w, "\n  Not decided (never counted as secure): %s\n", strings.Join(gs, ", "))
+		fmt.Fprintln(w)
+		printPath(w, rep.PathTo100, "  ")
 	}
 	if len(res.Errors) > 0 {
 		fmt.Fprintln(w, "  Adapter errors make this assessment INCOMPLETE:")
@@ -240,4 +243,20 @@ func printSummary(w io.Writer, res *engine.ScanResult, rep *report.Report, paths
 	fmt.Fprintln(w, "    pandaward fix-plan    ordered fixes, then pandaward retest --changed")
 	fmt.Fprintln(w, "    pandaward feedback    tell us about a wrong or missed finding")
 	fmt.Fprintf(w, "\n  Catalog %s. An automated technical assessment, not a certification or a penetration test.\n", catalog.Version)
+}
+
+// printPath prints the path to 100%: the undecided controls grouped by the
+// step that would decide them, largest group first.
+func printPath(w io.Writer, groups []engine.PathGroup, indent string) {
+	if len(groups) == 0 {
+		return
+	}
+	n := 0
+	for _, g := range groups {
+		n += g.Count
+	}
+	fmt.Fprintf(w, "%sPath to 100%% (%d control(s) not decided, by next step):\n", indent, n)
+	for _, g := range groups {
+		fmt.Fprintf(w, "%s  %3d  %s\n%s       %s\n", indent, g.Count, g.Step, indent, strings.Join(g.Controls, ", "))
+	}
 }

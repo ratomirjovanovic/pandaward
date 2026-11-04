@@ -9,10 +9,11 @@ import (
 )
 
 var funcs = template.FuncMap{
-	"pct":   pct,
-	"lower": func(s any) string { return strings.ToLower(toString(s)) },
-	"join":  strings.Join,
-	"ctrl":  ctrlTitle,
+	"pct":       pct,
+	"lower":     func(s any) string { return strings.ToLower(toString(s)) },
+	"join":      strings.Join,
+	"ctrl":      ctrlTitle,
+	"breakdown": Breakdown,
 	"sum": func(m map[string]int) int {
 		n := 0
 		for _, v := range m {
@@ -94,7 +95,14 @@ code{font:12.5px ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:an
 <div class="tile"><span class="mut">Cross-domain edges</span><b>{{.R.Coverage.EdgesTotal}}</b><span class="mut">{{.R.Coverage.EdgesVerified}} verified · {{.R.Coverage.EdgesFailed}} failed · {{.R.Coverage.EdgesOpen}} open</span></div>
 </div>
 {{if .R.StaleFiles}}<p class="warn">{{len .R.StaleFiles}} file(s) changed after this assessment. Controls and edges that depend on them are shown as STALE until <code>pandaward retest</code>.</p>{{end}}
+<p>{{breakdown .R.Coverage}}.</p>
 <p class="mut">{{.R.Coverage.Note}}</p>
+
+<h2>Path to 100%</h2>
+{{if .R.PathTo100}}<p class="mut">What must happen for each undecided control to be decided, grouped by next step. A step that says a control cannot be decided in this release keeps coverage below 100%.</p>
+<div class="wrap"><table><tr><th>Controls</th><th>Next step</th><th>Which</th></tr>
+{{range .R.PathTo100}}<tr><td>{{.Count}}</td><td>{{.Step}}</td><td>{{join .Controls ", "}}</td></tr>{{end}}
+</table></div>{{else}}<p>Every applicable control is decided.</p>{{end}}
 {{with .R.Delta}}
 <h2>Changes since {{.From}}</h2>
 <p>New {{len .New}}, reopened {{len .Reopened}}, remediated {{len .Remediated}}, moved {{len .Moved}}, stale {{len .Stale}}, waived {{len .Waived}}, unchanged {{.Unchanged}}.</p>
@@ -120,8 +128,8 @@ code{font:12.5px ui-monospace,SFMono-Regular,Consolas,monospace;overflow-wrap:an
 </table></div>{{else}}<p>No seed edge had concrete assets on both sides.</p>{{end}}
 
 <h2>Control ledger</h2>
-<div class="wrap"><table><tr><th>Control</th><th>Title</th><th>Method</th><th>Status</th><th>Reason</th></tr>
-{{range .R.Controls}}<tr><td><b>{{.ID}}</b></td><td>{{.Title}}</td><td>{{.Method}}</td><td><span class="b {{.Status}}">{{.Status}}</span></td><td>{{.Reason}}</td></tr>{{end}}
+<div class="wrap"><table><tr><th>Control</th><th>Title</th><th>Method</th><th>Status</th><th>Decided by</th><th>Reason</th><th>Next step</th></tr>
+{{range .R.Controls}}<tr><td><b>{{.ID}}</b></td><td>{{.Title}}</td><td>{{.Method}}</td><td><span class="b {{.Status}}">{{.Status}}</span></td><td>{{.DecidedBy}}</td><td>{{.Reason}}</td><td>{{.NextStep}}</td></tr>{{end}}
 </table></div>
 
 <h2>Tool runs</h2>

@@ -229,15 +229,22 @@ type ScanResult struct {
 
 // Coverage is the coverage arithmetic from PRD 15.2.
 type Coverage struct {
-	Applicable    int     `json:"applicable_controls"`
-	Decisive      int     `json:"decisive_controls"`
-	Ratio         float64 `json:"decisive_control_coverage"`
-	EdgesTotal    int     `json:"edges_total"`
-	EdgesVerified int     `json:"edges_verified"`
-	EdgesFailed   int     `json:"edges_failed"`
-	EdgesOpen     int     `json:"edges_blocked_or_inconclusive"`
-	Stale         int     `json:"stale_files"`
-	Note          string  `json:"note"`
+	Applicable int     `json:"applicable_controls"`
+	Decisive   int     `json:"decisive_controls"`
+	Ratio      float64 `json:"decisive_control_coverage"`
+	// Automatic, Runtime and Attested split Decisive by how each control
+	// was decided (see DecidedBy); they always add up to Decisive.
+	Automatic int `json:"decided_automatic"`
+	Runtime   int `json:"decided_runtime"`
+	Attested  int `json:"decided_attested"`
+	// NotApplicable controls are outside the denominator.
+	NotApplicable int    `json:"not_applicable_controls"`
+	EdgesTotal    int    `json:"edges_total"`
+	EdgesVerified int    `json:"edges_verified"`
+	EdgesFailed   int    `json:"edges_failed"`
+	EdgesOpen     int    `json:"edges_blocked_or_inconclusive"`
+	Stale         int    `json:"stale_files"`
+	Note          string `json:"note"`
 }
 
 // ComputeCoverage computes coverage from controls and edges. Pass the stale
@@ -247,11 +254,20 @@ func ComputeCoverage(cs []model.ControlResult, es []model.Edge, stale int) Cover
 	var c Coverage
 	for _, x := range cs {
 		if x.Status == model.StatusNotApplicable {
+			c.NotApplicable++
 			continue
 		}
 		c.Applicable++
 		if x.Status.Decisive() {
 			c.Decisive++
+		}
+		switch DecidedBy(x) {
+		case model.DecidedAutomatic:
+			c.Automatic++
+		case model.DecidedRuntime:
+			c.Runtime++
+		case model.DecidedAttested:
+			c.Attested++
 		}
 	}
 	if c.Applicable > 0 {

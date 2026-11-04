@@ -40,7 +40,7 @@ func TestAssessFromScratch(t *testing.T) {
 		t.Fatal(err)
 	}
 	s := out.String()
-	for _, want := range []string{"by Ratomir Jovanovic", "100%", "Decisive coverage", "Fix first", "Reports", "/pandaward:review"} {
+	for _, want := range []string{"by Ratomir Jovanovic", "100%", "Decisive coverage", "Fix first", "Reports", "/pandaward:review", "Decided by: ", "attested", "Path to 100% ("} {
 		if !strings.Contains(s, want) {
 			t.Errorf("output lacks %q", want)
 		}
@@ -57,6 +57,15 @@ func TestAssessFromScratch(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(root, ".pandaward", "config.yaml")); err != nil {
 		t.Fatal("assess did not initialize the project")
+	}
+	out.Reset()
+	if err := cmdStatus([]string{"--root", root}, &out); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"Decided by: ", "Path to 100% (", "pandaward retest", "/pandaward:review"} {
+		if !strings.Contains(out.String(), want) {
+			t.Errorf("status lacks %q:\n%s", want, out.String())
+		}
 	}
 	out.Reset()
 	if err := cmdAssess(context.Background(), []string{"--root", root, "--json"}, &out); err != nil {

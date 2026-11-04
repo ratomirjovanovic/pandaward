@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/ratomirjovanovic/pandaward/internal/engine"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
 	"github.com/ratomirjovanovic/pandaward/internal/testfixture"
 )
 
@@ -69,6 +70,62 @@ func TestReportsAreRedactedAndValid(t *testing.T) {
 		}
 		return nil
 	})
+}
+
+// Markdown, HTML and JSON reports show how controls were decided and the
+// path to 100%, and every undecided control carries its next step.
+func TestReportsShowBreakdownAndPath(t *testing.T) {
+	root := testfixture.VulnerableRepo(t)
+	e, _, err := engine.Init(root, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+	e.Cfg.Scan.Adapters = []string{"builtin-inventory", "builtin-secrets", "builtin-code"}
+	if _, err := e.Scan(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	r, err := Build(e)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := r.Coverage
+	if c.Automatic+c.Runtime+c.Attested != c.Decisive || c.Automatic == 0 || c.NotApplicable == 0 {
+		t.Errorf("breakdown %+v", c)
+	}
+	if len(r.PathTo100) == 0 {
+		t.Fatal("no path to 100%")
+	}
+	n := 0
+	for _, g := range r.PathTo100 {
+		n += g.Count
+	}
+	if n != len(r.Untested()) {
+		t.Errorf("path covers %d controls, %d undecided", n, len(r.Untested()))
+	}
+	for _, ctl := range r.Controls {
+		undecided := !ctl.Status.Decisive() && ctl.Status != model.StatusNotApplicable
+		if undecided != (ctl.NextStep != "") || ctl.Status.Decisive() != (ctl.DecidedBy != "") {
+			t.Errorf("%s %s: decided_by %q, next_step %q", ctl.ID, ctl.Status, ctl.DecidedBy, ctl.NextStep)
+		}
+	}
+	paths, err := Write(r, DefaultDir(root), []string{"html", "markdown", "json"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range paths {
+		b, _ := os.ReadFile(p)
+		s := string(b)
+		want := []string{"Path to 100%", "automatic (static and external adapters)", "attested", r.PathTo100[0].Controls[0]}
+		if filepath.Ext(p) == ".json" {
+			want = []string{`"path_to_100"`, `"decided_automatic"`, `"decided_runtime"`, `"decided_attested"`, `"not_applicable_controls"`, `"next_step"`, `"decided_by"`}
+		}
+		for _, w := range want {
+			if !strings.Contains(s, w) {
+				t.Errorf("%s lacks %q", filepath.Base(p), w)
+			}
+		}
+	}
 }
 
 // Imported SARIF results reach every report format as unconfirmed findings,
