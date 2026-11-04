@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -209,5 +210,195 @@ func TestGitleaksIgnoredLocalFile(t *testing.T) {
 	// ignored (it may be committed next): a real finding.
 	if sev[1] != model.SevInfo || sev[2] != model.SevHigh || sev[3] != model.SevHigh {
 		t.Fatalf("severities %v", sev)
+	}
+}
+
+// Secret-shaped values in the tests below are assembled at run time, so the
+// repository holds no literal that a secret scanner would flag.
+
+func pseudoRandom(n int, seed uint32) string {
+	const alpha = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+	b := make([]byte, n)
+	x := seed
+	for i := range b {
+		x = x*1664525 + 1013904223
+		b[i] = alpha[(x>>16)%uint32(len(alpha))]
+	}
+	return string(b)
+}
+
+func fakeJWT(payload, sig string) string {
+	enc := func(s string) string { return base64.RawURLEncoding.EncodeToString([]byte(s)) }
+	return enc(`{"alg":"HS256","typ":"JWT"}`) + "." + enc(payload) + "." + sig
+}
+
+func TestPlaceholderSecret(t *testing.T) {
+	sk := "sk_" + "test_"
+	fallback := pseudoRandom(30, 7)
+	inExpr := "  KEY: ${{ secrets.ANON_KEY || '" + fallback + "' }}"
+	cases := []struct {
+		name, value, file, line string
+		want                    bool
+	}{
+		{"sequential letters", sk + "51" + "abcdefghijklmnop", "a_test.go", "", true},
+		{"sequential digits", "key" + "0123456789" + "Zq", "x.go", "", true},
+		{"repeated", sk + strings.Repeat("x", 24), "x.go", "", true},
+		{"placeholder word", "my" + "-placeholder-" + "value", "x.go", "", true},
+		{"your prefix", "your" + "_api_key_here", "x.go", "", true},
+		{"test_ prefix", "test" + "_api_secret_" + pseudoRandom(12, 1), "x_test.go", "", true},
+		{"random 40", pseudoRandom(40, 2), "src/config.ts", "", false},
+		{"random stripe test key", sk + "51" + pseudoRandom(24, 3), "x_test.go", "", false},
+		{"jwt short signature", fakeJWT(`{"ref":"dummy","role":"anon"}`, "abcde"), "x.go", "", true},
+		{"jwt dummy claim", fakeJWT(`{"iss":"dummy-issuer","role":"anon"}`, pseudoRandom(43, 4)), "x.go", "", true},
+		{"jwt real", fakeJWT(`{"iss":"acme","role":"anon"}`, pseudoRandom(43, 5)), "x.go", "", false},
+		{"service_role short sig", fakeJWT(`{"ref":"dummy","role":"service_role"}`, "abcde"), "x.go", "", false},
+		{"service_role full sig", fakeJWT(`{"iss":"acme","role":"service_role"}`, pseudoRandom(43, 6)), "x.go", "", false},
+		{"workflow fallback", fallback, ".github/workflows/ci.yml", inExpr, true},
+		{"fallback outside workflows", fallback, "deploy/ci.yml", inExpr, false},
+		{"workflow literal without secrets", fallback, ".github/workflows/ci.yml", "  KEY: '" + fallback + "'", false},
+	}
+	for _, tc := range cases {
+		if got := placeholderSecret(tc.value, tc.file, tc.line); got != tc.want {
+			t.Errorf("%s: placeholderSecret = %v, want %v", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestGitleaksPlaceholdersListedAsInfo(t *testing.T) {
+	root := t.TempDir()
+	sk := "sk_" + "test_"
+	dummyJWT := fakeJWT(`{"iss":"supabase","ref":"dummy","role":"anon"}`, "abcde")
+	serviceJWT := fakeJWT(`{"iss":"supabase","ref":"`+pseudoRandom(20, 8)+`","role":"service_role"}`, pseudoRandom(43, 9))
+	random40 := pseudoRandom(40, 10)
+	randomSK := sk + "51" + pseudoRandom(24, 11)
+	seqSK := sk + "51" + "ABCDEFGHIJKLMNOPQRSTUVWX"
+	generic := "test" + "_api_secret_" + pseudoRandom(16, 12)
+	values := []string{dummyJWT, serviceJWT, random40, randomSK, seqSK, generic}
+
+	files := map[string][]string{
+		".github/workflows/ci.yml": {"env:", "  ANON: ${{ secrets.SUPABASE_ANON_KEY || '" + dummyJWT + "' }}"},
+		"src/config.ts":            {"// config", `export const k = "` + random40 + `";`, `const s = "` + serviceJWT + `";`},
+		"tests/pay_test.go":        {"package pay", `var real = "` + randomSK + `"`, `var seq = "` + seqSK + `"`, `api_secret := "` + generic + `"`},
+	}
+	for f, lines := range files {
+		p := filepath.Join(root, filepath.FromSlash(f))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var items []string
+	// shift moves the columns one to the right, as gitleaks reports them on
+	// some lines; the outcome must not change.
+	add := func(rule, file string, line int, match string, shift int) {
+		text := files[file][line-1]
+		i := strings.Index(text, match)
+		if i < 0 {
+			t.Fatalf("match not in line %s:%d", file, line)
+		}
+		fb, _ := json.Marshal(filepath.Join(root, filepath.FromSlash(file)))
+		items = append(items, fmt.Sprintf(`{"RuleID":%q,"Description":"d","StartLine":%d,"EndLine":%d,"StartColumn":%d,"EndColumn":%d,"Match":"REDACTED","Secret":"REDACTED","File":%s}`,
+			rule, line, line, i+1+shift, i+len(match)+shift, fb))
+	}
+	add("jwt", ".github/workflows/ci.yml", 2, dummyJWT+"'", 0)
+	add("generic-api-key", "src/config.ts", 2, `k = "`+random40+`"`, 0)
+	add("jwt", "src/config.ts", 3, serviceJWT, 1)
+	add("stripe-access-token", "tests/pay_test.go", 2, randomSK, 0)
+	add("stripe-access-token", "tests/pay_test.go", 3, seqSK, 1)
+	add("generic-api-key", "tests/pay_test.go", 4, `api_secret := "`+generic+`"`, 0)
+	// A file that is gone and a path outside the root keep the signal as is.
+	items = append(items, `{"RuleID":"jwt","Description":"d","StartLine":1,"EndLine":1,"StartColumn":1,"EndColumn":10,"Match":"REDACTED","File":"gone.ts"}`)
+	outside, _ := json.Marshal(filepath.Join(filepath.Dir(root), "elsewhere.ts"))
+	items = append(items, `{"RuleID":"jwt","Description":"d","StartLine":1,"EndLine":1,"StartColumn":1,"EndColumn":10,"Match":"REDACTED","File":`+string(outside)+`}`)
+
+	tool := gitleaks().(*externalTool)
+	sigs, err := tool.normalize(&Context{Root: root}, []byte("["+strings.Join(items, ",")+"]"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(sigs) != 8 {
+		t.Fatalf("got %d signals, want 8: nothing is dropped", len(sigs))
+	}
+	type key struct {
+		file string
+		line int
+	}
+	got := map[key]model.Signal{}
+	for _, s := range sigs {
+		got[key{relPath(root, s.File), s.StartLine}] = s
+		for _, v := range values {
+			for _, f := range []string{s.Title, s.Message, s.Fix, s.Snippet, s.Key, s.File} {
+				if strings.Contains(f, v) {
+					t.Fatal("a signal field holds the matched value")
+				}
+			}
+		}
+	}
+	want := map[key]model.Severity{
+		{".github/workflows/ci.yml", 2}: model.SevInfo,
+		{"src/config.ts", 2}:            model.SevMedium,
+		{"src/config.ts", 3}:            model.SevHigh,
+		{"tests/pay_test.go", 2}:        model.SevLow,
+		{"tests/pay_test.go", 3}:        model.SevInfo,
+		{"tests/pay_test.go", 4}:        model.SevInfo,
+		{"gone.ts", 1}:                  model.SevHigh,
+		{"(outside-root)", 1}:           model.SevHigh,
+	}
+	for k, sev := range want {
+		s, ok := got[k]
+		if !ok {
+			t.Errorf("%v: missing signal", k)
+			continue
+		}
+		if s.Severity != sev {
+			t.Errorf("%v: severity %s, want %s", k, s.Severity, sev)
+		}
+		if sev == model.SevInfo && (s.Confidence != model.Hypothesis || !strings.Contains(s.Title, "Placeholder-shaped")) {
+			t.Errorf("%v: placeholder signal %+v", k, s)
+		}
+	}
+	if tool.note != "; 3 placeholder-shaped value(s) listed as info" {
+		t.Errorf("note = %q", tool.note)
+	}
+	for _, v := range values {
+		if strings.Contains(tool.note, v) {
+			t.Fatal("the note holds the matched value")
+		}
+	}
+}
+
+// Registry rules that rate themselves confidence LOW: audit hints are listed
+// as info, vuln rules count as low at most. Nothing is dropped, and bundled
+// rules and rules with higher confidence keep their severity.
+func TestSemgrepLowConfidenceRegistryRules(t *testing.T) {
+	root := t.TempDir()
+	path, _ := json.Marshal(filepath.Join(root, "src", "a.ts"))
+	res := func(id, sev, meta string, line int) string {
+		return `{"check_id":"` + id + `","path":` + string(path) + `,"start":{"line":` + fmt.Sprint(line) + `},"end":{"line":` + fmt.Sprint(line) + `},"extra":{"severity":"` + sev + `","metadata":` + meta + `}}`
+	}
+	raw := []byte(`{"results":[` + strings.Join([]string{
+		res("r.js.audit.spawn-shell-true", "ERROR", `{"confidence":"LOW","subcategory":["audit"]}`, 1),
+		res("r.js.detect-non-literal-regexp", "WARNING", `{"confidence":"LOW","subcategory":["vuln"]}`, 2),
+		res("r.js.gcm-no-tag-length", "ERROR", `{"confidence":"MEDIUM","subcategory":["vuln"]}`, 3),
+		res("r.js.audit-string", "INFO", `{"confidence":"low","subcategory":"audit"}`, 4),
+		res("h.pandaward-semgrep-rules.pandaward-js-sql-string", "ERROR", `{"pandaward-control":"D-003","confidence":"LOW","subcategory":["audit"]}`, 5),
+	}, ",") + `],"errors":[]}`)
+	tool := semgrep().(*externalTool)
+	sigs, err := tool.normalize(&Context{Root: root, Cfg: config.Default("fx")}, raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, s := range sigs {
+		got = append(got, fmt.Sprintf("%s=%s", s.Title, s.Severity))
+	}
+	want := "spawn-shell-true=info,detect-non-literal-regexp=low,gcm-no-tag-length=high,audit-string=info,pandaward-js-sql-string=high"
+	if strings.Join(got, ",") != want {
+		t.Errorf("got %v, want %s", got, want)
+	}
+	if tool.note != "; 2 low-confidence audit result(s) listed as info" {
+		t.Errorf("note %q", tool.note)
 	}
 }

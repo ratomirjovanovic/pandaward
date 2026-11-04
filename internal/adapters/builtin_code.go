@@ -151,7 +151,10 @@ var codeRules = []lineRule{
 	{ID: "code.ruby-eval", Control: "D-001", Title: "Dynamic code evaluation", Langs: langs("ruby"), Re: regexp.MustCompile(`(^|[^.\w])(eval|instance_eval|class_eval)\s*[\(\s]['"a-z]`),
 		Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-95", Message: "Ruby string evaluation.", Fix: "Use blocks or explicit dispatch instead of string eval."},
 
-	{ID: "code.js-shell", Control: "D-002", Title: "Shell command built from a string", Langs: jsLike, Re: regexp.MustCompile(`\b(exec|execSync)\s*\(\s*(\x60[^\x60]*\$\{|['"][^'"]*['"]\s*\+|[a-zA-Z_]\w*\s*[,)])|shell\s*:\s*true`),
+	{ID: "code.js-shell", Control: "D-002", Title: "Shell command built from a string", Langs: jsLike, Re: jsShellExecRe,
+		Not: regexp.MustCompile(`\.exec\(|regex|RegExp|\bdb\.\w+\(|\.query\(`), Post: jsShellDynamic, SkipFile: definesOwnExec, Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-78",
+		Message: "child_process.exec or shell:true runs the command through a shell; interpolated values allow command injection.", Fix: "Use execFile/spawn with an argument array and shell:false; validate arguments against an allowlist."},
+	{ID: "code.js-shell", Control: "D-002", Title: "Shell command built from a string", Langs: jsLike, Re: regexp.MustCompile(`shell\s*:\s*true`),
 		Not: regexp.MustCompile(`\.exec\(|regex|RegExp|\bdb\.\w+\(|\.query\(`), Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-78",
 		Message: "child_process.exec or shell:true runs the command through a shell; interpolated values allow command injection.", Fix: "Use execFile/spawn with an argument array and shell:false; validate arguments against an allowlist."},
 	{ID: "code.py-shell", Control: "D-002", Title: "Shell command execution", Langs: py, Re: regexp.MustCompile(`shell\s*=\s*True|os\.system\s*\(|os\.popen\s*\(|commands\.getoutput\(`),
@@ -165,11 +168,11 @@ var codeRules = []lineRule{
 	{ID: "code.ruby-shell", Control: "D-002", Title: "Shell command with interpolation", Langs: langs("ruby"), Re: regexp.MustCompile("(`[^`]*#\\{|\\bsystem\\(\\s*\"[^\"]*#\\{|%x\\()"),
 		Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-78", Message: "Interpolated shell command.", Fix: "Use system with separate arguments (system(cmd, arg1, arg2))."},
 
-	{ID: "code.sql-concat", Control: "D-003", Title: "SQL built with string concatenation", Re: regexp.MustCompile(`(?i)['"\x60]\s*(select\s.+\sfrom|insert\s+into|update\s+\w+\s+set|delete\s+from)\b[^'"\x60]*['"\x60]\s*(\+|\.\s*\$|%\s*[\w(]|\.format\()`),
-		Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-89", Message: "Query text is concatenated with values; if a value is user controlled this is SQL injection.", Fix: "Use parameterized queries / prepared statements or the ORM query builder."},
 	{ID: "code.sql-template", Control: "D-003", Title: "SQL built with string interpolation", Re: regexp.MustCompile(`(?i)(\x60[^\x60]*\b(select\s[^\x60]*\sfrom|insert\s+into|update\s+\w+\s+set|delete\s+from)\b[^\x60]*\$\{|\bf['"][^'"]*\b(select\s.*\sfrom|insert\s+into|update\s+\w+\s+set|delete\s+from)\b[^'"]*\{)`),
 		Not: regexp.MustCompile(`(?i)\bsql(<[^\x60]*>)?\x60|Prisma\.sql|sql\.raw\(\s*\x60\s*\x60`), Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-89",
 		Message: "Query text is built with string interpolation.", Fix: "Use bound parameters (tagged sql templates, placeholders) instead of interpolation."},
+	{ID: "code.sql-concat", Control: "D-003", Title: "SQL built with string concatenation", Re: sqlConcatRe, SupersededBy: "code.sql-template",
+		Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-89", Message: "Query text is concatenated with values; if a value is user controlled this is SQL injection.", Fix: "Use parameterized queries / prepared statements or the ORM query builder."},
 	{ID: "code.sql-unsafe-raw", Control: "D-003", Title: "Unsafe raw query API", Re: regexp.MustCompile(`\$(queryRawUnsafe|executeRawUnsafe)\s*\(|\.raw\(\s*f['"]|sequelize\.query\(\s*\x60[^\x60]*\$\{`),
 		Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-89", Message: "Raw query API that does not parameterize input.", Fix: "Use $queryRaw with tagged templates or replacements/bind parameters."},
 
@@ -187,7 +190,7 @@ var codeRules = []lineRule{
 
 	{ID: "code.tls-verify-off", Control: "E-003", Title: "TLS certificate verification disabled", Re: regexp.MustCompile(`verify\s*=\s*False|InsecureSkipVerify\s*:\s*true|rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED['"]?\s*[\]=:,]\s*['"]?0|CURLOPT_SSL_VERIFY(PEER|HOST)\s*,\s*(false|0)|_create_unverified_context|ServerCertificateValidationCallback\s*=.*=>\s*true|ssl_verify\s*[:=]\s*false|VERIFY_NONE`),
 		Severity: model.SevHigh, Confidence: model.Confirmed, CWE: "CWE-295", Message: "Certificate verification is turned off, so any network attacker can impersonate the server.", Fix: "Remove the override; trust a specific CA bundle if a private CA is needed."},
-	{ID: "code.weak-hash-password", Control: "E-004", Title: "Weak hash used near password handling", Re: regexp.MustCompile(`(?i)(\b(md5|sha1)\b.*\b(password|passwd|pwd)\b|\b(password|passwd|pwd)\b.*\b(md5|sha1)\b)`),
+	{ID: "code.weak-hash-password", Control: "E-004", Title: "Weak hash used near password handling", Re: weakHashPasswordRe,
 		Severity: model.SevMedium, Confidence: model.Hypothesis, CWE: "CWE-327", Message: "MD5/SHA-1 appear in password handling; fast hashes are unsuitable for passwords.", Fix: "Use Argon2id, scrypt or bcrypt through a maintained library."},
 	{ID: "code.insecure-random", Control: "E-004", Title: "Non-cryptographic random for security value", Re: regexp.MustCompile(`(?i)((Math\.random\(\)|\brandom\.(random|randint|choice|choices|randrange)\(|\brand\.(Intn|Int63|Int)\(|\bmt_rand\(|\brand\(\)).*(token|secret|password|passwd|otp|nonce|salt|session|reset|apikey|api_key)|(token|secret|password|otp|nonce|salt|session|reset)\w*\s*[:=].*(Math\.random\(\)|\brandom\.(random|randint|choice|choices)\(|\bmt_rand\())`),
 		Severity: model.SevMedium, Confidence: model.Hypothesis, CWE: "CWE-338", Message: "A predictable PRNG appears to generate a security-sensitive value.", Fix: "Use crypto.randomBytes / crypto.getRandomValues, secrets.token_urlsafe, crypto/rand, random_bytes."},
@@ -199,16 +202,19 @@ var codeRules = []lineRule{
 	{ID: "code.cookie-flags-off", Control: "B-002", Title: "Session cookie without HttpOnly/Secure", Re: regexp.MustCompile(`(?i)(httpOnly\s*:\s*false|cookie.*\bsecure\s*:\s*false|SESSION_COOKIE_(SECURE|HTTPONLY)\s*=\s*False|CSRF_COOKIE_SECURE\s*=\s*False|HttpOnly\s*=\s*false|Secure\s*=\s*false.*[Cc]ookie)`),
 		Severity: model.SevMedium, Confidence: model.Confirmed, CWE: "CWE-1004", Message: "Cookie protection flag explicitly disabled.", Fix: "Set HttpOnly, Secure and SameSite=Lax/Strict for session cookies; gate Secure=false to local development only."},
 
-	{ID: "code.html-sink", Control: "H-001", Title: "Raw HTML sink", Re: regexp.MustCompile(`dangerouslySetInnerHTML|\.(inner|outer)HTML\s*=[^=]|document\.write(ln)?\s*\(|\bv-html\s*=|\|\s*safe\b|\bmark_safe\s*\(|\bhtml_safe\b|\{\{\{[^}]|<%-|bypassSecurityTrust\w+\(|\{!!\s`),
-		Not: regexp.MustCompile(`(?i)DOMPurify|sanitize|escape|innerHTML\s*=\s*['"\x60]{2}|innerHTML\s*=\s*['"]\s*['"]`), Severity: model.SevMedium, Confidence: model.Hypothesis, CWE: "CWE-79",
+	{ID: "code.html-sink", Control: "H-001", Title: "Raw HTML sink", Re: htmlSinkRe,
+		Not: htmlSinkNot, Post: htmlSinkDynamic, Severity: model.SevMedium, Confidence: model.Hypothesis, CWE: "CWE-79",
+		Message: "Content is inserted as raw HTML. If it can contain user data this is cross-site scripting.", Fix: "Render as text, or sanitize with a maintained sanitizer (DOMPurify) right at the sink."},
+	// Unescaped output tags of template engines exist only in template files.
+	{ID: "code.html-sink", Control: "H-001", Title: "Raw HTML sink", Langs: langs("template", "html", "php"), Re: regexp.MustCompile(`\|\s*safe\b|\{\{\{[^}]|<%-|\{!!\s`),
+		Not: htmlSinkNot, Severity: model.SevMedium, Confidence: model.Hypothesis, CWE: "CWE-79",
 		Message: "Content is inserted as raw HTML. If it can contain user data this is cross-site scripting.", Fix: "Render as text, or sanitize with a maintained sanitizer (DOMPurify) right at the sink."},
 
 	{ID: "code.secret-logged", Control: "O-002", Title: "Sensitive value written to logs", Re: regexp.MustCompile(`(?i)(console\.(log|info|debug|warn|error)|\blogger?\.(info|debug|warn|warning|error|trace)|\blog\.(Print\w*|Info\w*|Debug\w*|Warn\w*|Error\w*)|\bprint|\bputs|System\.out\.print\w*)\s*\(.*\b(password|passwd|secret|api_?key|access_?token|refresh_?token|authorization|private_?key)\b`),
-		Not: regexp.MustCompile(`(?i)redact|mask|\*\*\*|invalid|missing|required|incorrect|wrong|reset|changed|updated|expired`), Severity: model.SevLow, Confidence: model.Hypothesis, CWE: "CWE-532",
+		Prep: blankProse, Not: regexp.MustCompile(`(?i)redact|mask|\*\*\*|invalid|missing|required|incorrect|wrong|reset|changed|updated|expired`), Severity: model.SevLow, Confidence: model.Hypothesis, CWE: "CWE-532",
 		Message: "A credential-like value appears to be logged.", Fix: "Log identifiers and outcomes only; pass secrets through a redaction helper."},
 }
 
-var llmExecRe = regexp.MustCompile(`(?i)(\beval\s*\(|\bexec\s*\(|execSync\s*\(|subprocess\.\w+\s*\(|os\.system\s*\(|new\s+Function\s*\(|child_process).*\b(completion|response|output|message|content|choices|generated|llm|model|answer|result\.text)\b`)
 var webhookVerifyRe = regexp.MustCompile(`(?i)(signature|hmac|constructEvent|verifyWebhook|verify_webhook|timingSafeEqual|compare_digest|hmac\.Equal|svix|x-hub-signature|stripe-signature|webhooks\.verify|validateRequest|verifySignature)`)
 
 func (a codeAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
@@ -234,28 +240,43 @@ func (a codeAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 		if minified || strings.Contains(f.Path, ".min.") {
 			continue
 		}
+		text := strings.Join(f.Lines, "\n")
+		skipFile := map[int]bool{}
+		for k, r := range codeRules {
+			if r.SkipFile != nil && r.SkipFile(text) {
+				skipFile[k] = true
+			}
+		}
 		for i, l := range f.Lines {
 			if len(l) > 1000 || commentRe.MatchString(l) {
 				continue
 			}
-			for _, r := range codeRules {
+			emitted := map[string]bool{}
+			for k, r := range codeRules {
+				if skipFile[k] || emitted[r.ID] || (r.SupersededBy != "" && emitted[r.SupersededBy]) {
+					continue
+				}
 				if r.Langs != nil && !r.Langs[f.Lang] {
 					continue
 				}
-				if !r.Re.MatchString(l) || (r.Not != nil && r.Not.MatchString(l)) {
+				m := l
+				if r.Prep != nil {
+					m = r.Prep(l)
+				}
+				if !r.Re.MatchString(m) || (r.Not != nil && r.Not.MatchString(l)) || (r.Post != nil && !r.Post(l, text)) {
 					continue
 				}
+				emitted[r.ID] = true
 				res.Signals = append(res.Signals, sig(r, f, i+1, a.Name()))
 			}
-			if llmFiles[f.Path] && llmExecRe.MatchString(l) {
+			if llmFiles[f.Path] && llmOutputExec(l, text) {
 				res.Signals = append(res.Signals, sig(lineRule{ID: "code.llm-output-exec", Control: "P-001", Title: "Model output may reach code or shell execution",
 					Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-94",
-					Message: "An execution sink appears on the same line as model output. Prompt injection could turn into code execution.",
+					Message: "Model output appears to be passed to a code or shell execution sink. Prompt injection could turn into code execution.",
 					Fix:     "Treat model output as untrusted data: parse into a typed structure, validate against an allowlist, require human approval for side effects."}, f, i+1, a.Name()))
 			}
 		}
 		// H-002: wildcard/reflected CORS together with credentials in the same file.
-		text := strings.Join(f.Lines, "\n")
 		if credRe.MatchString(text) {
 			for i, l := range f.Lines {
 				if corsAnyRe.MatchString(l) {
