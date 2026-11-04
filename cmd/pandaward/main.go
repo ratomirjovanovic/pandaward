@@ -664,6 +664,7 @@ func cmdFindings(args []string, w io.Writer) error {
 			return err
 		}
 		fmt.Fprintf(w, "%s is now %s / %s (reviewer %s)\n", f.ID, f.Status, f.Confidence, f.Reviewer)
+		rescanHint(e, w, []model.Finding{*f})
 		feedbackHint(e, w)
 		return nil
 	case "apply":
@@ -682,10 +683,19 @@ func cmdFindings(args []string, w io.Writer) error {
 			fmt.Fprintf(w, "%s is now %s / %s (reviewer %s)\n", f.ID, f.Status, f.Confidence, f.Reviewer)
 		}
 		fmt.Fprintf(w, "Applied %d decision(s).\n", len(out))
+		rescanHint(e, w, out)
 		feedbackHint(e, w)
 		return nil
 	}
 	return exitErr{2, "findings subcommands: list, show, add, apply, false-positive, accept-risk, reopen, confirm, remediated"}
+}
+
+// rescanHint names the controls a rescan would decide again after findings
+// were dismissed as false positives. Triage itself never changes a control.
+func rescanHint(e *engine.Engine, w io.Writer, fs []model.Finding) {
+	if line, err := e.RescanHint(fs); err == nil && line != "" {
+		fmt.Fprintln(w, line)
+	}
 }
 
 func cmdRoutes(args []string, w io.Writer) error {

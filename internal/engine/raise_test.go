@@ -37,7 +37,7 @@ func TestForeignSignalsRaiseButNeverLower(t *testing.T) {
 	if sigs[2].ControlID != "D-006" || sigs[3].ControlID != "D-006" {
 		t.Fatalf("signals for N/A or blocked controls must move to D-006: %s %s", sigs[2].ControlID, sigs[3].ControlID)
 	}
-	raise(results, foreign)
+	raise(results, sigs, foreign, nil)
 	if results["D-001"].Status != model.StatusSuspected {
 		t.Errorf("PASS must be raised to SUSPECTED, got %s", results["D-001"].Status)
 	}
