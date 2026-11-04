@@ -69,7 +69,7 @@
       <tr><td><code>CG1</code></td><td>routes take object IDs</td><td>a user reads another tenant's object</td></tr>
       <tr><td><code>DG1</code></td><td>webhook routes exist</td><td>unsigned callback drives privileged state</td></tr>
       <tr><td><code>FG1</code></td><td>payments and webhooks</td><td>replay moves a payment into an invalid state</td></tr>
-      <tr><td><code>IN1</code></td><td>third-party CI actions</td><td>unpinned action changes code in your pipeline</td></tr>
+      <tr><td><code>IN1</code></td><td>third-party CI actions</td><td>unpinned action, floating tool install or tag-only image changes code in your pipeline</td></tr>
       <tr><td><code>DP1</code></td><td>LLM SDK usage</td><td>retrieved text triggers a tool action</td></tr>
     </table></div>
   </section>
@@ -91,7 +91,7 @@
 # restart Claude Code, then in your project
 # ask Claude to check its security, or:
 /pandaward:start</pre>
-        <p>Claude runs the whole assessment, asks one question at the end and applies what you choose, retesting after every fix. The scan shows how far it got, with a percentage and the time left, even on the first run. While the specialist reviewers work, you see what each one is reading and recording, live in the subagent panel and in the chat. When a rule gets something wrong, or a reviewer finds an issue the rules missed, it offers to report it to the project, after asking you once: the report has the rule, counts and file types, never your code or paths.</p>
+        <p>Claude runs the whole assessment, asks one question at the end and applies what you choose, retesting after every fix. The scan shows how far it got, with a percentage and the time left, even on the first run. While the specialist reviewers work, you see what each one is reading and recording, live in the subagent panel and in the chat. When a rule gets something wrong, or a reviewer finds an issue the rules missed, it offers to report it to the project, after asking you once: the report has the rule, counts and file types, never your code or paths. Low-confidence hints, such as placeholder-shaped keys or audit-level rules from registry packs, stay listed for review instead of raising a control.</p>
       </div>
       <div>
         <h3>CLI</h3>
