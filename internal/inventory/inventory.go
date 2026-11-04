@@ -472,6 +472,55 @@ func isWebhookPath(p string) bool {
 	return webhookPathRe.MatchString(p) && !signInSegRe.MatchString(p)
 }
 
+// oauthQueryRe matches a read of the OAuth "code" or "state" query
+// parameter: searchParams.get("code"), req.query.state, request.args["code"],
+// r.URL.Query().Get("state"), c.Query("code") and similar.
+var oauthQueryRe = regexp.MustCompile(`(?:(?i:searchParams|query|args|GET)(?:\(\))?\s*(?:\.\s*(?:get|Get|getAll)\s*\(\s*|\[\s*)['"](code|state)['"]|(?i:query|args|GET)\s*\.\s*(code|state)\b|\b(?:Query|QueryParam|query_param|query_params)\s*\(\s*['"](code|state)['"])`)
+
+// oauthDestructureRe matches `const { code, state } = req.query` and the
+// reverse order.
+var oauthDestructureRe = regexp.MustCompile(`\{[^{}]*\b(?:code\b[^{}]*\bstate|state\b[^{}]*\bcode)\b[^{}]*\}\s*=\s*(?:await\s+)?[\w.]*(?i:query|searchParams|args)\b`)
+
+// readsOAuthCodeAndState reports whether a handler file reads both the
+// "code" and the "state" query parameters: the shape of an OAuth
+// authorization-code redirect handler, which a browser reaches with GET.
+func readsOAuthCodeAndState(f *File) bool {
+	if f == nil {
+		return false
+	}
+	text := strings.Join(f.Lines, "\n")
+	if oauthDestructureRe.MatchString(text) {
+		return true
+	}
+	seen := map[string]bool{}
+	for _, m := range oauthQueryRe.FindAllStringSubmatch(text, -1) {
+		for _, g := range m[1:] {
+			if g != "" {
+				seen[g] = true
+			}
+		}
+	}
+	return seen["code"] && seen["state"]
+}
+
+// oauthRedirectRoute reports whether a route that matched isWebhookPath only
+// through "callback" is an OAuth browser redirect instead: every method the
+// file defines for the path is GET, and the file reads both "code" and
+// "state" from the query. Explicit webhook words never qualify, and payment
+// providers that call back with GET but without code and state stay
+// webhooks.
+func oauthRedirectRoute(p string, methods map[string]bool, f *File) bool {
+	if hookPathRe.MatchString(p) || len(methods) == 0 {
+		return false
+	}
+	for m := range methods {
+		if m != "GET" {
+			return false
+		}
+	}
+	return readsOAuthCodeAndState(f)
+}
+
 func (inv *Inventory) feature(name, prov string) {
 	for _, p := range inv.Features[name] {
 		if p == prov {
@@ -504,6 +553,7 @@ func (inv *Inventory) detect() {
 	nestGlobal := map[string]string{} // service root -> NestJS global prefix
 	manifests := map[string]string{}  // dir -> kind
 	locks := map[string]bool{}
+	workspaces := map[string][]string{} // dir -> declared JS workspace patterns
 	for _, f := range inv.Files {
 		base := path.Base(f.Path)
 		lb := strings.ToLower(base)
@@ -516,11 +566,14 @@ func (inv *Inventory) detect() {
 		switch {
 		case lb == "package.json":
 			manifests[dir+"|npm"] = f.Path
+			workspaces[dir] = append(workspaces[dir], packageJSONWorkspaces(f.Lines)...)
 			inv.feature("packages", f.Path)
 			domains["I"] = true
 			if bytes.Contains([]byte(strings.Join(f.Lines, "\n")), []byte(`"next"`)) || containsAny(f.Lines, `"express"`, `"fastify"`, `"koa"`, `"@nestjs/core"`, `"hono"`, `"react"`, `"vue"`, `"svelte"`, `"nuxt"`, `"@angular/core"`) {
 				inv.feature("web", f.Path)
 			}
+		case lb == "pnpm-workspace.yaml":
+			workspaces[dir] = append(workspaces[dir], pnpmWorkspaces(f.Lines)...)
 		case lb == "package-lock.json" || lb == "npm-shrinkwrap.json" || lb == "yarn.lock" || lb == "pnpm-lock.yaml" || lb == "bun.lock" || lb == "bun.lockb":
 			locks[dir+"|npm"] = true
 			domains["I"] = true
@@ -673,7 +726,7 @@ func (inv *Inventory) detect() {
 	}
 	inv.addEntrypoints(applyMounts(entries, mounts), roots, nestGlobal)
 	for k, p := range manifests {
-		if !locks[k] {
+		if !locks[k] && !(strings.HasSuffix(k, "|npm") && lockedByWorkspace(path.Dir(p), locks, workspaces)) {
 			inv.feature("missing_lockfile", p)
 		}
 	}
