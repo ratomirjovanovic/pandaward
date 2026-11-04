@@ -108,6 +108,14 @@ func IsToolLocalSettings(rel string) bool {
 	return localSettingsDirs[strings.ToLower(path.Base(strings.TrimSuffix(dir, "/")))]
 }
 
+// IsSQLMigration reports whether the project-relative path p is a SQL
+// migration: a .sql file directly inside a directory named migrations, as
+// in supabase/migrations/ or db/migrations/.
+func IsSQLMigration(p string) bool {
+	p = filepath.ToSlash(p)
+	return strings.EqualFold(path.Ext(p), ".sql") && path.Base(path.Dir(p)) == "migrations"
+}
+
 // Walk builds the inventory.
 func Walk(root string, opt Options) (*Inventory, error) {
 	absRoot, err := filepath.Abs(root)
@@ -681,6 +689,10 @@ func (inv *Inventory) detect() {
 		case lb == ".mcp.json" || lb == "mcp.json" || lb == "claude_desktop_config.json" || (strings.Contains(f.Path, ".cursor/") && lb == "mcp.json"):
 			inv.feature("mcp_config", f.Path)
 			domains["P"] = true
+		}
+		if IsSQLMigration(f.Path) {
+			inv.feature("sql_migrations", f.Path)
+			domains["C"] = true
 		}
 		if f.Lang == "yaml" && strings.Contains(f.Path, ".github/workflows/") {
 			inv.feature("github_workflows", f.Path)

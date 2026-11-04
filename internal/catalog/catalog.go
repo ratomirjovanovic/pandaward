@@ -7,7 +7,7 @@
 package catalog
 
 // Version of the built-in catalog. Bump on any semantic change.
-const Version = "2026.10-m5"
+const Version = "2026.11-m1"
 
 // Domain is one of the A-R work partitions.
 type Domain struct {
@@ -83,6 +83,7 @@ var Controls = []Control{
 	{ID: "C-001", Domain: "C", Title: "Object-level authorization enforced on parameterized routes (BOLA)", Method: MethodRuntime, Adapter: "authz", Requires: "param_routes", Profile: "staging-active", Refs: []string{"API1:2023", "CWE-639"}},
 	{ID: "C-002", Domain: "C", Title: "Function-level authorization enforced on privileged routes", Method: MethodRuntime, Adapter: "authz", Requires: "admin_routes", Profile: "staging-active", Refs: []string{"API5:2023", "CWE-285"}},
 	{ID: "C-003", Domain: "C", Title: "Authorization checks reviewed for every route handler", Method: MethodManual, Requires: "web", Refs: []string{"CWE-862"}},
+	{ID: "C-004", Domain: "C", Title: "Row-level security policies do not let users write privileged columns", Method: MethodStatic, Adapter: "builtin-code", Requires: "sql_migrations", Refs: []string{"CWE-269"}},
 
 	{ID: "D-001", Domain: "D", Title: "No dynamic code evaluation (eval/new Function/exec of strings)", Method: MethodStatic, Adapter: "builtin-code", Requires: "code", Refs: []string{"CWE-95"}},
 	{ID: "D-002", Domain: "D", Title: "No shell command construction through a shell interpreter", Method: MethodStatic, Adapter: "builtin-code", Requires: "code", Refs: []string{"CWE-78"}},
@@ -182,7 +183,7 @@ var Edges = []EdgeRule{
 	{ID: "AG1", Title: "Service inventory -> API coverage", Scenario: "Undocumented endpoints bypass contract tests", Needs: []string{"openapi", "routes"}, Tests: []string{"A-003", "G-002"}},
 	{ID: "AJ1", Title: "Cloud-deployed asset -> exposure", Scenario: "Private API exposed by ingress or policy drift", Needs: []string{"routes", "deploy_config"}, Tests: []string{"J-001", "J-003", "J-004"}},
 	{ID: "BC1", Title: "Authenticated identity -> authorization", Scenario: "Valid user can access another tenant's object", Needs: []string{"auth_routes", "param_routes"}, Tests: []string{"C-001"}},
-	{ID: "CG1", Title: "Object access -> API response", Scenario: "Mass assignment or property-level data access", Needs: []string{"param_routes"}, Tests: []string{"C-001", "G-002"}},
+	{ID: "CG1", Title: "Object access -> API response", Scenario: "Mass assignment or property-level data access", Needs: []string{"param_routes"}, Tests: []string{"C-001", "C-004", "G-002"}},
 	{ID: "DG1", Title: "Webhook input -> API trust", Scenario: "Unsigned callback payload drives privileged state", Needs: []string{"webhooks"}, Tests: []string{"G-001"}},
 	{ID: "DH1", Title: "HTML output -> browser", Scenario: "Unescaped backend content reaches the DOM", Needs: []string{"html_sinks"}, Tests: []string{"H-001"}},
 	{ID: "DP1", Title: "Prompt content -> tools", Scenario: "Untrusted retrieved text triggers a tool action", Needs: []string{"llm"}, Tests: []string{"P-001", "P-003"}},

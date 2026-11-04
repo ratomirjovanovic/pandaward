@@ -305,6 +305,25 @@ func TestIsToolLocalSettings(t *testing.T) {
 	}
 }
 
+func TestSQLMigrationsFeature(t *testing.T) {
+	for p, want := range map[string]bool{
+		"supabase/migrations/0001_init.sql": true,
+		"db/migrations/2024_users.SQL":      true,
+		"migrations/1.sql":                  true,
+		"db/schema.sql":                     false,
+		"supabase/migrations/seed/1.sql":    false,
+		"supabase/migrations/readme.md":     false,
+	} {
+		if got := inventory.IsSQLMigration(p); got != want {
+			t.Errorf("IsSQLMigration(%q) = %v, want %v", p, got, want)
+		}
+	}
+	inv := walk(t, map[string]string{"supabase/migrations/0001.sql": "create table t (id int);\n", "db/schema.sql": "select 1;\n"}, inventory.Options{MaxFileBytes: 1024})
+	if got := inv.Features["sql_migrations"]; len(got) != 1 || got[0] != "supabase/migrations/0001.sql" {
+		t.Errorf("sql_migrations = %v", got)
+	}
+}
+
 // Tool-local settings stay readable: the secret content scan must see them.
 func TestWalkReadsToolLocalSettings(t *testing.T) {
 	inv := walk(t, map[string]string{".claude/settings.local.json": "{}\n"}, inventory.Options{MaxFileBytes: 1024})

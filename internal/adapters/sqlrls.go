@@ -11,7 +11,7 @@ import (
 	"github.com/ratomirjovanovic/pandaward/internal/model"
 )
 
-// ---- Postgres/Supabase row-level security: C-002 ----
+// ---- Postgres/Supabase row-level security: C-004 ----
 //
 // An UPDATE (or ALL) policy whose USING clause matches the caller's own row
 // by auth.uid() lets a user update every column of that row. When the table
@@ -475,12 +475,6 @@ func findGuards(text string, g rlsGuards) {
 	}
 }
 
-// isMigration reports whether a file is a SQL migration: a .sql file
-// directly inside a directory named migrations.
-func isMigration(f *inventory.File) bool {
-	return f.Lang == "sql" && path.Base(path.Dir(f.Path)) == "migrations"
-}
-
 // rlsSignals runs the check over the inventory's SQL files.
 func rlsSignals(inv *inventory.Inventory, collector string) []model.Signal {
 	guards := rlsGuards{tables: map[string]bool{}, schemas: map[string]bool{}}
@@ -494,7 +488,7 @@ func rlsSignals(inv *inventory.Inventory, collector string) []model.Signal {
 			all = append(all, s.text)
 		}
 		findGuards(strings.Join(all, ";\n"), guards)
-		if isMigration(f) && !IsTestPath(f.Path) {
+		if inventory.IsSQLMigration(f.Path) && !IsTestPath(f.Path) {
 			d := path.Dir(f.Path)
 			dirs[d] = append(dirs[d], f)
 		}
@@ -530,7 +524,7 @@ func rlsSignals(inv *inventory.Inventory, collector string) []model.Signal {
 			if len(priv) == 0 || p.line < 1 || p.line > len(p.file.Lines) {
 				continue
 			}
-			s := sig(lineRule{ID: "sql.rls-update-privileged-column", Control: "C-002", Title: "Row-level security lets users update a privileged column of their own row",
+			s := sig(lineRule{ID: "sql.rls-update-privileged-column", Control: "C-004", Title: "Row-level security lets users update a privileged column of their own row",
 				Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-269",
 				Message: fmt.Sprintf("Policy %q lets a user update their own row of %s (matched by auth.uid()), and the table has the privileged column(s) %s. No column-limited GRANT UPDATE, REVOKE UPDATE or BEFORE UPDATE trigger on %s was found, so a user may be able to change %s on their own row and raise their privileges.",
 					p.name, p.table, strings.Join(priv, ", "), bareName(p.table), priv[0]),
