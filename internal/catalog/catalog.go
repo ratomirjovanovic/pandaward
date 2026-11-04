@@ -231,7 +231,7 @@ var TestProfiles = []TestProfile{
 		When:   map[string]string{"H-003": "approved origins that answer without errors"}},
 	{Name: "staging-active",
 		Covers: "Permission checks with test identities (who may read which object or privileged route, and whether a revoked credential is still accepted), then a ZAP spider and passive scan, and the ZAP active scan when the manifest allows it.",
-		Needs:  "scope.yaml approved with `pandaward scope approve`; identities and authorization_checks in it, with each credential in the environment variable its value_env names; ZAP installed (Java 17+) for M-001 and D-005. Refused for environment: production.",
+		Needs:  "scope.yaml approved with `pandaward scope approve`; identities and authorization_checks in it, with each credential in the environment variable its value_env names or returned by the identity_provisioning command; ZAP installed (Java 17+) for M-001 and D-005. Refused for environment: production.",
 		Local:  "yes, with environment: staging or local; loopback and private addresses need allow_private_addresses: true. Use this profile for permission checks against an app running on your machine",
 		When: map[string]string{
 			"B-004": "an identity marked revoked: true",

@@ -41,13 +41,20 @@ type authzCred struct {
 	value  string
 }
 
-// credentials reads every identity's credential from the environment
-// before any request is sent; a missing one stops the whole run.
-func credentials(m *scope.Manifest) (map[string]authzCred, error) {
+// credentials reads every identity's credential before any request is
+// sent: from the provisioning output when it has one, otherwise from the
+// environment. A missing one stops the whole run.
+func credentials(m *scope.Manifest, provided map[string]string) (map[string]authzCred, error) {
 	out := map[string]authzCred{}
 	for _, id := range m.Identities {
-		v := os.Getenv(id.ValueEnv)
+		v, ok := provided[id.ValueEnv]
+		if !ok {
+			v = os.Getenv(id.ValueEnv)
+		}
 		if strings.TrimSpace(v) == "" {
+			if m.IdentityProvisioning != nil {
+				return nil, fmt.Errorf("identity %s: identity provisioning did not return %s and the environment variable is empty", id.Name, id.ValueEnv)
+			}
 			return nil, fmt.Errorf("identity %s: environment variable %s is empty; set it to the full %s header value before the test", id.Name, id.ValueEnv, id.Header)
 		}
 		if strings.ContainsAny(v, "\r\n") {

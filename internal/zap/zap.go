@@ -70,7 +70,33 @@ func Locate(configured string) (string, error) {
 			return p, nil
 		}
 	}
-	return "", errors.New("ZAP is not installed (optional; install it from zaproxy.org and make sure Java 17+ is available, or set runtime.zap_path in .pandaward/config.yaml)")
+	return "", errors.New(MissingReason(runtime.GOOS))
+}
+
+// InstallCommand is the official package install command for ZAP on an
+// OS, or "" when there is none.
+func InstallCommand(goos string) string {
+	switch goos {
+	case "windows":
+		return "winget install --id ZAP.ZAP -e"
+	case "darwin":
+		return "brew install --cask zap"
+	case "linux":
+		return "sudo snap install zaproxy --classic"
+	}
+	return ""
+}
+
+// MissingReason is the BLOCKED reason when ZAP cannot be found: what is
+// missing, how to install it on this OS and what it would decide.
+func MissingReason(goos string) string {
+	how := "install it from https://www.zaproxy.org/download/"
+	if c := InstallCommand(goos); c != "" {
+		how = "install it with `" + c + "` (or from https://www.zaproxy.org/download/)"
+	}
+	return "ZAP is not installed: " + how + "; ZAP needs Java 17+. " +
+		"Or set runtime.zap_path in .pandaward/config.yaml to an existing launcher. " +
+		"ZAP decides M-001 (spider and passive scan) and, with zap.active_scan: true in the scope manifest, D-005."
 }
 
 var jarRe = regexp.MustCompile(`^zap-(\d+\.\d+\.\d+)\.jar$`)

@@ -272,6 +272,9 @@ identities[].name string
 identities[].revoked bool
 identities[].tenant string
 identities[].value_env string
+identity_provisioning.cleanup[] string
+identity_provisioning.provision[] string
+identity_provisioning.timeout_seconds int
 limits.max_requests_total int
 limits.requests_per_second float64
 limits.timeout_seconds int
