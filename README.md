@@ -118,7 +118,7 @@ scoop bucket add pandaward https://github.com/ratomirjovanovic/pandaward; scoop 
 Or download a binary from the [releases page](https://github.com/ratomirjovanovic/pandaward/releases) (Linux and macOS on amd64 and arm64, Windows on amd64). For example on Linux:
 
 ```sh
-v=v0.2.9
+v=v0.2.10
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/pandaward-linux-amd64
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/SHA256SUMS
 sha256sum --ignore-missing -c SHA256SUMS
@@ -128,7 +128,7 @@ chmod +x pandaward-linux-amd64 && sudo mv pandaward-linux-amd64 /usr/local/bin/p
 On Windows (PowerShell), save `pandaward-windows-amd64.exe` as `pandaward.exe` in a folder on your `PATH`:
 
 ```powershell
-Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.9/pandaward-windows-amd64.exe -OutFile pandaward.exe
+Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.10/pandaward-windows-amd64.exe -OutFile pandaward.exe
 (Get-FileHash pandaward.exe).Hash   # compare with the line in SHA256SUMS
 ```
 
@@ -168,7 +168,7 @@ flowchart LR
 
 1. **Inventory** walks the repository read-only and records files, routes, manifests, workflows, IaC, mobile manifests and AI/MCP usage.
 2. **Plan** maps the control catalog (domains A to R) onto what was found. Controls without matching assets become `NOT_APPLICABLE` with a reason you can review.
-3. **Adapters** run. Built-in checks are offline and always available; gitleaks, semgrep, osv-scanner, trivy and apktool are used only if you installed them. apktool decodes `.apk` files found in the project (resources only, never the app's code) so the manifest checks also run on what you ship (K-005). If you run [MobSF](https://github.com/MobSF/Mobile-Security-Framework-MobSF) yourself on this machine, set `scan.mobsf_url` (for example `http://127.0.0.1:8000`) and export its REST API key as `MOBSF_API_KEY`; PandaWard uploads the `.apk` and `.ipa` files it finds to that server, runs the static scan and reports MobSF's high and warning items as hypotheses under K-006 (APK) and L-005 (IPA). Code findings that MobSF reports only in bundled library code, outside the app's own package namespace, are listed for review instead. Only loopback addresses are accepted, proxies and redirects are ignored, and the key never appears in evidence, logs or reports. The adapter is tested against MobSF 4.5.3. When semgrep is installed it runs PandaWard's bundled offline rules (see [`rules/README.md`](rules/README.md)) plus any rules you configure. SARIF 2.1.0 files from analyzers you ran yourself (CodeQL or other SAST tools) are imported from `.pandaward/sarif/*.sarif` and any paths listed in `scan.sarif_files`; PandaWard never runs those tools. Imported results are hypotheses under control R-002, with snippets read and redacted from your files rather than taken from the SARIF. The directories in `inventory.exclude` (build output such as `.next/` and `dist/`, `node_modules/` and the like) apply to every adapter: results a scanner reports there are dropped, and the adapter line in the summary says how many.
+3. **Adapters** run. Built-in checks are offline and always available; gitleaks, semgrep, osv-scanner, trivy and apktool are used only if you installed them. A gitleaks match whose value is shaped like a placeholder (a run of 8 or more sequential or repeated characters, a word such as dummy, example or changeme, a value starting with `test_`, a JWT with a short signature or dummy claims, or the fallback after `secrets.NAME ||` in a workflow) is kept but listed as info for review instead of counting against E-005; the value is judged in memory and never stored, a `service_role` JWT is never treated as a placeholder, and the adapter line says how many were listed. apktool decodes `.apk` files found in the project (resources only, never the app's code) so the manifest checks also run on what you ship (K-005). If you run [MobSF](https://github.com/MobSF/Mobile-Security-Framework-MobSF) yourself on this machine, set `scan.mobsf_url` (for example `http://127.0.0.1:8000`) and export its REST API key as `MOBSF_API_KEY`; PandaWard uploads the `.apk` and `.ipa` files it finds to that server, runs the static scan and reports MobSF's high and warning items as hypotheses under K-006 (APK) and L-005 (IPA). Code findings that MobSF reports only in bundled library code, outside the app's own package namespace, are listed for review instead. Only loopback addresses are accepted, proxies and redirects are ignored, and the key never appears in evidence, logs or reports. The adapter is tested against MobSF 4.5.3. When semgrep is installed it runs PandaWard's bundled offline rules (see [`rules/README.md`](rules/README.md)) plus any rules you configure. SARIF 2.1.0 files from analyzers you ran yourself (CodeQL or other SAST tools) are imported from `.pandaward/sarif/*.sarif` and any paths listed in `scan.sarif_files`; PandaWard never runs those tools. Imported results are hypotheses under control R-002, with snippets read and redacted from your files rather than taken from the SARIF. The directories in `inventory.exclude` (build output such as `.next/` and `dist/`, `node_modules/` and the like) apply to every adapter: results a scanner reports there are dropped, and the adapter line in the summary says how many.
 4. **Findings** are redacted, fingerprinted and linked to evidence. Repeated runs update their lifecycle: `OPEN`, `REMEDIATED`, `REOPENED`, `FALSE_POSITIVE`, `RISK_ACCEPTED`. Identical hits in one file are told apart by position, so fixing one of them remediates that one; a finding whose file was moved or renamed keeps its ID and status and is reported as moved, never as fixed.
 5. **Edges** between domains are created only from shared assets and get their status from the linked controls.
 6. **Reports** show confirmed findings, suspected signals, coverage by domain, every undecided control and the evidence index.
@@ -183,16 +183,16 @@ While the specialist reviewers run, you can see what each one is doing. Their ro
 |---|---|---|
 | A Inventory and architecture | entrypoints with file and line (`pandaward routes`): HTTP routes for Express, NestJS, Next.js, Flask, FastAPI, Django, Go, Spring, Laravel, Rails, ASP.NET with router prefixes and mounts resolved; GraphQL schema operations; gRPC services; queue consumers and cron jobs; services in monorepos; OpenAPI drift | threat model |
 | B Authentication | JWT `none` or unverified decode, cookie flags | revoked credentials refused (`staging-active`); login, reset and MFA flows |
-| C Authorization | | object and function level authorization with test identities (`staging-active`), route review (manual-assisted) |
+| C Authorization | Supabase/Postgres RLS update policies that let users change privileged columns of their own row (from SQL migrations) | object and function level authorization with test identities (`staging-active`), route review (manual-assisted) |
 | D Injection | eval, shell, SQL concatenation, unsafe deserialization | ZAP active scan (`staging-active`, opt-in) |
-| E Secrets and crypto | 16 high-specificity secret formats, tracked `.env` and key files, disabled TLS verification, weak hash or random | |
+| E Secrets and crypto | 16 high-specificity secret formats, tracked `.env` and key files, tracked tool-local settings such as `.claude/settings.local.json`, disabled TLS verification, weak hash or random | |
 | F Business logic | | invariants, idempotency, races (manual-assisted) |
 | G APIs and webhooks | webhook signature verification presence | contract vs runtime |
-| H Web | raw HTML sinks, CORS wildcard with credentials | security headers (`production-observe`) |
+| H Web | raw HTML sinks, CORS wildcard with credentials, CSP allowing `'unsafe-inline'` or `'unsafe-eval'` scripts in `vercel.json`, `netlify.toml`, `_headers` and literal Next.js `headers()` values | security headers and weak CSP (`production-observe`) |
 | I Supply chain | missing lockfiles, npm install scripts, unpinned Python requirements | advisories via osv-scanner |
 | J Infrastructure | Dockerfile root and unpinned base, privileged containers, public storage and admin ports in Terraform | trivy |
 | K, L Mobile | Android manifest flags and exported components, credentials in SharedPreferences, world-readable storage; iOS ATS, `get-task-allow` in release entitlements, Keychain accessibility and credentials in UserDefaults | built APKs via apktool; built APKs and IPAs via a local MobSF server; plain credentials in app storage on an emulator or simulator (`local-runtime`) |
-| N CI/CD | unpinned actions, script injection, `pull_request_target` checkout, token permissions | |
+| N CI/CD | unpinned actions, container images without a digest, floating global tool installs in privileged jobs, script injection, `pull_request_target` checkout, token permissions | |
 | O Observability | credentials in log calls | alerting review |
 | P AI and MCP | model output reaching exec sinks, MCP server pinning and inline credentials | prompt-injection tests |
 | R Assurance | evidence integrity, imported SARIF results | |
@@ -320,7 +320,7 @@ With [pre-commit](https://pre-commit.com), add this to `.pre-commit-config.yaml`
 ```yaml
 repos:
   - repo: https://github.com/ratomirjovanovic/pandaward
-    rev: v0.2.9
+    rev: v0.2.10
     hooks:
       - id: pandaward-system   # uses the pandaward on your PATH; use id: pandaward to build it with Go 1.26+
 ```
