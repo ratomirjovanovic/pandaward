@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ratomirjovanovic/pandaward/internal/csp"
 	"github.com/ratomirjovanovic/pandaward/internal/evidence"
 	"github.com/ratomirjovanovic/pandaward/internal/model"
 	"github.com/ratomirjovanovic/pandaward/internal/redact"
@@ -227,14 +228,18 @@ func headerSignals(u *url.URL, resp *http.Response) []model.Signal {
 	if u.Scheme == "https" && h.Get("Strict-Transport-Security") == "" {
 		add("missing-hsts", "Missing Strict-Transport-Security", model.SevMedium, "CWE-319", "HTTPS response without HSTS; first visits can be downgraded.", "Send Strict-Transport-Security: max-age=31536000; includeSubDomains.")
 	}
-	csp := h.Get("Content-Security-Policy")
-	if csp == "" {
+	cspValue := h.Get("Content-Security-Policy")
+	if cspValue == "" {
 		add("missing-csp", "Missing Content-Security-Policy", model.SevMedium, "CWE-693", "No CSP limits script sources, so any XSS has full effect.", "Define a CSP (start with default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none').")
+	} else if w, weak := csp.Check(strings.Join(h.Values("Content-Security-Policy"), ",")); weak {
+		// Only the enforced header counts; Content-Security-Policy-Report-Only
+		// blocks nothing and is ignored either way.
+		add("weak-csp", "Content-Security-Policy allows "+w.Keyword+" scripts", model.SevMedium, "CWE-693", w.Message(), w.Fix())
 	}
 	if !strings.EqualFold(h.Get("X-Content-Type-Options"), "nosniff") {
 		add("missing-nosniff", "Missing X-Content-Type-Options: nosniff", model.SevLow, "CWE-693", "Browsers may MIME-sniff responses.", "Send X-Content-Type-Options: nosniff.")
 	}
-	if h.Get("X-Frame-Options") == "" && !strings.Contains(strings.ToLower(csp), "frame-ancestors") {
+	if h.Get("X-Frame-Options") == "" && !strings.Contains(strings.ToLower(cspValue), "frame-ancestors") {
 		add("missing-frame-protection", "No clickjacking protection", model.SevLow, "CWE-1021", "Neither X-Frame-Options nor CSP frame-ancestors is set.", "Send CSP frame-ancestors 'none' (or 'self').")
 	}
 	if h.Get("Referrer-Policy") == "" {

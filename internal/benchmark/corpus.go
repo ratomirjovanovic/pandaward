@@ -140,6 +140,9 @@ func Corpus() []Case {
 	add(pair("code.webhook-no-signature", "builtin-code",
 		map[string]string{"src/app.js": "app.post('/webhooks/stripe', (req, res) => { pay(req.body); });\n"},
 		map[string]string{"src/app.js": "app.post('/webhooks/stripe', (req, res) => { stripe.webhooks.constructEvent(req.body, sig, key); });\n"}))
+	add(pair("code.weak-csp", "builtin-code",
+		map[string]string{"vercel.json": `{"headers":[{"source":"/(.*)","headers":[{"key":"Content-Security-Policy","value":"default-src 'self'; script-src 'self' 'unsafe-inline'"}]}]}`},
+		map[string]string{"vercel.json": `{"headers":[{"source":"/(.*)","headers":[{"key":"Content-Security-Policy","value":"default-src 'self'; script-src 'self' 'nonce-r4nd0m' 'unsafe-inline' 'strict-dynamic'; style-src 'self' 'unsafe-inline'"}]}]}`}))
 	add(pair("inventory.undeclared-route", "builtin-inventory",
 		map[string]string{"package.json": `{"dependencies":{"express":"4"}}`, "openapi.yaml": "openapi: 3.0.0\npaths:\n  /a: {}\n", "src/app.js": "app.get('/a', h);\napp.get('/b', h);\n"},
 		map[string]string{"package.json": `{"dependencies":{"express":"4"}}`, "openapi.yaml": "openapi: 3.0.0\npaths:\n  /a: {}\n  /b: {}\n", "src/app.js": "app.get('/a', h);\napp.get('/b', h);\n"}))

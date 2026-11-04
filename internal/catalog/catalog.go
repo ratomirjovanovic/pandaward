@@ -7,7 +7,7 @@
 package catalog
 
 // Version of the built-in catalog. Bump on any semantic change.
-const Version = "2026.10-m5"
+const Version = "2026.11-m1"
 
 // Domain is one of the A-R work partitions.
 type Domain struct {
@@ -106,6 +106,7 @@ var Controls = []Control{
 	{ID: "H-001", Domain: "H", Title: "No raw HTML injection sinks (innerHTML, dangerouslySetInnerHTML, v-html, |safe)", Method: MethodStatic, Adapter: "builtin-code", Requires: "code", Refs: []string{"CWE-79"}},
 	{ID: "H-002", Domain: "H", Title: "CORS is not configured as wildcard together with credentials", Method: MethodStatic, Adapter: "builtin-code", Requires: "web", Refs: []string{"CWE-942"}},
 	{ID: "H-003", Domain: "H", Title: "Security response headers present on approved deployed target", Method: MethodRuntime, Adapter: "observe-headers", Requires: "any", Profile: "production-observe", Refs: []string{"CWE-693"}},
+	{ID: "H-004", Domain: "H", Title: "Content-Security-Policy declared in deploy or framework header config does not allow unsafe inline or eval script", Method: MethodStatic, Adapter: "builtin-code", Requires: "csp_config", Refs: []string{"CWE-693"}},
 
 	{ID: "I-001", Domain: "I", Title: "Every package manifest has a committed lockfile", Method: MethodStatic, Adapter: "builtin-supply", Requires: "packages", Refs: []string{"CWE-829"}},
 	{ID: "I-002", Domain: "I", Title: "Dependencies with install-time scripts are listed for review", Method: MethodStatic, Adapter: "builtin-supply", Requires: "npm_lock", Refs: []string{"CWE-506"}},
@@ -189,7 +190,7 @@ var Edges = []EdgeRule{
 	{ID: "EI1", Title: "Secrets -> dependencies", Scenario: "Package lifecycle script obtains environment secret", Needs: []string{"install_scripts", "github_workflows"}, Tests: []string{"I-002", "N-002"}},
 	{ID: "FG1", Title: "Payment state -> webhooks", Scenario: "Replay moves payment into an invalid terminal state", Needs: []string{"payments", "webhooks"}, Tests: []string{"F-001", "G-001"}},
 	{ID: "FQ1", Title: "State machine -> race", Scenario: "Concurrent requests bypass idempotency", Needs: []string{"payments"}, Tests: []string{"F-002", "Q-002"}},
-	{ID: "HJ1", Title: "Web headers -> CDN/edge config", Scenario: "Edge overrides CSP or cache policy", Needs: []string{"headers_observed", "deploy_config"}, Tests: []string{"H-003", "J-004"}},
+	{ID: "HJ1", Title: "Web headers -> CDN/edge config", Scenario: "Edge overrides CSP or cache policy", Needs: []string{"headers_observed", "deploy_config"}, Tests: []string{"H-003", "H-004", "J-004"}},
 	{ID: "IN1", Title: "Action dependency -> CI integrity", Scenario: "Unpinned third-party action may change code", Needs: []string{"third_party_actions"}, Tests: []string{"N-001"}},
 	{ID: "BK1", Title: "Mobile identity -> Android storage", Scenario: "Token copied to Android insecure storage", Needs: []string{"android", "auth"}, Tests: []string{"K-001", "K-003"}},
 	{ID: "BL1", Title: "Mobile identity -> iOS keychain", Scenario: "Session material stored outside platform controls", Needs: []string{"ios", "auth"}, Tests: []string{"L-001", "L-002"}},
