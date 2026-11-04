@@ -211,3 +211,37 @@ func TestGitleaksIgnoredLocalFile(t *testing.T) {
 		t.Fatalf("severities %v", sev)
 	}
 }
+
+// Registry rules that rate themselves confidence LOW: audit hints are listed
+// as info, vuln rules count as low at most. Nothing is dropped, and bundled
+// rules and rules with higher confidence keep their severity.
+func TestSemgrepLowConfidenceRegistryRules(t *testing.T) {
+	root := t.TempDir()
+	path, _ := json.Marshal(filepath.Join(root, "src", "a.ts"))
+	res := func(id, sev, meta string, line int) string {
+		return `{"check_id":"` + id + `","path":` + string(path) + `,"start":{"line":` + fmt.Sprint(line) + `},"end":{"line":` + fmt.Sprint(line) + `},"extra":{"severity":"` + sev + `","metadata":` + meta + `}}`
+	}
+	raw := []byte(`{"results":[` + strings.Join([]string{
+		res("r.js.audit.spawn-shell-true", "ERROR", `{"confidence":"LOW","subcategory":["audit"]}`, 1),
+		res("r.js.detect-non-literal-regexp", "WARNING", `{"confidence":"LOW","subcategory":["vuln"]}`, 2),
+		res("r.js.gcm-no-tag-length", "ERROR", `{"confidence":"MEDIUM","subcategory":["vuln"]}`, 3),
+		res("r.js.audit-string", "INFO", `{"confidence":"low","subcategory":"audit"}`, 4),
+		res("h.pandaward-semgrep-rules.pandaward-js-sql-string", "ERROR", `{"pandaward-control":"D-003","confidence":"LOW","subcategory":["audit"]}`, 5),
+	}, ",") + `],"errors":[]}`)
+	tool := semgrep().(*externalTool)
+	sigs, err := tool.normalize(&Context{Root: root, Cfg: config.Default("fx")}, raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, s := range sigs {
+		got = append(got, fmt.Sprintf("%s=%s", s.Title, s.Severity))
+	}
+	want := "spawn-shell-true=info,detect-non-literal-regexp=low,gcm-no-tag-length=high,audit-string=info,pandaward-js-sql-string=high"
+	if strings.Join(got, ",") != want {
+		t.Errorf("got %v, want %s", got, want)
+	}
+	if tool.note != "; 2 low-confidence audit result(s) listed as info" {
+		t.Errorf("note %q", tool.note)
+	}
+}
