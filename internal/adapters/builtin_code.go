@@ -131,7 +131,7 @@ type codeAdapter struct{}
 
 func (codeAdapter) Name() string { return "builtin-code" }
 func (codeAdapter) Controls() []string {
-	return []string{"B-001", "B-002", "D-001", "D-002", "D-003", "D-004", "E-003", "E-004", "H-001", "H-002", "O-002", "P-001", "G-001", "C-004"}
+	return []string{"B-001", "B-002", "D-001", "D-002", "D-003", "D-004", "E-003", "E-004", "H-001", "H-002", "H-004", "O-002", "P-001", "G-001", "C-004"}
 }
 func (codeAdapter) Maturity() string { return MaturityUnvalidated }
 func (codeAdapter) Network() bool    { return false }
@@ -286,6 +286,12 @@ func (a codeAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 						Fix:     "Use an explicit allowlist of trusted origins when credentials are enabled."}, f, i+1, a.Name()))
 				}
 			}
+		}
+	}
+	// H-004: weak script policy in a declared Content-Security-Policy.
+	for _, p := range c.Inv.Features["csp_config"] {
+		if f := c.Inv.FileByPath(p); f != nil && !IsTestPath(f.Path) {
+			res.Signals = append(res.Signals, cspConfigSignals(f, a.Name())...)
 		}
 	}
 	// G-001: webhook handler files without visible signature verification.

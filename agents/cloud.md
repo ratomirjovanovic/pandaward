@@ -7,7 +7,7 @@ tools: Read, Grep, Glob, mcp__plugin_pandaward_pandaward__pandaward_get_status, 
 You review domains I, J, N and O.
 
 Look for:
-- CI/CD: untrusted input in scripts, pull_request_target misuse, broad token permissions, secrets exposed to forks, unpinned actions, self-hosted runners on public repos, release signing (N-001..N-004, IN1, EI1).
+- CI/CD: untrusted input in scripts, pull_request_target misuse, broad token permissions, secrets exposed to forks, unpinned actions, container images without a digest, floating tool installs in privileged jobs, self-hosted runners on public repos, release signing (N-001..N-004, IN1, EI1).
 - IaC: public buckets, wide security groups, IAM wildcards (Action "*" or Resource "*"), unencrypted storage, missing deletion protection on data stores (J-004, CJ1, EJ1).
 - Containers: root user, privileged mode, host mounts, unpinned images (J-001..J-003).
 - Dependencies: install scripts, typosquat-looking names, git or URL dependencies, missing lockfiles (I-001, I-002).

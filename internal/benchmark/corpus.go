@@ -151,6 +151,9 @@ func Corpus() []Case {
 	add(pair("code.webhook-no-signature", "builtin-code",
 		map[string]string{"src/app.js": "app.post('/webhooks/stripe', (req, res) => { pay(req.body); });\n"},
 		map[string]string{"src/app.js": "app.post('/webhooks/stripe', (req, res) => { stripe.webhooks.constructEvent(req.body, sig, key); });\n"}))
+	add(pair("code.weak-csp", "builtin-code",
+		map[string]string{"vercel.json": `{"headers":[{"source":"/(.*)","headers":[{"key":"Content-Security-Policy","value":"default-src 'self'; script-src 'self' 'unsafe-inline'"}]}]}`},
+		map[string]string{"vercel.json": `{"headers":[{"source":"/(.*)","headers":[{"key":"Content-Security-Policy","value":"default-src 'self'; script-src 'self' 'nonce-r4nd0m' 'unsafe-inline' 'strict-dynamic'; style-src 'self' 'unsafe-inline'"}]}]}`}))
 	add(pair("inventory.undeclared-route", "builtin-inventory",
 		map[string]string{"package.json": `{"dependencies":{"express":"4"}}`, "openapi.yaml": "openapi: 3.0.0\npaths:\n  /a: {}\n", "src/app.js": "app.get('/a', h);\napp.get('/b', h);\n"},
 		map[string]string{"package.json": `{"dependencies":{"express":"4"}}`, "openapi.yaml": "openapi: 3.0.0\npaths:\n  /a: {}\n  /b: {}\n", "src/app.js": "app.get('/a', h);\napp.get('/b', h);\n"}))
@@ -167,6 +170,16 @@ func Corpus() []Case {
 	add(pair("cicd.no-permissions", "builtin-cicd",
 		map[string]string{".github/workflows/ci.yml": workflow("push", "      - run: make\n", false)},
 		map[string]string{".github/workflows/ci.yml": workflow("push", "      - run: make\n", true)}))
+	release := func(perms, run string) string {
+		return "on: [push]\npermissions:\n  contents: read\njobs:\n  publish:\n    runs-on: ubuntu-latest\n    permissions:\n" + perms +
+			"    steps:\n      - run: " + run + "\n"
+	}
+	add(pair("cicd.unpinned-tool-install", "builtin-cicd",
+		map[string]string{".github/workflows/release.yml": release("      id-token: write\n", "npm install -g npm@11")},
+		map[string]string{".github/workflows/release.yml": release("      id-token: write\n", "npm install -g npm@11.21.1")}))
+	add(pair("cicd.image-not-pinned", "builtin-cicd",
+		map[string]string{".github/workflows/ci.yml": workflow("push", "      - run: docker run --rm -v \"$PWD:/src\" ghcr.io/org/tool:v1 scan\n", true)},
+		map[string]string{".github/workflows/ci.yml": workflow("push", "      - run: docker run --rm -v \"$PWD:/src\" ghcr.io/org/tool:v1@sha256:"+strings.Repeat("0a", 32)+" scan\n", true)}))
 
 	add(pair("infra.unpinned-base-image", "builtin-infra",
 		map[string]string{"Dockerfile": "FROM node:latest\nUSER node\n"},

@@ -320,6 +320,8 @@ func langOf(name string) string {
 		return "requirements"
 	case l == "go.mod" || l == "go.sum" || l == "gemfile.lock" || l == "cargo.lock" || l == "poetry.lock" || l == "pipfile" || l == "pipfile.lock" || l == "yarn.lock" || l == "composer.lock" || l == "podfile.lock" || l == "uv.lock":
 		return "manifest"
+	case l == "_headers":
+		return "headers" // Netlify and Cloudflare Pages response headers
 	}
 	return langByExt[strings.ToLower(path.Ext(l))]
 }
@@ -694,6 +696,10 @@ func (inv *Inventory) detect() {
 			inv.feature("sql_migrations", f.Path)
 			domains["C"] = true
 		}
+		if IsHeaderConfig(f.Path) && containsFold(f.Lines, "content-security-policy") {
+			inv.feature("csp_config", f.Path)
+			domains["H"] = true
+		}
 		if f.Lang == "yaml" && strings.Contains(f.Path, ".github/workflows/") {
 			inv.feature("github_workflows", f.Path)
 			domains["N"] = true
@@ -773,6 +779,27 @@ func containsAny(lines []string, subs ...string) bool {
 				return true
 			}
 		}
+	}
+	return false
+}
+
+// containsFold reports whether any line contains sub (lower case) in any case.
+func containsFold(lines []string, sub string) bool {
+	for _, l := range lines {
+		if strings.Contains(strings.ToLower(l), sub) {
+			return true
+		}
+	}
+	return false
+}
+
+// IsHeaderConfig reports whether a file declares HTTP response headers in a
+// form PandaWard reads statically: vercel.json, netlify.toml, a Netlify or
+// Cloudflare Pages _headers file, or a Next.js config.
+func IsHeaderConfig(p string) bool {
+	switch strings.ToLower(path.Base(p)) {
+	case "vercel.json", "netlify.toml", "_headers", "next.config.js", "next.config.mjs", "next.config.cjs", "next.config.ts", "next.config.mts":
+		return true
 	}
 	return false
 }

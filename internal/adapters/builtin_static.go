@@ -275,6 +275,7 @@ func (a cicdAdapter) Run(_ context.Context, c *Context) (Result, model.Run) {
 				}
 			}
 		}
+		res.Signals = append(res.Signals, supplyChainSignals(f, a.Name())...)
 		if isPRT {
 			for i, l := range f.Lines {
 				if checkoutHead.MatchString(l) {

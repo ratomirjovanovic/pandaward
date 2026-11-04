@@ -186,8 +186,8 @@ func dollarTag(s string) string {
 	return ""
 }
 
-// unquote strips the double quotes of a quoted identifier.
-func unquote(id string) string {
+// unquoteIdent strips the double quotes of a quoted identifier.
+func unquoteIdent(id string) string {
 	return strings.Trim(strings.TrimSpace(id), `"`)
 }
 
@@ -196,9 +196,9 @@ func unquote(id string) string {
 func tableKey(q string) string {
 	parts := splitTopLevel(q, '.')
 	if len(parts) == 2 {
-		return unquote(parts[0]) + "." + unquote(parts[1])
+		return unquoteIdent(parts[0]) + "." + unquoteIdent(parts[1])
 	}
-	return "public." + unquote(q)
+	return "public." + unquoteIdent(q)
 }
 
 // bareName returns the unqualified table name.
@@ -282,7 +282,7 @@ func (st *rlsState) apply(s sqlStmt, f *inventory.File) {
 			if len(fields) < 2 || tableConstraintWords[fields[0]] || generatedRe.MatchString(el) {
 				continue
 			}
-			cols = append(cols, unquote(fields[0]))
+			cols = append(cols, unquoteIdent(fields[0]))
 		}
 		st.columns[key] = cols
 		return
@@ -307,7 +307,7 @@ func (st *rlsState) apply(s sqlStmt, f *inventory.File) {
 		return
 	}
 	if m := createPolicyRe.FindStringSubmatch(t); m != nil {
-		name, key := unquote(m[1]), tableKey(m[2])
+		name, key := unquoteIdent(m[1]), tableKey(m[2])
 		if p := parsePolicy(m[3]); p != nil {
 			p.name, p.table, p.file, p.line = name, key, f, s.line
 			pk := policyKey(key, name)
@@ -319,7 +319,7 @@ func (st *rlsState) apply(s sqlStmt, f *inventory.File) {
 		return
 	}
 	if m := alterPolicyRe.FindStringSubmatch(t); m != nil {
-		pk := policyKey(tableKey(m[2]), unquote(m[1]))
+		pk := policyKey(tableKey(m[2]), unquoteIdent(m[1]))
 		if p := st.policies[pk]; p != nil {
 			// A renamed or rewritten policy is not followed further.
 			p.ambiguous = true
@@ -327,7 +327,7 @@ func (st *rlsState) apply(s sqlStmt, f *inventory.File) {
 		return
 	}
 	if m := dropPolicyRe.FindStringSubmatch(t); m != nil {
-		delete(st.policies, policyKey(tableKey(m[2]), unquote(m[1])))
+		delete(st.policies, policyKey(tableKey(m[2]), unquoteIdent(m[1])))
 	}
 }
 
@@ -335,19 +335,19 @@ func (st *rlsState) apply(s sqlStmt, f *inventory.File) {
 func (st *rlsState) alter(key, act string) {
 	cols, known := st.columns[key]
 	if m := renameTableRe.FindStringSubmatch(act); m != nil {
-		nk := key[:strings.LastIndex(key, ".")+1] + unquote(m[1])
+		nk := key[:strings.LastIndex(key, ".")+1] + unquoteIdent(m[1])
 		st.moveTable(key, nk)
 		return
 	}
 	if m := setSchemaRe.FindStringSubmatch(act); m != nil {
-		st.moveTable(key, unquote(m[1])+"."+bareName(key))
+		st.moveTable(key, unquoteIdent(m[1])+"."+bareName(key))
 		return
 	}
 	if !known {
 		return
 	}
 	if m := addColumnRe.FindStringSubmatch(act); m != nil {
-		col := unquote(m[1])
+		col := unquoteIdent(m[1])
 		if tableConstraintWords[col] || generatedRe.MatchString(act) {
 			return
 		}
@@ -355,7 +355,7 @@ func (st *rlsState) alter(key, act string) {
 		return
 	}
 	if m := renameColumnRe.FindStringSubmatch(act); m != nil {
-		from, to := unquote(m[1]), unquote(m[2])
+		from, to := unquoteIdent(m[1]), unquoteIdent(m[2])
 		for i, c := range cols {
 			if c == from {
 				cols[i] = to
@@ -364,7 +364,7 @@ func (st *rlsState) alter(key, act string) {
 		return
 	}
 	if m := dropColumnRe.FindStringSubmatch(act); m != nil {
-		col := unquote(m[1])
+		col := unquoteIdent(m[1])
 		if col == "constraint" {
 			return
 		}
@@ -403,7 +403,7 @@ func parsePolicy(rest string) *rlsPolicy {
 	if to := policyToRe.FindStringSubmatch(after); to != nil {
 		user := false
 		for _, r := range splitTopLevel(to[1], ',') {
-			switch unquote(r) {
+			switch unquoteIdent(r) {
 			case "authenticated", "public", "anon":
 				user = true
 			}
@@ -448,7 +448,7 @@ func (g rlsGuards) addObjects(objs string) {
 	objs = strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(objs), "table "))
 	if m := allTablesRe.FindStringSubmatch(objs); m != nil {
 		for _, s := range splitTopLevel(m[1], ',') {
-			g.schemas[unquote(s)] = true
+			g.schemas[unquoteIdent(s)] = true
 		}
 		return
 	}
@@ -539,7 +539,7 @@ func rlsSignals(inv *inventory.Inventory, collector string) []model.Signal {
 // mentionsColumn reports whether a WITH CHECK expression refers to col.
 func mentionsColumn(expr, col string) bool {
 	for _, tok := range columnTokenRe.FindAllString(expr, -1) {
-		if unquote(tok) == col {
+		if unquoteIdent(tok) == col {
 			return true
 		}
 	}

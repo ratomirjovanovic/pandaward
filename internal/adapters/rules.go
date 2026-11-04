@@ -11,9 +11,10 @@ import (
 // and secret tables. A test keeps this list in sync with the source.
 var fileRuleIDs = []string{
 	"inventory.undeclared-route",
-	"code.llm-output-exec", "code.cors-wildcard-credentials", "code.webhook-no-signature",
+	"code.llm-output-exec", "code.cors-wildcard-credentials", "code.webhook-no-signature", "code.weak-csp",
 	"secret.tracked-sensitive-file",
 	"cicd.unpinned-action", "cicd.script-injection", "cicd.prt-untrusted-checkout", "cicd.no-permissions",
+	"cicd.unpinned-tool-install", "cicd.image-not-pinned",
 	"infra.unpinned-base-image", "infra.container-root", "infra.privileged-container", "infra.public-storage", "infra.world-open-admin-port",
 	"sql.rls-update-privileged-column",
 	"supply.missing-lockfile", "supply.install-script", "supply.unpinned-requirements", "supply.mcp-unpinned", "supply.mcp-inline-credential",

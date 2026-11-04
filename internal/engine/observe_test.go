@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -124,5 +125,54 @@ func TestObservePrivateAddressBlocked(t *testing.T) {
 	}
 	if res.Status != string(model.StatusInconclusive) {
 		t.Fatalf("expected INCONCLUSIVE when the guard blocks, got %s (%v)", res.Status, res.Errors)
+	}
+}
+
+func TestHeaderSignalsWeakCSP(t *testing.T) {
+	u, _ := url.Parse("https://app.example.test/")
+	cases := []struct {
+		name   string
+		header map[string][]string
+		weak   bool
+	}{
+		{"inline without nonce", map[string][]string{"Content-Security-Policy": {"script-src 'self' 'unsafe-inline'"}}, true},
+		{"eval in default-src", map[string][]string{"Content-Security-Policy": {"default-src 'self' 'unsafe-eval'"}}, true},
+		{"nonce with strict-dynamic", map[string][]string{"Content-Security-Policy": {"script-src 'self' 'nonce-abc' 'unsafe-inline' 'strict-dynamic'"}}, false},
+		{"hash makes inline ignored", map[string][]string{"Content-Security-Policy": {"script-src 'self' 'sha256-xyz' 'unsafe-inline'"}}, false},
+		{"inline styles only", map[string][]string{"Content-Security-Policy": {"script-src 'self'; style-src 'unsafe-inline'"}}, false},
+		{"report-only is ignored", map[string][]string{"Content-Security-Policy": {"script-src 'self'"}, "Content-Security-Policy-Report-Only": {"script-src 'unsafe-inline'"}}, false},
+		{"second enforced header is strict", map[string][]string{"Content-Security-Policy": {"script-src 'unsafe-inline'", "script-src 'self'"}}, false},
+	}
+	for _, c := range cases {
+		h := http.Header{}
+		for k, vs := range c.header {
+			for _, v := range vs {
+				h.Add(k, v)
+			}
+		}
+		var got *model.Signal
+		sigs := headerSignals(u, &http.Response{Header: h})
+		for i := range sigs {
+			if sigs[i].RuleID == "observe.weak-csp" {
+				got = &sigs[i]
+			}
+		}
+		if (got != nil) != c.weak {
+			t.Errorf("%s: weak-csp reported = %v, want %v", c.name, got != nil, c.weak)
+			continue
+		}
+		if got != nil && (got.ControlID != "H-003" || got.Severity != model.SevMedium || got.Confidence != model.Confirmed) {
+			t.Errorf("%s: unexpected signal %+v", c.name, *got)
+		}
+	}
+	// A report-only header alone is still a missing CSP, never a weak one.
+	h := http.Header{}
+	h.Set("Content-Security-Policy-Report-Only", "script-src 'unsafe-inline'")
+	rules := map[string]bool{}
+	for _, s := range headerSignals(u, &http.Response{Header: h}) {
+		rules[s.RuleID] = true
+	}
+	if !rules["observe.missing-csp"] || rules["observe.weak-csp"] {
+		t.Errorf("report-only header alone: got %v", rules)
 	}
 }
