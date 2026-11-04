@@ -49,6 +49,51 @@ func pemBodyFollows(lines []string, i int, header string) bool {
 	return false
 }
 
+// exampleHostRe matches host names reserved for documentation and testing
+// (RFC 2606, RFC 6761). A database URL pointing at one is a sample.
+// localhost is deliberately left out: a password for a local database is
+// often reused in other environments.
+var exampleHostRe = regexp.MustCompile(`(?i)(^|\.)(example(\.(com|net|org))?|invalid|test)$`)
+
+// dbURLHost returns the host of the database URL whose match ends at end:
+// the text after "@" up to a port, path, query or closing quote.
+func dbURLHost(line string, end int) string {
+	rest := line[end:]
+	if k := strings.IndexAny(rest, ":/?#'\"` \t,;)"); k >= 0 {
+		rest = rest[:k]
+	}
+	return strings.TrimSuffix(rest, ".")
+}
+
+// pemOneLineStub reports whether line holds a whole PEM block on one line
+// (BEGIN and END together, usually with "\n" escapes) whose body is too
+// short to be key material, such as a documentation or parser stub.
+func pemOneLineStub(line string) bool {
+	b := strings.Index(line, "-----BEGIN")
+	if b < 0 {
+		return false
+	}
+	rest := line[b+10:]
+	k := strings.Index(rest, "-----")
+	if k < 0 {
+		return false
+	}
+	body := rest[k+5:]
+	e := strings.Index(body, "-----END")
+	if e < 0 {
+		return false
+	}
+	body = body[:e]
+	body = strings.NewReplacer(`\r`, "", `\n`, "").Replace(body)
+	n := 0
+	for _, ch := range body {
+		if ch >= 'A' && ch <= 'Z' || ch >= 'a' && ch <= 'z' || ch >= '0' && ch <= '9' || ch == '+' || ch == '/' {
+			n++
+		}
+	}
+	return n < 64
+}
+
 func (a secretsAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 	run := newRun(a.Name(), version.Version)
 	res := Result{Decisions: map[string]Decision{}}
@@ -74,6 +119,14 @@ func (a secretsAdapter) Run(ctx context.Context, c *Context) (Result, model.Run)
 					continue
 				}
 				if r.ID == "db-url-password" && (strings.HasPrefix(val, "$") || strings.Contains(val, "{") || strings.EqualFold(val, "password")) {
+					continue
+				}
+				if r.ID == "db-url-password" {
+					if loc := r.Re.FindStringIndex(l); loc != nil && exampleHostRe.MatchString(dbURLHost(l, loc[1])) {
+						continue
+					}
+				}
+				if r.ID == "private-key" && pemOneLineStub(l) {
 					continue
 				}
 				sev, conf := model.SevHigh, model.Confirmed
