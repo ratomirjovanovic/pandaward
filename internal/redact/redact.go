@@ -24,8 +24,8 @@ type SecretRule struct {
 // SecretRules are formats with a low false-positive rate.
 var SecretRules = []SecretRule{
 	{"aws-access-key-id", "AWS access key ID", regexp.MustCompile(`\b((?:AKIA|ASIA|ABIA|ACCA)[0-9A-Z]{16})\b`), 1},
-	{"github-token", "GitHub token", regexp.MustCompile(`\b((?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,})\b`), 1},
-	{"github-fine-grained-pat", "GitHub fine-grained token", regexp.MustCompile(`\b(github_pat_[A-Za-z0-9_]{60,})\b`), 1},
+	{"github-token", "GitHub token", regexp.MustCompile(`((?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,})`), 1},
+	{"github-fine-grained-pat", "GitHub fine-grained token", regexp.MustCompile(`(github_pat_[A-Za-z0-9_]{60,})`), 1},
 	{"gitlab-token", "GitLab personal access token", regexp.MustCompile(`\b(glpat-[A-Za-z0-9_\-]{20,})\b`), 1},
 	{"slack-token", "Slack token", regexp.MustCompile(`\b(xox[abpors]-[A-Za-z0-9-]{10,})\b`), 1},
 	{"slack-webhook", "Slack webhook URL", regexp.MustCompile(`(https://hooks\.slack\.com/services/[A-Za-z0-9/]{20,})`), 1},

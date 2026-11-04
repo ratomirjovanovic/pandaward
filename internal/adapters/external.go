@@ -337,8 +337,10 @@ func semgrep() Adapter {
 						Severity string `json:"severity"`
 						Lines    string `json:"lines"`
 						Metadata struct {
-							CWE     any    `json:"cwe"`
-							Control string `json:"pandaward-control"`
+							CWE         any    `json:"cwe"`
+							Control     string `json:"pandaward-control"`
+							Confidence  string `json:"confidence"`
+							Subcategory any    `json:"subcategory"`
 						} `json:"metadata"`
 					} `json:"extra"`
 				} `json:"results"`
@@ -348,7 +350,7 @@ func semgrep() Adapter {
 				return nil, err
 			}
 			var out []model.Signal
-			skipped := 0
+			skipped, audit := 0, 0
 			for _, r := range doc.Results {
 				// Results in test and fixture code are skipped, as in the
 				// built-in checks: registry rules match the fake keys and
@@ -360,6 +362,21 @@ func semgrep() Adapter {
 					if bundled := strings.HasPrefix(lastSegment(r.CheckID), "pandaward-"); bundled || c.Cfg == nil || !c.Cfg.Scan.SemgrepIncludeTests {
 						skipped++
 						continue
+					}
+				}
+				// Registry rules rate their own precision. A low-confidence
+				// audit rule only points at code worth a look: it is listed as
+				// info and does not decide the control. A low-confidence vuln
+				// rule still counts, as low at most. Nothing is dropped, since a
+				// hint that is noise in one project can be real in another.
+				sev := sevFrom(r.Extra.Severity)
+				if !strings.HasPrefix(lastSegment(r.CheckID), "pandaward-") && strings.EqualFold(r.Extra.Metadata.Confidence, "low") {
+					switch {
+					case hasValue(r.Extra.Metadata.Subcategory, "audit"):
+						sev = model.SevInfo
+						audit++
+					case model.SeverityRank(sev) > model.SeverityRank(model.SevLow):
+						sev = model.SevLow
 					}
 				}
 				cwe := ""
@@ -385,11 +402,15 @@ func semgrep() Adapter {
 				}
 				// check_id is prefixed with the rule file's directory, which
 				// differs per machine; keep only the rule id for stable fingerprints.
-				out = append(out, model.Signal{RuleID: "semgrep." + lastSegment(r.CheckID), ControlID: cid, Title: lastSegment(r.CheckID), Severity: sevFrom(r.Extra.Severity), Confidence: model.Hypothesis, CWE: cwe,
+				out = append(out, model.Signal{RuleID: "semgrep." + lastSegment(r.CheckID), ControlID: cid, Title: lastSegment(r.CheckID), Severity: sev, Confidence: model.Hypothesis, CWE: cwe,
 					File: r.Path, StartLine: r.Start.Line, EndLine: r.End.Line, Snippet: snippet, Message: r.Extra.Message, Fix: "See rule " + lastSegment(r.CheckID) + " guidance."})
 			}
+			t.note = ""
 			if skipped > 0 {
 				t.note = fmt.Sprintf("; %d result(s) in test/fixture files skipped by policy", skipped)
+			}
+			if audit > 0 {
+				t.note += fmt.Sprintf("; %d low-confidence audit result(s) listed as info", audit)
 			}
 			return out, nil
 		},
@@ -540,4 +561,20 @@ func Tools(ctx context.Context) []ToolInfo {
 		ti.Path, ti.Version = p, (apktoolAdapter{}).version(ctx, p)
 	}
 	return append(out, ti)
+}
+
+// hasValue reports whether a metadata field, a string or a list of strings,
+// holds v.
+func hasValue(field any, v string) bool {
+	switch x := field.(type) {
+	case string:
+		return strings.EqualFold(x, v)
+	case []any:
+		for _, e := range x {
+			if s, ok := e.(string); ok && strings.EqualFold(s, v) {
+				return true
+			}
+		}
+	}
+	return false
 }
