@@ -96,6 +96,146 @@ func constLiteralDefined(name, text string) bool {
 	return lit != nil && !strings.Contains(lit[1], "${")
 }
 
+var (
+	reactSinkRe = regexp.MustCompile(`dangerouslySetInnerHTML`)
+	htmlPropRe  = regexp.MustCompile(`^dangerouslySetInnerHTML\s*(?:=\s*\{|:)\s*\{\s*__html\s*:\s*`)
+)
+
+// htmlSinkProvenSafe reports whether every dangerouslySetInnerHTML on the
+// line, and no other sink, receives a value the code proves cannot carry
+// markup from outside: a whole string literal; JSON.stringify(...) whose
+// "<" is replaced; a call to a helper defined in the file or imported from a
+// module in the repository whose only return is such an escape or a call
+// to a known sanitizer (sanitize-html, DOMPurify, xss); or a const of the
+// same file initialized with one of those. A script element's type is no
+// proof: a consent manager re-types text/plain scripts and runs them.
+func htmlSinkProvenSafe(c lineCtx) bool {
+	l := c.File.Lines[c.Index]
+	if htmlSinkRe.MatchString(reactSinkRe.ReplaceAllString(l, "")) {
+		return false
+	}
+	locs := reactSinkRe.FindAllStringIndex(l, -1)
+	if len(locs) == 0 {
+		return false
+	}
+	off := c.offset()
+	for _, loc := range locs {
+		at := off + loc[0]
+		m := htmlPropRe.FindStringIndex(c.Text[at:])
+		if m == nil {
+			return false
+		}
+		start := at + m[1]
+		end := exprEnd(c.Text, start, ",", false)
+		if !safeHTMLValue(c, strings.TrimSpace(c.Text[start:end]), start, true) {
+			return false
+		}
+	}
+	return true
+}
+
+// safeHTMLValue applies the proofs of htmlSinkProvenSafe to one expression
+// of the sink's file; at is where it appears, and trace allows following
+// one identifier to its const declaration.
+func safeHTMLValue(c lineCtx, expr string, at int, trace bool) bool {
+	if isWholeLiteral(expr) || isLtEscapedJSON(expr) {
+		return true
+	}
+	if callee, args, ok := wholeCall(expr); ok {
+		return sanitizerCall(callee, args, jsImports(c.Text)) || safeHelper(c, callee)
+	}
+	if trace && identRe.MatchString(expr) {
+		init, ok := constInit(c.Text, expr, at)
+		return ok && safeHTMLValue(c, init, at, false)
+	}
+	return false
+}
+
+var sanitizerModules = map[string]bool{"sanitize-html": true, "dompurify": true, "isomorphic-dompurify": true, "xss": true}
+
+// sanitizerCall reports whether callee(args) is a known HTML sanitizer
+// imported in the file, called without options that let scripts through.
+func sanitizerCall(callee, args string, imports map[string]jsBinding) bool {
+	if unsafeOptsRe.MatchString(args) {
+		return false
+	}
+	name, method, _ := strings.Cut(callee, ".")
+	b, ok := imports[name]
+	if !ok || !sanitizerModules[b.module] {
+		return false
+	}
+	switch b.module {
+	case "sanitize-html":
+		return method == "" && b.imported == "default"
+	case "xss":
+		return method == "" && (b.imported == "default" || b.imported == "filterXSS")
+	}
+	// dompurify, isomorphic-dompurify
+	return method == "sanitize" && (b.imported == "default" || b.imported == "*") || method == "" && b.imported == "sanitize"
+}
+
+// safeHelper reports whether name, called at the sink, is a function whose
+// only return is a proven-safe expression: defined in the sink's file, or a
+// named import from a module of the repository (never a package).
+func safeHelper(c lineCtx, name string) bool {
+	if strings.Contains(name, ".") {
+		return false
+	}
+	imports := jsImports(c.Text)
+	text, fn, exported := c.Text, name, false
+	if b, ok := imports[name]; ok {
+		if b.imported == "default" || b.imported == "*" {
+			return false
+		}
+		f := resolveLocal(c.Inv, c.File.Path, b.module)
+		if f == nil {
+			return false
+		}
+		text, fn, exported = strings.Join(f.Lines, "\n"), b.imported, true
+		imports = jsImports(text)
+	}
+	ret, ok := funcReturn(text, fn, exported)
+	if !ok {
+		return false
+	}
+	if isLtEscapedJSON(ret) {
+		return true
+	}
+	callee, args, ok := wholeCall(ret)
+	return ok && sanitizerCall(callee, args, imports)
+}
+
+// constInit returns the initializer of the one const declaration of name in
+// text, when it comes before at in a block that is still open there and the
+// name is not used in between (so no parameter or later binding shadows it).
+func constInit(text, name string, at int) (string, bool) {
+	q := regexp.QuoteMeta(name)
+	all := regexp.MustCompile(`(?:^|[^.\w$])(?:const|let|var|function|class)\s+`+q+`\b`).FindAllStringIndex(text, -1)
+	decl := regexp.MustCompile(`(?:^|[^.\w$])const\s+`+q+`\s*(?::[^=]+)?=\s*`).FindAllStringIndex(text, -1)
+	if len(all) != 1 || len(decl) != 1 || decl[0][1] >= at {
+		return "", false
+	}
+	start := decl[0][1]
+	end := exprEnd(text, start, ";,", true)
+	if end >= at || regexp.MustCompile(`(?:^|[^.\w$])`+q+`\b`).MatchString(text[end:at]) {
+		return "", false
+	}
+	depth := 0
+	walkJS(text[:at], end, func(i int) bool {
+		switch text[i] {
+		case '{', '(', '[':
+			depth++
+		case '}', ')', ']':
+			depth--
+		}
+		return depth < 0
+	})
+	if depth < 0 {
+		return "", false
+	}
+	return strings.TrimSpace(text[start:end]), true
+}
+
 // ---- code.secret-logged ----
 
 var (
@@ -206,6 +346,80 @@ var sqlConcatRe = regexp.MustCompile(`(?i)("\s*` + sqlIn(`[^"]`) + `[^"]*"|'\s*`
 // literal.
 func sqlIn(class string) string {
 	return `(select\s` + class + `+\sfrom|insert\s+into|update\s+\w+\s+set|delete\s+from)\b`
+}
+
+var (
+	dbClientRe = regexp.MustCompile(`['"\x60](pg|pg-promise|pg-pool|postgres|@neondatabase/serverless|mysql|mysql2|mariadb|sqlite|sqlite3|better-sqlite3|sql\.js|bun:sqlite|node:sqlite|@libsql/client|@planetscale/database|@vercel/postgres|@supabase/supabase-js|@supabase/postgrest-js|knex|drizzle-orm|@prisma/client|prisma|kysely|sequelize|typeorm|mongodb|mongoose|@mikro-orm/core|objection|slonik|tedious|mssql|oracledb|duckdb|@duckdb/node-api|@clickhouse/client|cassandra-driver|redis|ioredis|@cloudflare/d1|@electric-sql/pglite)(/[^'"\x60]*)?['"\x60]`)
+	dbCLIRe    = regexp.MustCompile(`^(?:.*[/\\])?(psql|pg_restore|mysql|mariadb|sqlite3?|sqlcmd|duckdb|clickhouse(-client)?|cockroach|supabase|wrangler|turso|bq|snowsql|mongosh|mongo|prisma|knex|drizzle-kit|sequelize|npx|pnpm|pnpx|yarn|npm|bunx|bun|node|deno|tsx|ts-node|sh|bash|zsh|dash|cmd|cmd\.exe|powershell|pwsh|env|docker|podman|kubectl|ssh|sudo)(\.exe)?(\s|$)`)
+	queryRunRe = regexp.MustCompile(`\.\s*\$?(query|queryRaw\w*|executeRaw\w*|execute|exec|unsafe|raw|prepare|run|all|batch|sql|transaction)\s*[(\x60]|\bsql\s*[(\x60]|\bimport\s*\(`)
+	netRe      = regexp.MustCompile(`\bfetch\s*\(|\baxios\b|\bgot\s*\(|\bky\s*\(|XMLHttpRequest|WebSocket|\bundici\b|\bnew\s+Worker\b|process\.send\b|postMessage\b`)
+	netModRe   = regexp.MustCompile(`['"\x60](node:)?(https?|http2|net|tls|dgram|worker_threads|cluster|axios|undici|got|ky|node-fetch|ws)['"\x60]`)
+	exportRe   = regexp.MustCompile(`(?m)^\s*export\b|\bmodule\.exports\b|\bexports\.\w+\s*=`)
+	writeOutRe = regexp.MustCompile(`\b(writeFile|writeFileSync|appendFile|appendFileSync|createWriteStream)\s*\(|process\.stdout\.write\s*\(|console\.(log|info)\s*\(`)
+	childRunRe = regexp.MustCompile(`\b(?:exec|execSync|execFile|execFileSync|spawn|spawnSync|fork|execa|execaSync)\s*\(\s*(?:'([^'\n]*)'|"([^"\n]*)"|())`)
+	pureMethod = map[string]bool{"map": true, "filter": true, "find": true, "findIndex": true, "some": true, "every": true, "forEach": true, "reduce": true,
+		"join": true, "includes": true, "indexOf": true, "slice": true, "concat": true, "flat": true, "flatMap": true, "keys": true, "values": true,
+		"entries": true, "at": true, "toString": true, "has": true, "get": true}
+)
+
+// nodeBuiltins are modules whose bindings may be used freely: none of them
+// can run a query. child_process is checked separately.
+var nodeBuiltins = map[string]bool{"fs": true, "fs/promises": true, "path": true, "url": true, "os": true, "util": true, "crypto": true, "process": true,
+	"readline": true, "events": true, "stream": true, "zlib": true, "assert": true, "buffer": true, "string_decoder": true, "timers": true, "child_process": true}
+
+// sqlForFileOnly demotes a concatenated SQL string to an info listing when
+// the JavaScript file that builds it cannot run it: the file imports no
+// database client, calls no query method, uses no network, exports
+// nothing, starts no database command line tool, calls no imported
+// function from outside the Node standard library, and writes files or
+// console output. The SQL may still be executed later from the generated
+// file, so it stays listed.
+func sqlForFileOnly(c lineCtx) *demotion {
+	t := c.Text
+	if !jsLike[c.File.Lang] || dbClientRe.MatchString(t) || netModRe.MatchString(t) {
+		return nil
+	}
+	// The remaining checks look at code only, so a file name such as
+	// "x.sql" in a string is not taken for a query call.
+	code := maskLiterals(t)
+	if !writeOutRe.MatchString(code) || queryRunRe.MatchString(code) || netRe.MatchString(code) || exportRe.MatchString(code) {
+		return nil
+	}
+	// A child process must be a literal program that is neither a
+	// database tool nor a shell or runner that could start one.
+	for _, m := range childRunRe.FindAllStringSubmatchIndex(t, -1) {
+		cmd := ""
+		switch {
+		case m[2] >= 0:
+			cmd = t[m[2]:m[3]]
+		case m[4] >= 0:
+			cmd = t[m[4]:m[5]]
+		default:
+			return nil
+		}
+		if cmd == "" || dbCLIRe.MatchString(cmd) {
+			return nil
+		}
+	}
+	for name, b := range jsImports(t) {
+		if nodeBuiltins[strings.TrimPrefix(b.module, "node:")] {
+			continue
+		}
+		q := regexp.QuoteMeta(name)
+		if regexp.MustCompile(`(?:^|[^.\w$])(new\s+)?` + q + `\s*[(\x60]`).MatchString(code) {
+			return nil
+		}
+		for _, m := range regexp.MustCompile(`(?:^|[^.\w$])`+q+`\s*\??\.\s*([A-Za-z_$][\w$]*)\s*\(`).FindAllStringSubmatch(code, -1) {
+			if !pureMethod[m[1]] {
+				return nil
+			}
+		}
+	}
+	return &demotion{
+		Title:   "SQL text built for a file, not executed here",
+		Message: "Query text is concatenated with values, but this file imports no database client, runs no query, exports nothing and only writes its output to files or the console. It is listed because the generated SQL may be executed later.",
+		Fix:     "Check that every value placed in the generated SQL is validated against the shape it may have, or quoted with the database's own literal quoting, before the file is applied.",
+	}
 }
 
 // ---- code.weak-hash-password ----
