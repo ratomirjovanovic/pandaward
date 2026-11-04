@@ -273,4 +273,10 @@ func TestScanProgressNotifications(t *testing.T) {
 	if n := len(res) - notes; n != 2 {
 		t.Fatalf("expected 2 responses, got %d", n)
 	}
+	st := res[len(res)-1]["result"].(map[string]any)["content"].([]any)[0].(map[string]any)["text"].(string)
+	for _, want := range []string{`"path_to_100"`, `"decided_automatic"`, `"step"`} {
+		if !strings.Contains(st, want) {
+			t.Errorf("status lacks %s: %.300s", want, st)
+		}
+	}
 }

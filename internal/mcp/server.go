@@ -89,7 +89,7 @@ func knownTool(name string) bool {
 
 func tools() []tool {
 	return []tool{
-		{"pandaward_get_status", "Compact assessment state from the local ledger: latest assessment, coverage, open findings, stale files, blockers and next action.", obj(map[string]any{}), readOnly},
+		{"pandaward_get_status", "Compact assessment state from the local ledger: latest assessment, coverage split by how controls were decided, open findings, stale files, blockers, next action and the path to 100% (undecided controls grouped by the step that would decide them).", obj(map[string]any{}), readOnly},
 		{"pandaward_list_coverage_gaps", "Applicable controls that were not decisively tested (BLOCKED, UNSUPPORTED, SUSPECTED, INCONCLUSIVE, ERROR), optionally for one domain A-R.", obj(map[string]any{"domain": str("Domain letter A-R")}), readOnly},
 		{"pandaward_get_control", "One control with its status, reason, references and evidence IDs.", obj(map[string]any{"control_id": str("e.g. C-001")}, "control_id"), readOnly},
 		{"pandaward_get_findings", "Findings from the ledger. Defaults to open findings. Snippets are redacted.", obj(map[string]any{

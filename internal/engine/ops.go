@@ -41,6 +41,9 @@ type Status struct {
 	ChangeCheck string   `json:"change_check,omitempty"`
 	Blockers    []string `json:"blockers,omitempty"`
 	NextAction  string   `json:"next_action"`
+	// PathTo100 groups the undecided applicable controls by what must
+	// happen for each to be decided.
+	PathTo100 []PathGroup `json:"path_to_100,omitempty"`
 }
 
 // Status returns the current state from the ledger.
@@ -93,6 +96,7 @@ func (e *Engine) Status() (*Status, error) {
 	if err != nil {
 		return nil, err
 	}
+	s.PathTo100 = PathTo100(cs, fs)
 	for _, f := range fs {
 		if !f.Status.Active() {
 			continue
