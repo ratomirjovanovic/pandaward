@@ -59,7 +59,8 @@ Assessment (local, no target network traffic):
   status          Resumable state, coverage, blockers and next action
   findings        List/show findings; human triage: false-positive, accept-risk, reopen, confirm, remediated
   graph           Cross-domain edges (text or --format mermaid)
-  routes          Discovered entrypoints (HTTP, GraphQL, gRPC, workers, cron) with file:line
+  routes          Discovered entrypoints (HTTP, Next.js pages, layouts and middleware, GraphQL, gRPC,
+                  workers, cron) with file:line
   fix-plan        Ordered remediation plan from open findings
   report          Render HTML, Markdown, JSON, SARIF and CSV reports
   evidence        show <id> | verify

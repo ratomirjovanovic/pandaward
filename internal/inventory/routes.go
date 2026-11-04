@@ -162,20 +162,8 @@ func extractEntries(f *File, resolve func(from, spec string) string) ([]entry, [
 			add(entry{method: httpMethod(m[1]), path: m[2], line: i + 1, framework: "aspnet"})
 		}
 	}
-	if m := nextRouteRe.FindStringSubmatch(f.Path); m != nil || nextPagesAPI.MatchString(f.Path) {
-		var p string
-		if m != nil {
-			p = "/" + m[1]
-		} else {
-			p = "/api/" + nextPagesAPI.FindStringSubmatch(f.Path)[1]
-		}
-		p = nextGroupRe.ReplaceAllString(p, "")
-		var methods []string
-		for _, l := range f.Lines {
-			if mm := nextMethodRe.FindStringSubmatch(l); mm != nil {
-				methods = append(methods, mm[1])
-			}
-		}
+	if p, ok := nextHandlerURL(f.Path); ok && jsLangs[f.Lang] {
+		methods := nextMethods(f.Lines)
 		if len(methods) == 0 {
 			methods = []string{"ANY"}
 		}
@@ -290,8 +278,6 @@ func firstCodeLine(f *File) int {
 	}
 	return -1
 }
-
-var nextGroupRe = regexp.MustCompile(`/\([^)]*\)`)
 
 func firstNonEmpty(ss ...string) string {
 	for _, s := range ss {

@@ -49,6 +49,8 @@ type Inventory struct {
 	GitCommit      string
 	GitDirty       bool
 	SensitiveNames []string // .env-like files found (content not read)
+	// NextJS is the Next.js route table, nil when no Next.js app was found.
+	NextJS *RouteTable
 }
 
 // Options control the walk.
@@ -547,9 +549,8 @@ func MinimalEnv() []string { return minimalEnv() }
 // ---- detection ----
 
 var (
-	nextRouteRe   = regexp.MustCompile(`(?:^|/)app/(.*)/route\.(?:js|ts|mjs)$`)
+	nextRouteRe   = regexp.MustCompile(`(?:^|/)app/(?:(.*)/)?route\.(?:js|ts|mjs|jsx|tsx)$`)
 	nextPagesAPI  = regexp.MustCompile(`(?:^|/)pages/api/(.*)\.(?:js|ts|jsx|tsx)$`)
-	nextMethodRe  = regexp.MustCompile(`export\s+(?:async\s+)?(?:function|const)\s+(GET|POST|PUT|PATCH|DELETE)\b`)
 	paramRe       = regexp.MustCompile(`(:[A-Za-z_]\w*|\{[^}]+\}|<[^>]+>|\[[^\]]+\])`)
 	authPathRe    = regexp.MustCompile(`(?i)(login|logout|signin|sign-in|signup|register|auth|oauth|token|session|password|reset|mfa|2fa|otp|sso|callback)`)
 	adminPathRe   = regexp.MustCompile(`(?i)(/admin|/internal|/manage|/staff|/superuser|/root)`)
@@ -845,6 +846,7 @@ func (inv *Inventory) detect() {
 		inv.addAsset(model.Asset{ID: "file:" + f.Path, Kind: "file:" + f.Lang, Locator: f.Path, ContentHash: f.SHA256, Domains: f.Domains})
 	}
 	inv.addEntrypoints(applyMounts(entries, mounts), roots, nestGlobal)
+	inv.NextJS = inv.nextTable(roots)
 	for k, p := range manifests {
 		if !locks[k] && !(strings.HasSuffix(k, "|npm") && lockedByWorkspace(path.Dir(p), locks, workspaces)) {
 			inv.feature("missing_lockfile", p)

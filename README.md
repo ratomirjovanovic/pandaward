@@ -181,7 +181,7 @@ While the specialist reviewers run, you can see what each one is doing. Their ro
 
 | Domain | Automated today (offline) | Needs review or runtime |
 |---|---|---|
-| A Inventory and architecture | entrypoints with file and line (`pandaward routes`): HTTP routes for Express, NestJS, Next.js, Flask, FastAPI, Django, Go, Spring, Laravel, Rails, ASP.NET with router prefixes and mounts resolved; GraphQL schema operations; gRPC services; queue consumers and cron jobs; services in monorepos; OpenAPI drift | threat model |
+| A Inventory and architecture | entrypoints with file and line (`pandaward routes`): HTTP routes for Express, NestJS, Next.js, Flask, FastAPI, Django, Go, Spring, Laravel, Rails, ASP.NET with router prefixes and mounts resolved; GraphQL schema operations; gRPC services; queue consumers and cron jobs; services in monorepos; OpenAPI drift. For Next.js apps the file-system route table (pages, layouts, route handlers, metadata routes, server actions and middleware of every app, with route groups, dynamic and catch-all segments, parallel slots and intercepting folders resolved) decides A-002: PASS only when nothing found can add routes outside it, otherwise INCONCLUSIVE with each blocker named (a custom server, next.config or vercel.json rewrites and redirects to other origins or not resolvable statically, middleware that proxies or answers requests itself, another web framework or server, serverless function directories, PHP, an OpenAPI mismatch, skipped code files) | threat model |
 | B Authentication | JWT `none` or unverified decode, cookie flags | revoked credentials refused (`staging-active`); login, reset and MFA flows |
 | C Authorization | Supabase/Postgres RLS update policies that let users change privileged columns of their own row (from SQL migrations) | object and function level authorization with test identities (`staging-active`), route review (manual-assisted) |
 | D Injection | eval, shell, SQL concatenation, unsafe deserialization | ZAP active scan (`staging-active`, opt-in) |
@@ -213,7 +213,7 @@ While the specialist reviewers run, you can see what each one is doing. Their ro
 | `pandaward status` | Coverage, open findings, stale files, blockers, next action |
 | `pandaward findings [show ID]` | List or inspect findings; `apply --file` records many decisions at once |
 | `pandaward graph [--format mermaid]` | Domains and cross-domain edges |
-| `pandaward routes` | Discovered entrypoints (HTTP, GraphQL, gRPC, workers, cron) with file and line |
+| `pandaward routes` | Discovered entrypoints (HTTP, Next.js pages, layouts and middleware, GraphQL, gRPC, workers, cron) with file and line |
 | `pandaward fix-plan` | Ordered remediation steps |
 | `pandaward report [--format ...]` | HTML, Markdown, JSON, SARIF 2.1.0, CSV |
 | `pandaward evidence show ID \| verify` | Read or verify redacted evidence |

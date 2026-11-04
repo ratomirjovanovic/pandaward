@@ -2,13 +2,10 @@ package adapters
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"sort"
 	"strings"
-
-	"gopkg.in/yaml.v3"
 
 	"github.com/ratomirjovanovic/pandaward/internal/model"
 	"github.com/ratomirjovanovic/pandaward/internal/redact"
@@ -56,30 +53,9 @@ func (a inventoryAdapter) Run(_ context.Context, c *Context) (Result, model.Run)
 			n, len(inv.Features["graphql_operations"]), len(inv.Features["grpc_methods"]), len(inv.Features["queue_consumers"]), len(inv.Features["cron_jobs"]), len(inv.Features["server_actions"]))}
 	}
 	// A-003: compare OpenAPI paths with discovered routes.
-	declared := map[string]bool{}
-	var parseErr []string
-	for _, p := range inv.Features["openapi"] {
-		f := inv.FileByPath(p)
-		if f == nil {
-			continue
-		}
-		var doc struct {
-			Paths map[string]any `yaml:"paths" json:"paths"`
-		}
-		text := strings.Join(f.Lines, "\n")
-		var err error
-		if strings.HasSuffix(p, ".json") {
-			err = json.Unmarshal([]byte(text), &doc)
-		} else {
-			err = yaml.Unmarshal([]byte(text), &doc)
-		}
-		if err != nil {
-			parseErr = append(parseErr, p)
-			continue
-		}
-		for k := range doc.Paths {
-			declared[normRoute(k)] = true
-		}
+	declared, parseErr := openAPIPaths(inv)
+	if inv.NextJS != nil {
+		res.Decisions["A-002"] = nextRouteDecision(inv, declared, parseErr)
 	}
 	if inv.Has("openapi") {
 		if len(declared) == 0 {
