@@ -169,11 +169,27 @@ func Sanitize(s string) string {
 		if r == '\t' {
 			return ' '
 		}
-		if unicode.IsControl(r) || r == '‮' || r == '‭' || r == '⁦' || r == '⁧' || r == '⁨' || r == '⁩' {
+		if unicode.IsControl(r) || invisible(r) {
 			return -1
 		}
 		return r
 	}, s)
+}
+
+// invisible reports characters that render as nothing but can carry or
+// reorder text: bidi embeddings, overrides and isolates, zero-width
+// characters, invisible operators, the BOM and Unicode tag characters, which
+// can spell out a hidden instruction for a model.
+func invisible(r rune) bool {
+	switch {
+	case r >= 0x202A && r <= 0x202E, r >= 0x2066 && r <= 0x2069:
+		return true
+	case r >= 0x200B && r <= 0x200D, r >= 0x2060 && r <= 0x2064, r == 0xFEFF:
+		return true
+	case r >= 0xE0000 && r <= 0xE007F:
+		return true
+	}
+	return false
 }
 
 func looksLikeKeyBody(s string) bool {
