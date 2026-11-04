@@ -430,7 +430,7 @@ func (inv *Inventory) nextTable(roots []string) *RouteTable {
 		case "route":
 			if a.Meta["framework"] == "nextjs" {
 				if !tableFiles[a.Locator] {
-					t.Blockers = append(t.Blockers, fmt.Sprintf("Next.js route file %s lies outside the app/ and pages/ directories of every detected app", a.Locator))
+					t.Blockers = append(t.Blockers, fmt.Sprintf("Next.js route file %s is not in the route table of any detected app (outside its app/ and pages/ directories, or an extension Next.js does not route by default)", a.Locator))
 				}
 				continue
 			}
