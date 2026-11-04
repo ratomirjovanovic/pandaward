@@ -159,7 +159,10 @@ func runCase(ctx context.Context, c Case) (bool, error) {
 		}
 	}
 	if c.Git {
-		for _, args := range [][]string{{"init", "-q"}, {"add", "-A"}, {"-c", "user.email=bench@example.org", "-c", "user.name=bench", "-c", "commit.gpgsign=false", "commit", "-qm", "case"}} {
+		// core.excludesFile is cleared because git reads the user's
+		// ~/.config/git/ignore even without a global config, and a case's
+		// files must be tracked exactly as its .gitignore says.
+		for _, args := range [][]string{{"init", "-q"}, {"-c", "core.excludesFile=" + os.DevNull, "add", "-A"}, {"-c", "user.email=bench@example.org", "-c", "user.name=bench", "-c", "commit.gpgsign=false", "commit", "-qm", "case"}} {
 			cmd := exec.CommandContext(ctx, "git", args...)
 			cmd.Dir = root
 			cmd.Env = append(inventory.MinimalEnv(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull)

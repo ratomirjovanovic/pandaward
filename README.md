@@ -185,7 +185,7 @@ While the specialist reviewers run, you can see what each one is doing. Their ro
 | B Authentication | JWT `none` or unverified decode, cookie flags | revoked credentials refused (`staging-active`); login, reset and MFA flows |
 | C Authorization | | object and function level authorization with test identities (`staging-active`), route review (manual-assisted) |
 | D Injection | eval, shell, SQL concatenation, unsafe deserialization | ZAP active scan (`staging-active`, opt-in) |
-| E Secrets and crypto | 16 high-specificity secret formats, tracked `.env` and key files, disabled TLS verification, weak hash or random | |
+| E Secrets and crypto | 16 high-specificity secret formats, tracked `.env` and key files, tracked tool-local settings such as `.claude/settings.local.json`, disabled TLS verification, weak hash or random | |
 | F Business logic | | invariants, idempotency, races (manual-assisted) |
 | G APIs and webhooks | webhook signature verification presence | contract vs runtime |
 | H Web | raw HTML sinks, CORS wildcard with credentials | security headers (`production-observe`) |

@@ -282,3 +282,36 @@ func TestIgnoredLocal(t *testing.T) {
 		t.Error("outside git nothing counts as ignored")
 	}
 }
+
+func TestIsToolLocalSettings(t *testing.T) {
+	for p, want := range map[string]bool{
+		".claude/settings.local.json":     true,
+		".claude/mcp.local.json":          true,
+		".vscode/settings.local.json":     true,
+		".cursor/mcp.local.json":          true,
+		"apps/web/.claude/x.local.json":   true,
+		".claude/settings.json":           false,
+		".mcp.json":                       false,
+		"settings.local.json":             false,
+		".claude/.local.json":             false,
+		".claude/agents/x.local.json":     false,
+		"config/settings.local.json":      false,
+		".vscode/settings.json":           false,
+		".claude/settings.local.json.bak": false,
+	} {
+		if got := inventory.IsToolLocalSettings(p); got != want {
+			t.Errorf("IsToolLocalSettings(%q) = %v, want %v", p, got, want)
+		}
+	}
+}
+
+// Tool-local settings stay readable: the secret content scan must see them.
+func TestWalkReadsToolLocalSettings(t *testing.T) {
+	inv := walk(t, map[string]string{".claude/settings.local.json": "{}\n"}, inventory.Options{MaxFileBytes: 1024})
+	if inv.FileByPath(".claude/settings.local.json") == nil {
+		t.Error("tool-local settings file must be analyzed")
+	}
+	if len(inv.SensitiveNames) != 0 {
+		t.Errorf("tool-local settings must not be recorded as unread sensitive names: %v", inv.SensitiveNames)
+	}
+}

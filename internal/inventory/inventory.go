@@ -89,6 +89,25 @@ func isSensitiveName(name string) bool {
 	return strings.HasSuffix(l, ".pem") || strings.HasSuffix(l, ".p12") || strings.HasSuffix(l, ".pfx") || strings.HasSuffix(l, ".key") || strings.HasSuffix(l, ".keystore") || strings.HasSuffix(l, ".jks")
 }
 
+// localSettingsDirs are the tool directories whose *.local.json files hold
+// one developer's machine-local settings (permissions, tokens, paths).
+var localSettingsDirs = map[string]bool{".claude": true, ".vscode": true, ".cursor": true}
+
+// IsToolLocalSettings reports whether the project-relative path rel is a
+// tool-local settings file, such as .claude/settings.local.json: a file
+// named *.local.json directly inside .claude/, .vscode/ or .cursor/. These
+// files are meant to stay out of git. Unlike the sensitive names above they
+// are still read, so the secret content scan covers them.
+func IsToolLocalSettings(rel string) bool {
+	rel = filepath.ToSlash(rel)
+	dir, name := path.Split(rel)
+	l := strings.ToLower(name)
+	if !strings.HasSuffix(l, ".local.json") || l == ".local.json" {
+		return false
+	}
+	return localSettingsDirs[strings.ToLower(path.Base(strings.TrimSuffix(dir, "/")))]
+}
+
 // Walk builds the inventory.
 func Walk(root string, opt Options) (*Inventory, error) {
 	absRoot, err := filepath.Abs(root)

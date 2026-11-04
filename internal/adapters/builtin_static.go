@@ -118,6 +118,24 @@ func (a secretsAdapter) Run(ctx context.Context, c *Context) (Result, model.Run)
 				Collector: a.Name(),
 			})
 		}
+		// Tool-local settings files are matched by path and only when git
+		// tracks them; their content is read by the scan above like any file.
+		var local []string
+		for p := range c.Inv.Tracked {
+			if inventory.IsToolLocalSettings(p) {
+				local = append(local, p)
+			}
+		}
+		sort.Strings(local)
+		for _, p := range local {
+			res.Signals = append(res.Signals, model.Signal{
+				RuleID: "secret.tracked-sensitive-file", ControlID: "E-002", Title: "Tool-local settings file tracked in git", Severity: model.SevHigh, Confidence: model.Confirmed, CWE: "CWE-538",
+				File: p, Message: "This *.local.json file holds one developer's local tool settings, which can include tokens, permissions and machine paths, and it is committed to git.",
+				Fix:       "Rotate any credentials it contains, `git rm --cached` it, add it to .gitignore, and purge it from history if the repository is shared. Keep shared settings in the non-local file (for example .claude/settings.json).",
+				Retest:    "Re-run `pandaward scan`; the file must no longer be tracked.",
+				Collector: a.Name(),
+			})
+		}
 	}
 	return res, finish(run, model.ExitOK, fmt.Sprintf("%d secret formats checked; %d sensitive file names recorded without reading", len(redact.SecretRules), len(c.Inv.SensitiveNames)), len(res.Signals))
 }

@@ -14,7 +14,7 @@ import (
 )
 
 // CorpusVersion changes whenever cases are added, removed or edited.
-const CorpusVersion = "2026.10.4"
+const CorpusVersion = "2026.11.1"
 
 // Case is one repository that a rule must fire on (Vulnerable) or must not
 // fire on (Safe).
@@ -226,6 +226,9 @@ func Corpus() []Case {
 	cs = append(cs,
 		Case{Rule: "secret.tracked-sensitive-file", Adapter: "builtin-secrets", Vulnerable: true, Git: true, Files: map[string]string{".env": "API_TOKEN=x\n", "src/a.js": "x\n"}},
 		Case{Rule: "secret.tracked-sensitive-file", Adapter: "builtin-secrets", Git: true, Files: map[string]string{".gitignore": ".env\n", ".env": "API_TOKEN=x\n", "src/a.js": "x\n"},
-			Note: "the .env file exists only in the working tree"})
+			Note: "the .env file exists only in the working tree"},
+		Case{Rule: "secret.tracked-sensitive-file", Adapter: "builtin-secrets", Vulnerable: true, Git: true, Files: map[string]string{".claude/settings.local.json": "{}\n", "src/a.js": "x\n"}},
+		Case{Rule: "secret.tracked-sensitive-file", Adapter: "builtin-secrets", Git: true, Files: map[string]string{".gitignore": ".claude/settings.local.json\n", ".claude/settings.local.json": "{}\n", ".claude/settings.json": "{}\n", ".mcp.json": "{}\n", "src/a.js": "x\n"},
+			Note: "shared settings tracked, the local file ignored"})
 	return cs
 }
