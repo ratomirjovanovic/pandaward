@@ -450,6 +450,12 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 		cr := &model.ControlResult{ID: p.Control.ID, Domain: p.Control.Domain, Title: p.Control.Title, Method: p.Control.Method, Adapter: p.Adapter, Refs: p.Control.Refs, Status: p.Status, Reason: p.Reason}
 		results[p.Control.ID] = cr
 	}
+	// Runtime verdicts are not observable here; carry the valid ones over
+	// and show the others as STALE.
+	rtValid, err := e.carryRuntime(results, inv, time.Now())
+	if err != nil {
+		return nil, err
+	}
 
 	runDir := filepath.Join(e.Private(), "runs", asmt.ID)
 	if err := os.MkdirAll(runDir, 0o700); err != nil {
@@ -628,6 +634,15 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 	}
 	for _, f := range fs {
 		if seen[f.Fingerprint] || !f.Status.Active() || f.Collector == "manual-assisted" || carried[f.Collector] {
+			continue
+		}
+		if runtimeCollectors[f.Collector] {
+			// A runtime finding keeps its status; it is current only while
+			// the verdict of its control is still valid.
+			if f.Stale != !rtValid[f.ControlID] {
+				f.Stale = !rtValid[f.ControlID]
+				_ = e.St.UpsertFinding(e.ProjectID, f)
+			}
 			continue
 		}
 		if !ranOK[f.Collector] {

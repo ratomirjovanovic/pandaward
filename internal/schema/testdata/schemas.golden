@@ -261,6 +261,7 @@ window.start string
 zap.active_scan bool
 zap.max_duration_minutes int
 
-## ledger version 2
+## ledger version 3
 migration 1 49a96cfafaf80b086bcf887f1f6bd214b4951f26cf375fe73c7c44c0a7e75f75
 migration 2 cc5b1751a8f49e4fab63385ae8b5f9f544e68eca69c214ab11aec407d8e9ab82
+migration 3 539947f84b5dc93aee6a2811efee2d492579f564625fcc885c6c59d726022fc4

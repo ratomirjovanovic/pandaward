@@ -167,3 +167,33 @@ func TestLocalRuntimeNeedsConfiguredApp(t *testing.T) {
 		t.Fatalf("controls %v, calls %v", res.Controls, f.calls)
 	}
 }
+
+// A local-runtime verdict survives a passive scan, and a config change
+// (which may name another app) makes it STALE.
+func TestLocalRuntimeVerdictCarriedUntilConfigChanges(t *testing.T) {
+	f := &fakeTools{devices: "emulator-5554\tdevice", qemu: "1", runAs: true}
+	e := localRuntimeSetup(t, f, "linux")
+	if _, err := e.LocalRuntime(context.Background(), func(string) {}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Scan(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	c := controlStatus(t, e, "K-003")
+	if c.Status != model.StatusFail || c.DecidedBy != model.DecidedRuntime || !strings.Contains(c.Reason, "runtime local-runtime") {
+		t.Fatalf("K-003 after a passive scan = %s %q (%q), want the runtime FAIL", c.Status, c.Reason, c.DecidedBy)
+	}
+	fs, _ := e.St.Findings(e.ProjectID)
+	for _, f := range fs {
+		if f.Collector == "local-runtime" && f.ControlID == "K-003" && (!f.Status.Active() || f.Stale) {
+			t.Errorf("finding %s is %s (stale %v), want open and current", f.ID, f.Status, f.Stale)
+		}
+	}
+	e.ConfigHash = "changed"
+	if _, err := e.Scan(context.Background(), nil); err != nil {
+		t.Fatal(err)
+	}
+	if c := controlStatus(t, e, "K-003"); c.Status != model.StatusStale || !strings.Contains(c.Reason, "config changed") {
+		t.Fatalf("K-003 after a config change = %s %q, want STALE", c.Status, c.Reason)
+	}
+}

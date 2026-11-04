@@ -51,6 +51,12 @@ var migrations = []string{
 	`CREATE TABLE IF NOT EXISTS observations(assessment_id TEXT NOT NULL, fingerprint TEXT NOT NULL, finding_id TEXT NOT NULL, carried INTEGER DEFAULT 0,
 		PRIMARY KEY(assessment_id, fingerprint));
 	ALTER TABLE assessments ADD COLUMN observed INTEGER DEFAULT 0;`,
+	// 3: runtime verdicts that later passive scans carry over while they
+	// stay valid, and who decided each control.
+	`ALTER TABLE controls ADD COLUMN decided_by TEXT DEFAULT '';
+	CREATE TABLE IF NOT EXISTS runtime_verdicts(project_id TEXT NOT NULL, control_id TEXT NOT NULL, profile TEXT NOT NULL, status TEXT NOT NULL, reason TEXT,
+		assessment_id TEXT NOT NULL, decided_at TEXT NOT NULL, approval_id TEXT, manifest_hash TEXT, config_hash TEXT, catalog_version TEXT, deps_json TEXT,
+		PRIMARY KEY(project_id, control_id));`,
 }
 
 // Open opens (and migrates) the database under the private directory.
@@ -336,8 +342,8 @@ func (s *Store) PutControls(asmt string, cs []model.ControlResult) error {
 		return err
 	}
 	for _, c := range cs {
-		if _, err := tx.Exec(`INSERT OR REPLACE INTO controls(assessment_id,id,domain,title,method,status,reason,adapter,evidence_json,refs_json) VALUES(?,?,?,?,?,?,?,?,?,?)`,
-			asmt, c.ID, c.Domain, c.Title, c.Method, string(c.Status), c.Reason, c.Adapter, js(c.EvidenceIDs), js(c.Refs)); err != nil {
+		if _, err := tx.Exec(`INSERT OR REPLACE INTO controls(assessment_id,id,domain,title,method,status,reason,adapter,evidence_json,refs_json,decided_by) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+			asmt, c.ID, c.Domain, c.Title, c.Method, string(c.Status), c.Reason, c.Adapter, js(c.EvidenceIDs), js(c.Refs), c.DecidedBy); err != nil {
 			tx.Rollback()
 			return err
 		}
@@ -347,7 +353,7 @@ func (s *Store) PutControls(asmt string, cs []model.ControlResult) error {
 
 // Controls lists control results.
 func (s *Store) Controls(asmt string) ([]model.ControlResult, error) {
-	rows, err := s.DB.Query(`SELECT id,domain,title,method,status,COALESCE(reason,''),COALESCE(adapter,''),evidence_json,refs_json FROM controls WHERE assessment_id=? ORDER BY id`, asmt)
+	rows, err := s.DB.Query(`SELECT id,domain,title,method,status,COALESCE(reason,''),COALESCE(adapter,''),evidence_json,refs_json,COALESCE(decided_by,'') FROM controls WHERE assessment_id=? ORDER BY id`, asmt)
 	if err != nil {
 		return nil, err
 	}
@@ -357,7 +363,7 @@ func (s *Store) Controls(asmt string) ([]model.ControlResult, error) {
 		var c model.ControlResult
 		var st string
 		var ev, refs sql.NullString
-		if err := rows.Scan(&c.ID, &c.Domain, &c.Title, &c.Method, &st, &c.Reason, &c.Adapter, &ev, &refs); err != nil {
+		if err := rows.Scan(&c.ID, &c.Domain, &c.Title, &c.Method, &st, &c.Reason, &c.Adapter, &ev, &refs, &c.DecidedBy); err != nil {
 			return nil, err
 		}
 		c.Status = model.Status(st)
@@ -379,6 +385,77 @@ func (s *Store) SetControlStatus(projectID, asmt, id string, st model.Status, re
 		return err
 	}
 	return s.Event(projectID, asmt+"/"+id, old, string(st), reason)
+}
+
+// SetControlResult updates one control with its status, reason and who
+// decided it, and records an event when the status changes. Unlike
+// SetControlStatus it always rewrites the reason.
+func (s *Store) SetControlResult(projectID, asmt, id string, st model.Status, reason, decidedBy string) error {
+	var old string
+	_ = s.DB.QueryRow(`SELECT status FROM controls WHERE assessment_id=? AND id=?`, asmt, id).Scan(&old)
+	if _, err := s.DB.Exec(`UPDATE controls SET status=?, reason=?, decided_by=? WHERE assessment_id=? AND id=?`, string(st), reason, decidedBy, asmt, id); err != nil {
+		return err
+	}
+	if old == string(st) {
+		return nil
+	}
+	return s.Event(projectID, asmt+"/"+id, old, string(st), reason)
+}
+
+// RuntimeVerdict is the latest result a runtime profile wrote for one
+// control, with what it depended on, so that later passive scans can carry
+// it over while it is still valid.
+type RuntimeVerdict struct {
+	ControlID      string       `json:"control_id"`
+	Profile        string       `json:"profile"`
+	Status         model.Status `json:"status"`
+	Reason         string       `json:"reason"`
+	AssessmentID   string       `json:"assessment_id"`
+	DecidedAt      string       `json:"decided_at"`
+	ApprovalID     string       `json:"approval_id,omitempty"`
+	ManifestHash   string       `json:"manifest_hash,omitempty"`
+	ConfigHash     string       `json:"config_hash"`
+	CatalogVersion string       `json:"catalog_version"`
+	// Deps maps every file the verdict depends on to its SHA-256 at run
+	// time. Nil means the dependencies were not recorded.
+	Deps map[string]string `json:"deps"`
+}
+
+// PutRuntimeVerdict stores the latest runtime verdict for a control,
+// replacing any earlier one.
+func (s *Store) PutRuntimeVerdict(projectID string, v RuntimeVerdict) error {
+	_, err := s.DB.Exec(`INSERT OR REPLACE INTO runtime_verdicts(project_id,control_id,profile,status,reason,assessment_id,decided_at,approval_id,manifest_hash,config_hash,catalog_version,deps_json)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`, projectID, v.ControlID, v.Profile, string(v.Status), v.Reason, v.AssessmentID, v.DecidedAt, v.ApprovalID, v.ManifestHash, v.ConfigHash, v.CatalogVersion, js(v.Deps))
+	return err
+}
+
+// DeleteRuntimeVerdict forgets the runtime verdict of a control.
+func (s *Store) DeleteRuntimeVerdict(projectID, controlID string) error {
+	_, err := s.DB.Exec(`DELETE FROM runtime_verdicts WHERE project_id=? AND control_id=?`, projectID, controlID)
+	return err
+}
+
+// RuntimeVerdicts returns the latest runtime verdict of each control.
+func (s *Store) RuntimeVerdicts(projectID string) (map[string]RuntimeVerdict, error) {
+	rows, err := s.DB.Query(`SELECT control_id,profile,status,COALESCE(reason,''),assessment_id,decided_at,COALESCE(approval_id,''),COALESCE(manifest_hash,''),
+		COALESCE(config_hash,''),COALESCE(catalog_version,''),deps_json FROM runtime_verdicts WHERE project_id=?`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]RuntimeVerdict{}
+	for rows.Next() {
+		var v RuntimeVerdict
+		var st string
+		var deps sql.NullString
+		if err := rows.Scan(&v.ControlID, &v.Profile, &st, &v.Reason, &v.AssessmentID, &v.DecidedAt, &v.ApprovalID, &v.ManifestHash, &v.ConfigHash, &v.CatalogVersion, &deps); err != nil {
+			return nil, err
+		}
+		v.Status = model.Status(st)
+		v.Deps = unjs[map[string]string](deps)
+		out[v.ControlID] = v
+	}
+	return out, rows.Err()
 }
 
 // PutEdges stores edges.
@@ -673,6 +750,22 @@ func (s *Store) ValidApproval(projectID, kind, subjectHash string, now time.Time
 		}
 	}
 	return nil, rows.Err()
+}
+
+// ApprovalByID returns an approval whatever its state, and whether it was
+// revoked; nil when there is none with that ID.
+func (s *Store) ApprovalByID(projectID, id string) (*Approval, bool, error) {
+	var a Approval
+	var revoked int
+	err := s.DB.QueryRow(`SELECT id,kind,subject_hash,approved_by,approved_at,expires_at,COALESCE(revoked,0) FROM approvals WHERE project_id=? AND id=?`, projectID, id).
+		Scan(&a.ID, &a.Kind, &a.SubjectHash, &a.ApprovedBy, &a.ApprovedAt, &a.ExpiresAt, &revoked)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+	return &a, revoked != 0, nil
 }
 
 // RevokeApprovals revokes all approvals of a kind.

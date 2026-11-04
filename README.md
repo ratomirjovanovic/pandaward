@@ -294,6 +294,16 @@ runtime:
 
 On Android it uses `adb` with an `emulator-*` serial that also reports `ro.kernel.qemu=1`, and reads the app's `shared_prefs` through `run-as`, which only works for debuggable builds. On iOS it uses `xcrun simctl get_app_container booted` and only accepts a container inside CoreSimulator, then reads the app's preferences plist. A non-empty value under a credential-like key (token, password, session and similar) is a finding for K-003 or L-002; PandaWard records the key name and never the value. Real devices are refused, and a missing emulator, simulator, tool or setting makes the control `BLOCKED` with the reason. Transport security and Keychain accessibility are not tested at runtime.
 
+## How long a runtime result lasts
+
+A passive scan or retest cannot observe what a runtime profile tested, so it carries the last runtime verdict (`PASS`, `FAIL` or `SUSPECTED`) of each control over, marked `decided_by: runtime` and with a reason that names the profile and time of the run. Its findings stay open. The verdict holds only while everything it ran under is unchanged:
+
+- for `staging-active` and `production-observe`, the exact `scope.yaml` and the approval it ran under, which must still be valid (not expired, not revoked);
+- the PandaWard config and control catalog;
+- every source file in the project, every file linked to the control's domain and every file behind the asset the control needs (route files, `AndroidManifest.xml`, `Info.plist`, built packages), compared by SHA-256 with the run.
+
+When any of these changes, the control becomes `STALE` with a reason that says which (for example `the scope approval apr_... it ran under expired` or `1 file(s) it depends on changed since the runtime run (src/server.js)`), in `pandaward status` and the reports at once and in every later scan. It counts as decided again only after the profile runs again. A run that ends `BLOCKED`, `ERROR` or `INCONCLUSIVE` replaces the earlier verdict too, so an old `PASS` never outlives a newer run that could not decide.
+
 ## In CI
 
 ```yaml

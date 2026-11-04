@@ -11,7 +11,7 @@ These are the formats other programs and people depend on. Their shape is pinned
 | MCP tools | names, input schemas and annotations of `pandaward mcp` tools | shares the report version | 1 |
 | Project config | `.pandaward/config.yaml` | `schema_version` | 1 |
 | Scope manifest | `.pandaward/scope.yaml` | `schema_version` | 1 |
-| Ledger | `.pandaward/private/state.db` | `meta.schema_version` (number of migrations) | 2 |
+| Ledger | `.pandaward/private/state.db` | `meta.schema_version` (number of migrations) | 3 |
 
 SARIF output follows SARIF 2.1.0 and is not versioned separately.
 
