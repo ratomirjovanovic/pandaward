@@ -215,3 +215,48 @@ func TestNextServerActions(t *testing.T) {
 		t.Errorf("server actions must not count as HTTP routes, got %d", n)
 	}
 }
+
+// The Next.js table resolves route groups, parallel slots and intercepting
+// folders to the URL they serve, and leaves private folders out.
+func TestNextRouteTableURLs(t *testing.T) {
+	inv := writeAndWalk(t, map[string]string{
+		"web/package.json":                                `{"dependencies":{"next":"15"}}`,
+		"web/src/app/(shop)/items/[id]/page.tsx":          "export default function P() {}\n",
+		"web/src/app/feed/@modal/(..)photo/[id]/page.tsx": "export default function P() {}\n",
+		"web/src/app/(...)login/page.tsx":                 "export default function P() {}\n",
+		"web/src/app/_lib/route.ts":                       "export function GET() {}\n",
+		"web/src/app/%5Fescaped/page.tsx":                 "export default function P() {}\n",
+		"web/src/app/route.ts":                            "export const GET = () => new Response('ok')\nexport function HEAD() {}\n",
+		"web/src/app/layout.tsx":                          "export default function L() {}\n",
+		"web/src/app/robots.ts":                           "export default function robots() {}\n",
+		"web/src/middleware.ts":                           "export function middleware() {}\n",
+		"web/src/pages/api/users/index.ts":                "export default function h() {}\n",
+	})
+	var got []string
+	for _, a := range inv.Assets {
+		switch a.Kind {
+		case "route", "page", "layout", "middleware":
+			got = append(got, a.ID)
+		}
+	}
+	sort.Strings(got)
+	want := []string{
+		"layout:/@web/src/app/layout.tsx",
+		"middleware:/*@web/src/middleware.ts",
+		"page:/_escaped@web/src/app/%5Fescaped/page.tsx",
+		"page:/items/[id]@web/src/app/(shop)/items/[id]/page.tsx",
+		"page:/login@web/src/app/(...)login/page.tsx",
+		"page:/photo/[id]@web/src/app/feed/@modal/(..)photo/[id]/page.tsx",
+		"page:/robots.txt@web/src/app/robots.ts",
+		"route:ANY:/api/users@web/src/pages/api/users/index.ts",
+		"route:GET:/@web/src/app/route.ts",
+		"route:HEAD:/@web/src/app/route.ts",
+	}
+	if !slices.Equal(got, want) {
+		t.Fatalf("table assets:\n got  %q\n want %q", got, want)
+	}
+	app := inv.NextJS.Apps[0]
+	if app.AppDir != "web/src/app" || app.PagesDir != "web/src/pages" || app.Middleware != "web/src/middleware.ts" || app.Intercepting != 2 || app.Slots != 1 || app.Groups != 1 {
+		t.Errorf("app = %+v", app)
+	}
+}
