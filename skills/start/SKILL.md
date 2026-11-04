@@ -23,6 +23,8 @@ With the argument `quick`, keep only items 1, 4, 5 and 6.
 
 ## 1. Scan
 
+Before anything else, run `pandaward version`. If it cannot start because the binary is built for another system ("cannot execute binary file", "Exec format error", "not a valid Win32 application", or the plugin's `bin/` has only `pandaward.exe` on macOS or Linux, or only `pandaward` without `.exe` on Windows), the wrong plugin variant is installed. Say so in one sentence, offer to fix it, and after a yes run, for Windows, `claude plugin uninstall pandaward@pandaward` and `claude plugin install pandaward-windows@pandaward`, or for macOS and Linux, `claude plugin uninstall pandaward-windows@pandaward` and `claude plugin install pandaward@pandaward`. Then tell the user to restart Claude Code and stop; nothing else can run until then.
+
 Run `pandaward assess` in the project root (the plugin puts `pandaward` on PATH; otherwise use `"${CLAUDE_PLUGIN_ROOT}/bin/pandaward"`) through the Monitor tool, described as "PandaWard assessment", with the longest timeout it allows, so the user sees it move; without a Monitor tool, run it directly. It initializes the project if needed, prints a progress bar with a percentage weighted by how long each adapter is expected to take (on the first scan an estimate from the inventory, later the durations recorded in this project), the step, the adapter and the time left, and ends with a summary. Show the banner once. Pass each line that starts or finishes an adapter on to the user at once, in one short sentence with the percentage, step and time left as printed; pass on "still running" lines at most once a minute. Then show the summary block as it appears; do not paraphrase the numbers. If the assessment is INCOMPLETE, say which adapter failed and continue: an incomplete run is never a clean run.
 
 If scanners are BLOCKED because they are not installed, note which optional scanners would raise coverage (from `pandaward doctor`) and keep going; offer to install them in the final question, never before.
@@ -59,14 +61,16 @@ Run `pandaward report` so the reports include the reviewers' hypotheses. End wit
 PandaWard assessment - by Ratomir Jovanovic
 ==============================================================
 Coverage     [#########---------------]  38%  (19 of 50 controls)
+Decided by   19 automatic, 0 runtime, 0 attested; 22 not applicable
 Findings     22 confirmed, 11 suspected, 4 new hypotheses
 Fix first    PW-0022  critical  pull_request_target checkout
 Not decided  BLOCKED 9, UNSUPPORTED 11, SUSPECTED 10
+Path to 100% 10 triage suspected findings, 6 review manually, 2 install a scanner, ...
 Reports      .pandaward/reports/<name>.html
 ==============================================================
 ```
 
-Fill it only with numbers from the ledger and the `pandaward assess` output. Then list, briefly, what a human still has to decide or test (runtime authorization, business logic, anything BLOCKED for lack of a tool or approval).
+Fill it only with numbers from the ledger and the `pandaward assess` output; the "Decided by" line and the "Path to 100%" groups come from the summary's own lines of those names (or `coverage` and `path_to_100` in `pandaward_get_status`). Then list, briefly, what a human still has to decide or test, using the path to 100% steps as worded (runtime authorization, business logic, anything BLOCKED for lack of a tool or approval).
 
 ## 6. One question, then do it
 
