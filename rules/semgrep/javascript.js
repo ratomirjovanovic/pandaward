@@ -38,6 +38,7 @@ app.get('/invoices/:id', async (req, res) => {
 
 const OPEN_DISPUTE_STATUSES = ['open', 'needs_response'];
 const INVOICES_TABLE = 'invoices';
+const RETRY = { delaysMs: [100, 500, 2000] };
 
 app.get('/reports', async (req, res) => {
   // Module constants, lists built from them and numbers carry no request data.
@@ -59,8 +60,25 @@ app.get('/reports', async (req, res) => {
   await db.query(req.query.where + " AND " + INVOICES_TABLE);
   // ruleid: pandaward-js-sql-string
   await sql.raw(`SELECT * FROM t WHERE x = ${CONFIG.prefix + req.body.x}`);
+  // A ternary between two string literals only picks fixed SQL text (#221).
+  // ok: pandaward-js-sql-string
+  await db.query(`SET LOCAL ROLE ${req.user.isAdmin ? 'admin' : 'reader'}`);
+  // ruleid: pandaward-js-sql-string
+  await db.query(`SET LOCAL ROLE ${req.user.isAdmin ? req.body.role : 'reader'}`);
+  // A list built from a property of a module constant (#221).
+  // ok: pandaward-js-sql-string
+  await db.query(`SELECT * FROM jobs WHERE delay_ms IN (${RETRY.delaysMs.map((ms) => Math.trunc(ms)).join(",")})`);
+  // ok: pandaward-js-sql-string
+  await db.query("SELECT * FROM jobs WHERE delay_ms IN (" + RETRY.delaysMs.map((ms) => Math.trunc(ms)).join(",") + ")");
+  // ruleid: pandaward-js-sql-string
+  await db.query(`SELECT * FROM jobs WHERE delay_ms IN (${req.body.delays.map((ms) => Math.trunc(ms)).join(",")})`);
+  // ruleid: pandaward-js-sql-string
+  await db.query("SELECT * FROM jobs WHERE delay_ms IN (" + req.body.delays.map((ms) => Math.trunc(ms)).join(",") + ")");
   res.end();
 });
+
+const LOGO_SVG = '<svg viewBox="0 0 16 16"></svg>';
+const ICONS = { close: '<svg viewBox="0 0 8 8"></svg>' };
 
 function render(el, msg) {
   // ruleid: pandaward-js-html-sink
@@ -69,6 +87,15 @@ function render(el, msg) {
   el.innerHTML = "<b>static</b>";
   // ok: pandaward-js-html-sink
   el.textContent = msg;
+  // A bare UPPER_CASE module constant is fixed markup (#220).
+  // ok: pandaward-js-html-sink
+  el.innerHTML = LOGO_SVG;
+  // ok: pandaward-js-html-sink
+  el.innerHTML = ICONS.close;
+  // ruleid: pandaward-js-html-sink
+  el.innerHTML = LOGO_SVG + msg;
+  // ruleid: pandaward-js-html-sink
+  el.insertAdjacentHTML("beforeend", LOGO_SVG + msg);
 }
 
 function auth(token, key) {
