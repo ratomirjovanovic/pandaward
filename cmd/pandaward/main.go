@@ -74,8 +74,10 @@ Assessment (local, no target network traffic):
 
 Network-active (human authorization required):
   scope           init | show | validate | approve --by <name> | revoke
-  test            --profile production-observe  (passive header/TLS review of approved origins)
-                  --profile staging-active      (ZAP spider and passive scan, active scan if the manifest allows)
+  test            --profile production-observe  (headers and cookies of approved origins)
+                  --profile staging-active      (permission checks with test identities, ZAP; staging or local)
+                  --profile local-runtime       (mobile test build storage on an emulator or simulator)
+                  pandaward test --help lists what each profile decides and needs
 
 Integration and tooling:
   doctor          Environment, optional scanners and their network needs
@@ -1128,11 +1130,12 @@ func cmdScope(args []string, stdin io.Reader, w io.Writer) error {
 			fmt.Fprintln(w, "  "+t.URL)
 		}
 		fmt.Fprintf(w, "Owner: %s\nReference: %s\nEnvironment: %s\nBudget: %d requests, %.1f req/s\n", m.Authorization.Owner, m.Authorization.Reference, m.Environment, m.Limits.MaxRequestsTotal, m.Limits.RequestsPerSecond)
-		code := m.Hash()[:8]
-		fmt.Fprintf(w, "\nI confirm I am authorized to test every target above. Type APPROVE %s to continue: ", code)
+		// The code binds what the human types to this exact manifest.
+		want := "APPROVE " + m.Hash()[:8]
+		fmt.Fprintf(w, "\nI confirm I am authorized to test every target above.\nTo approve, type exactly this line and press Enter (anything else cancels):\n\n    %s\n\n> ", want)
 		line, _ := bufio.NewReader(stdin).ReadString('\n')
-		if strings.TrimSpace(line) != "APPROVE "+code {
-			return exitErr{3, "not approved"}
+		if got := strings.TrimSpace(line); got != want {
+			return exitErr{3, approveMismatch(got, want)}
 		}
 		subject, err := e.ApprovalSubject(m, true)
 		if err != nil {
@@ -1160,8 +1163,9 @@ func cmdScope(args []string, stdin io.Reader, w io.Writer) error {
 
 func cmdTest(ctx context.Context, args []string, w, ew io.Writer) error {
 	fs, root := newFS("test")
-	profile := fs.String("profile", "", "production-observe | staging-active | local-runtime")
+	profile := fs.String("profile", "", "production-observe | staging-active | local-runtime (see pandaward test --help)")
 	asJSON := fs.Bool("json", false, "JSON output")
+	fs.Usage = func() { testHelp(w) }
 	if _, err := parse(fs, args); err != nil {
 		return err
 	}
@@ -1192,9 +1196,9 @@ func cmdTest(ctx context.Context, args []string, w, ew io.Writer) error {
 	case "manual-assisted":
 		return exitErr{3, "profile " + *profile + " is UNSUPPORTED in this release: no runtime adapter is implemented, so related controls stay UNSUPPORTED/BLOCKED in the report. Use /pandaward:review for manual-assisted analysis."}
 	case "":
-		return exitErr{2, "--profile is required"}
+		return exitErr{2, "--profile is required; `pandaward test --help` lists the profiles, what each decides and needs"}
 	default:
-		return exitErr{2, "unknown profile " + *profile}
+		return exitErr{2, "unknown profile " + redact.Line(*profile) + "; `pandaward test --help` lists the profiles"}
 	}
 	if _, _, err := e.CheckScope(time.Now()); err != nil {
 		return exitErr{3, err.Error()}

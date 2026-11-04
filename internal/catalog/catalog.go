@@ -202,3 +202,75 @@ var Edges = []EdgeRule{
 
 // Profiles known to the policy engine.
 var Profiles = []string{"local-passive", "local-runtime", "staging-active", "production-observe", "manual-assisted"}
+
+// TestProfile describes a profile of `pandaward test` for the help text and
+// the docs. The controls it decides are not listed here: they come from the
+// Profile field of the controls, so the help cannot drift from the catalog.
+// Profile names are part of scope manifests and scripts; never rename one.
+type TestProfile struct {
+	Name   string
+	Covers string
+	Needs  string
+	// Local says whether the profile may run against a target on this
+	// machine (localhost or a private address).
+	Local string
+	// When gives, per control, the condition under which the profile
+	// decides it.
+	When map[string]string
+	// Unsupported profiles have no runtime adapter in this release.
+	Unsupported bool
+}
+
+// TestProfiles are the profiles `pandaward test --profile` accepts, in the
+// order the help lists them.
+var TestProfiles = []TestProfile{
+	{Name: "production-observe",
+		Covers: "Passive look at a deployed site: one GET per approved origin, then the security response headers, a weak CSP and cookie flags. No payloads, no login, redirects are not followed.",
+		Needs:  "scope.yaml approved with `pandaward scope approve` (GET in allowed_methods). No identities, no ZAP. Works for any environment, production included.",
+		Local:  "only when the manifest sets allow_private_addresses: true",
+		When:   map[string]string{"H-003": "approved origins that answer without errors"}},
+	{Name: "staging-active",
+		Covers: "Permission checks with test identities (who may read which object or privileged route, and whether a revoked credential is still accepted), then a ZAP spider and passive scan, and the ZAP active scan when the manifest allows it.",
+		Needs:  "scope.yaml approved with `pandaward scope approve`; identities and authorization_checks in it, with each credential in the environment variable its value_env names; ZAP installed (Java 17+) for M-001 and D-005. Refused for environment: production.",
+		Local:  "yes, with environment: staging or local; loopback and private addresses need allow_private_addresses: true. Use this profile for permission checks against an app running on your machine",
+		When: map[string]string{
+			"B-004": "an identity marked revoked: true",
+			"C-001": "an authorization check of kind object",
+			"C-002": "an authorization check of kind function",
+			"M-001": "ZAP installed",
+			"D-005": "ZAP installed and zap.active_scan: true",
+		}},
+	{Name: "local-runtime",
+		Covers: "Mobile apps only: what the Android or iOS test build stored on an emulator or simulator (credentials in shared preferences or the preferences plist; key names are recorded, never values). Sends no network traffic.",
+		Needs:  "runtime.android_package in .pandaward/config.yaml, adb and a running emulator with the debuggable test build; or runtime.ios_bundle_id, xcrun and a booted simulator on macOS. No scope manifest. Real devices are refused.",
+		Local:  "not a web target: it reads an emulator or simulator on this machine. For a web app on localhost use staging-active",
+		When:   map[string]string{"K-003": "runtime.android_package and a running Android emulator", "L-002": "runtime.ios_bundle_id and a booted iOS simulator on macOS"}},
+	{Name: "manual-assisted", Unsupported: true,
+		Covers: "Not a runtime profile in this release; `pandaward test` refuses it. Manual review runs through /pandaward:review.",
+		Needs:  "nothing to run",
+		Local:  "not applicable"},
+}
+
+// Decides returns the runtime controls this profile decides, in catalog
+// order.
+func (p TestProfile) Decides() []Control {
+	var out []Control
+	for _, c := range Controls {
+		if c.Profile == p.Name && c.Method == MethodRuntime && c.Adapter != "" {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+// NotAutomated returns the controls assigned to this profile that no
+// runtime adapter decides yet; they stay UNSUPPORTED.
+func (p TestProfile) NotAutomated() []Control {
+	var out []Control
+	for _, c := range Controls {
+		if c.Profile == p.Name && c.Method == MethodRuntime && c.Adapter == "" {
+			out = append(out, c)
+		}
+	}
+	return out
+}
