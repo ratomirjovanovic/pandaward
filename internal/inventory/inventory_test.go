@@ -324,6 +324,55 @@ func TestSQLMigrationsFeature(t *testing.T) {
 	}
 }
 
+func TestAgentTextFeature(t *testing.T) {
+	for p, want := range map[string]bool{
+		"AGENTS.md":                        true,
+		"pkg/api/CLAUDE.md":                true,
+		"GEMINI.md":                        true,
+		".cursorrules":                     true,
+		".windsurfrules":                   true,
+		".github/copilot-instructions.md":  true,
+		".claude/agents/reviewer.md":       true,
+		".claude/commands/ops/deploy.md":   true,
+		"skills/scan/SKILL.md":             true,
+		"plugins/x/skills/a/b/SKILL.md":    true,
+		".github/prompts/review.prompt.md": true,
+		"README.md":                        false,
+		"docs/agents.txt":                  false,
+		"docs/SKILL.md":                    false,
+		".claude/agents/notes.txt":         false,
+		".claude/settings.json":            false,
+		"copilot-instructions.md":          false,
+		"agents/ai.md":                     false,
+	} {
+		if got := inventory.IsAgentInstructions(p); got != want {
+			t.Errorf("IsAgentInstructions(%q) = %v, want %v", p, got, want)
+		}
+	}
+	inv := walk(t, map[string]string{
+		"CLAUDE.md":        "Use pnpm.\n",
+		".cursorrules":     "Prefer small diffs.\n",
+		".mcp.json":        "{}\n",
+		"README.md":        "hello\n",
+		"src/server.ts":    "import { McpServer } from \"@modelcontextprotocol/sdk/server/mcp.js\";\nserver.tool(\"a\", \"b\", {}, cb);\n",
+		"src/other.ts":     "server.tool(\"a\", \"b\", {}, cb);\n",
+		"server.py":        "from mcp.server.fastmcp import FastMCP\n@mcp.tool()\ndef a():\n    pass\n",
+		"main.go":          "package main\nimport \"github.com/mark3labs/mcp-go/mcp\"\nvar t = mcp.NewTool(\"a\")\n",
+		"lib/unrelated.py": "@app.tool\ndef a():\n    pass\n",
+	}, inventory.Options{})
+	got := slices.Sorted(slices.Values(inv.Features["agent_text"]))
+	want := []string{".cursorrules", ".mcp.json", "CLAUDE.md", "main.go", "server.py", "src/server.ts"}
+	if !slices.Equal(got, want) {
+		t.Errorf("agent_text = %v, want %v", got, want)
+	}
+	if f := inv.FileByPath("CLAUDE.md"); f == nil || f.Lang != "markdown" || len(f.Lines) != 1 {
+		t.Errorf("CLAUDE.md not read as markdown: %+v", f)
+	}
+	if inv.FileByPath("README.md") != nil {
+		t.Error("README.md must stay out of the inventory")
+	}
+}
+
 // Tool-local settings stay readable: the secret content scan must see them.
 func TestWalkReadsToolLocalSettings(t *testing.T) {
 	inv := walk(t, map[string]string{".claude/settings.local.json": "{}\n"}, inventory.Options{MaxFileBytes: 1024})

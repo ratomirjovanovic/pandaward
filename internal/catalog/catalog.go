@@ -7,7 +7,7 @@
 package catalog
 
 // Version of the built-in catalog. Bump on any semantic change.
-const Version = "2026.11-m1"
+const Version = "2026.11-m2"
 
 // Domain is one of the A-R work partitions.
 type Domain struct {
@@ -146,6 +146,7 @@ var Controls = []Control{
 	{ID: "P-001", Domain: "P", Title: "Model output is not executed as code or shell", Method: MethodStatic, Adapter: "builtin-code", Requires: "llm", Refs: []string{"CWE-94"}},
 	{ID: "P-002", Domain: "P", Title: "MCP server configs pinned and free of inline credentials", Method: MethodStatic, Adapter: "builtin-supply", Requires: "mcp_config", Refs: []string{"CWE-829", "CWE-798"}},
 	{ID: "P-003", Domain: "P", Title: "Prompt-injection and tool-authorization cases tested", Method: MethodRuntime, Requires: "llm", Profile: "staging-active"},
+	{ID: "P-004", Domain: "P", Title: "Agent instructions and tool descriptions free of hidden or injected instructions", Method: MethodStatic, Adapter: "builtin-code", Requires: "agent_text", Refs: []string{"CWE-1427"}},
 
 	{ID: "Q-001", Domain: "Q", Title: "Rate limiting applied to authentication and expensive routes", Method: MethodManual, Requires: "web", Refs: []string{"API4:2023", "CWE-770"}},
 	{ID: "Q-002", Domain: "Q", Title: "Concurrency and duplicate-action tests on stateful flows", Method: MethodRuntime, Requires: "payments", Profile: "staging-active", Refs: []string{"CWE-362"}},
@@ -196,6 +197,7 @@ var Edges = []EdgeRule{
 	{ID: "BK1", Title: "Mobile identity -> Android storage", Scenario: "Token copied to Android insecure storage", Needs: []string{"android", "auth"}, Tests: []string{"K-001", "K-003"}},
 	{ID: "BL1", Title: "Mobile identity -> iOS keychain", Scenario: "Session material stored outside platform controls", Needs: []string{"ios", "auth"}, Tests: []string{"L-001", "L-002"}},
 	{ID: "JP1", Title: "IAM -> MCP credentials", Scenario: "Agent receives wider credentials than the tool requires", Needs: []string{"mcp_config"}, Tests: []string{"P-002"}},
+	{ID: "IP1", Title: "Agent instructions and MCP tool text -> agent actions", Scenario: "A copied skill, rules file or third-party MCP tool description carries hidden or injected instructions that steer the agent", Needs: []string{"agent_text"}, Tests: []string{"P-004"}},
 }
 
 // Profiles known to the policy engine.

@@ -116,6 +116,83 @@ func IsSQLMigration(p string) bool {
 	return strings.EqualFold(path.Ext(p), ".sql") && path.Base(path.Dir(p)) == "migrations"
 }
 
+// IsMCPConfig reports whether the file at project-relative path p is an MCP
+// client config: .mcp.json, mcp.json (as in .cursor/ or .vscode/) or
+// claude_desktop_config.json.
+func IsMCPConfig(p string) bool {
+	switch strings.ToLower(path.Base(filepath.ToSlash(p))) {
+	case ".mcp.json", "mcp.json", "claude_desktop_config.json":
+		return true
+	}
+	return false
+}
+
+// IsAgentInstructions reports whether the file at project-relative path p
+// holds instructions that coding agents load as context: AGENTS.md,
+// CLAUDE.md, GEMINI.md, .cursorrules, .windsurfrules,
+// .github/copilot-instructions.md, Markdown files in .claude/agents/ and
+// .claude/commands/, SKILL.md files below a skills/ directory and
+// *.prompt.md files.
+func IsAgentInstructions(p string) bool {
+	p = filepath.ToSlash(p)
+	l := strings.ToLower(p)
+	base := path.Base(l)
+	switch base {
+	case "agents.md", "claude.md", "gemini.md", ".cursorrules", ".windsurfrules":
+		return true
+	case "skill.md":
+		return strings.HasPrefix(l, "skills/") || strings.Contains(l, "/skills/")
+	}
+	if l == ".github/copilot-instructions.md" || strings.HasSuffix(l, "/.github/copilot-instructions.md") || strings.HasSuffix(base, ".prompt.md") {
+		return true
+	}
+	if path.Ext(base) != ".md" {
+		return false
+	}
+	return strings.HasPrefix(l, ".claude/agents/") || strings.Contains(l, "/.claude/agents/") ||
+		strings.HasPrefix(l, ".claude/commands/") || strings.Contains(l, "/.claude/commands/")
+}
+
+// agentLang is the analysis language of an agent instruction file that has
+// no language of its own.
+func agentLang(rel string) string {
+	if !IsAgentInstructions(rel) {
+		return ""
+	}
+	if strings.HasSuffix(strings.ToLower(rel), ".md") {
+		return "markdown"
+	}
+	return "text"
+}
+
+// mcpToolSourceRe finds MCP server tool definitions in source code. A file
+// qualifies only when it also imports an MCP server SDK (mcpSDKRe).
+var (
+	mcpSDKRe = map[string]*regexp.Regexp{
+		"javascript": regexp.MustCompile(`(\bfrom\s*|\brequire\(\s*|\bimport\(\s*)['"](@modelcontextprotocol/sdk|fastmcp)\b`),
+		"python":     regexp.MustCompile(`(?m)^\s*(from\s+(mcp|fastmcp)[\s.]|import\s+(mcp|fastmcp)\b)`),
+		"go":         regexp.MustCompile(`(?m)^\s*(import\s+)?(\w+\s+)?"github\.com/mark3labs/mcp-go/`),
+	}
+	mcpToolSourceRe = map[string]*regexp.Regexp{
+		"javascript": regexp.MustCompile(`\.(tool|registerTool|addTool)\s*\(`),
+		"python":     regexp.MustCompile(`(?m)^\s*@\w+\.tool\b`),
+		"go":         regexp.MustCompile(`\bmcp\.NewTool\s*\(`),
+	}
+)
+
+// IsMCPToolSource reports whether text, the content of a file in language
+// lang, defines MCP server tools with a recognised SDK: server.tool,
+// registerTool or addTool with @modelcontextprotocol/sdk or fastmcp
+// (JavaScript, TypeScript), @<server>.tool decorators with mcp or fastmcp
+// (Python), or mcp.NewTool with mcp-go (Go).
+func IsMCPToolSource(lang, text string) bool {
+	if lang == "typescript" {
+		lang = "javascript"
+	}
+	sdk, def := mcpSDKRe[lang], mcpToolSourceRe[lang]
+	return sdk != nil && sdk.MatchString(text) && def.MatchString(text)
+}
+
 // Walk builds the inventory.
 func Walk(root string, opt Options) (*Inventory, error) {
 	absRoot, err := filepath.Abs(root)
@@ -271,6 +348,9 @@ func walkFiles(ctx context.Context, absRoot string, opt Options, withLines bool,
 			return nil
 		}
 		lang := langOf(d.Name())
+		if lang == "" {
+			lang = agentLang(rel)
+		}
 		if lang == "" {
 			return nil // not a type we analyze; not a coverage gap
 		}
@@ -688,8 +768,13 @@ func (inv *Inventory) detect() {
 			inv.feature("ipa", f.Path)
 			inv.feature("ios", f.Path)
 			domains["L"] = true
-		case lb == ".mcp.json" || lb == "mcp.json" || lb == "claude_desktop_config.json" || (strings.Contains(f.Path, ".cursor/") && lb == "mcp.json"):
+		case IsMCPConfig(f.Path):
 			inv.feature("mcp_config", f.Path)
+			inv.feature("agent_text", f.Path)
+			domains["P"] = true
+		}
+		if IsAgentInstructions(f.Path) {
+			inv.feature("agent_text", f.Path)
 			domains["P"] = true
 		}
 		if IsSQLMigration(f.Path) {
@@ -731,6 +816,10 @@ func (inv *Inventory) detect() {
 			}
 			if llmRe.MatchString(joined) {
 				inv.feature("llm", f.Path)
+				domains["P"] = true
+			}
+			if IsMCPToolSource(f.Lang, joined) {
+				inv.feature("agent_text", f.Path)
 				domains["P"] = true
 			}
 			if jwtLibRe.MatchString(joined) {

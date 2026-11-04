@@ -22,7 +22,7 @@ func adapterWatches(adapter, p string) bool {
 	lang := inventory.LangOf(base)
 	switch adapter {
 	case "builtin-code":
-		return isCodeLang(lang)
+		return isCodeLang(lang) || inventory.IsAgentInstructions(p) || inventory.IsMCPConfig(p)
 	case "builtin-cicd":
 		return strings.Contains(p, ".github/workflows/")
 	case "builtin-infra":
