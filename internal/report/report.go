@@ -25,13 +25,15 @@ const Attestation = "Automated technical security assessment. Not a certificatio
 
 // Report is the full report model.
 type Report struct {
-	SchemaVersion int                       `json:"schema_version"`
-	Generator     string                    `json:"generator"`
-	GeneratedAt   string                    `json:"generated_at"`
-	Project       string                    `json:"project"`
-	Assessment    store.Assessment          `json:"assessment"`
-	Attestation   string                    `json:"attestation"`
-	Coverage      engine.Coverage           `json:"coverage"`
+	SchemaVersion int              `json:"schema_version"`
+	Generator     string           `json:"generator"`
+	GeneratedAt   string           `json:"generated_at"`
+	Project       string           `json:"project"`
+	Assessment    store.Assessment `json:"assessment"`
+	Attestation   string           `json:"attestation"`
+	Coverage      engine.Coverage  `json:"coverage"`
+	// PathTo100 groups the undecided applicable controls by next step.
+	PathTo100     []engine.PathGroup        `json:"path_to_100,omitempty"`
 	StaleFiles    []string                  `json:"stale_files,omitempty"`
 	Controls      []model.ControlResult     `json:"controls"`
 	Edges         []model.Edge              `json:"edges"`
@@ -105,7 +107,9 @@ func BuildFor(e *engine.Engine, a *store.Assessment) (*Report, error) {
 		return fs[i].ID < fs[j].ID
 	})
 	r.Findings = fs
+	engine.Annotate(r.Controls, fs)
 	r.Coverage = engine.ComputeCoverage(r.Controls, r.Edges, len(r.StaleFiles))
+	r.PathTo100 = engine.PathTo100(r.Controls, fs)
 	r.DomainSummary = map[string]map[string]int{}
 	for _, c := range r.Controls {
 		if r.DomainSummary[c.Domain] == nil {
@@ -249,12 +253,25 @@ func Markdown(r *Report) string {
 	w("- Confirmed observations (open): **%d** (critical %d, high %d, medium %d, low %d, info %d)\n", len(conf), sev[model.SevCritical], sev[model.SevHigh], sev[model.SevMedium], sev[model.SevLow], sev[model.SevInfo])
 	w("- Suspected signals needing review: **%d** (never counted as confirmed)\n", len(susp))
 	w("- Controls: %d applicable, %d decisive (%s decisive coverage), %d not decided\n", r.Coverage.Applicable, r.Coverage.Decisive, pct(r.Coverage.Ratio), len(r.Untested()))
+	w("- %s\n", Breakdown(r.Coverage))
 	w("- Cross-domain edges: %d instantiated, %d verified, %d failed, %d blocked/inconclusive/suspected\n", r.Coverage.EdgesTotal, r.Coverage.EdgesVerified, r.Coverage.EdgesFailed, r.Coverage.EdgesOpen)
 	if len(r.StaleFiles) > 0 {
 		w("- **%d file(s) changed after this assessment; %d dependent control(s) and their edges are STALE until `pandaward retest`.**\n", len(r.StaleFiles), r.staleControls())
 	}
 	w("\n**Important:** %d applicable controls were not decisively tested. They must not be read as secure.\n\n", len(r.Untested()))
 	w("%s\n\n", r.Coverage.Note)
+
+	w("## Path to 100%%\n\n")
+	if len(r.PathTo100) == 0 {
+		w("Every applicable control is decided.\n\n")
+	} else {
+		w("What must happen for each undecided control to be decided, grouped by next step. A step that says a control cannot be decided in this release keeps coverage below 100%%.\n\n")
+		w("| Controls | Next step | Which |\n|---|---|---|\n")
+		for _, g := range r.PathTo100 {
+			w("| %d | %s | %s |\n", g.Count, esc(g.Step), strings.Join(g.Controls, ", "))
+		}
+		w("\n")
+	}
 
 	if d := r.Delta; d != nil {
 		w("## Changes since %s\n\n", d.From)
@@ -316,9 +333,9 @@ func Markdown(r *Report) string {
 		}
 		w("\nA domain passing in isolation never hides a failed or blocked edge.\n\n")
 	}
-	w("## Control ledger\n\n| Control | Title | Method | Status | Reason |\n|---|---|---|---|---|\n")
+	w("## Control ledger\n\n| Control | Title | Method | Status | Decided by | Reason | Next step |\n|---|---|---|---|---|---|---|\n")
 	for _, c := range r.Controls {
-		w("| %s | %s | %s | %s | %s |\n", c.ID, esc(c.Title), c.Method, c.Status, esc(c.Reason))
+		w("| %s | %s | %s | %s | %s | %s | %s |\n", c.ID, esc(c.Title), c.Method, c.Status, orDash(c.DecidedBy), esc(c.Reason), orDash(esc(c.NextStep)))
 	}
 	w("\n## Tool runs\n\n| Adapter | Version | Result | Signals | Detail |\n|---|---|---|---|---|\n")
 	for _, run := range r.Runs {
@@ -350,6 +367,13 @@ func CoverageCSV(r *Report) string {
 		b.WriteString(strings.Join([]string{"edge", e.ID, e.Domains, q(e.Title), "graph", string(e.Status), q(e.Reason), q(strings.Join(e.Provenance, " "))}, ",") + "\n")
 	}
 	return b.String()
+}
+
+// Breakdown says how the decisive controls were decided and how many
+// controls are not applicable, and so outside the denominator.
+func Breakdown(c engine.Coverage) string {
+	return fmt.Sprintf("Decided by: %d automatic (static and external adapters), %d runtime (approved runtime profiles), %d attested (recorded manual review; not available yet); %d not applicable, outside the denominator",
+		c.Automatic, c.Runtime, c.Attested, c.NotApplicable)
 }
 
 func ctrlTitle(id string) string {

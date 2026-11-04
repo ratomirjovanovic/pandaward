@@ -121,14 +121,25 @@ type ControlResult struct {
 	Adapter     string   `json:"adapter,omitempty"`
 	EvidenceIDs []string `json:"evidence_ids,omitempty"`
 	Refs        []string `json:"refs,omitempty"`
-	// DecidedBy says how the status was reached: DecidedRuntime when a
-	// runtime profile decided it (in this assessment or carried over from
-	// an earlier one); empty for the passive scan.
+	// DecidedBy says how a PASS or FAIL was reached: DecidedAutomatic,
+	// DecidedRuntime or DecidedAttested. Empty while undecided. Reports
+	// derive it from the method unless a recorded attestation sets it.
 	DecidedBy string `json:"decided_by,omitempty"`
+	// NextStep says what must happen for an undecided control to be
+	// decided. Reports fill it; it is empty for PASS, FAIL and N/A.
+	NextStep string `json:"next_step,omitempty"`
 }
 
-// DecidedRuntime marks a control result written by a runtime profile.
-const DecidedRuntime = "runtime"
+// How a decisive control result was reached.
+const (
+	// DecidedAutomatic is a static or external adapter in a passive scan.
+	DecidedAutomatic = "automatic"
+	// DecidedRuntime is a runtime profile (observe, staging, local runtime).
+	DecidedRuntime = "runtime"
+	// DecidedAttested is a recorded human attestation. Nothing records one
+	// yet; the value is reserved so coverage can count it once it exists.
+	DecidedAttested = "attested"
+)
 
 // Edge is an instantiated cross-domain dependency (AB1, CG1, ...).
 type Edge struct {

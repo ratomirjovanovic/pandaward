@@ -63,7 +63,13 @@ func wantStatus(t *testing.T, step string, cs map[string]model.ControlResult, wa
 	t.Helper()
 	for _, cid := range authzIDs {
 		c := cs[cid]
-		if c.Status != want || c.DecidedBy != model.DecidedRuntime || !strings.Contains(c.Reason, reasonHas) {
+		// decided_by is set only for decisive results; a STALE result in a
+		// report is undecided, so it carries none.
+		wantBy := model.DecidedRuntime
+		if want == model.StatusStale && c.DecidedBy == "" {
+			wantBy = ""
+		}
+		if c.Status != want || c.DecidedBy != wantBy || !strings.Contains(c.Reason, reasonHas) {
 			t.Errorf("%s: %s = %s (decided_by %q, reason %q), want %s from runtime with %q", step, cid, c.Status, c.DecidedBy, c.Reason, want, reasonHas)
 		}
 	}

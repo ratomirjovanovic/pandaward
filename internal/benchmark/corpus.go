@@ -14,7 +14,7 @@ import (
 )
 
 // CorpusVersion changes whenever cases are added, removed or edited.
-const CorpusVersion = "2026.11.3"
+const CorpusVersion = "2026.11.4"
 
 // Case is one repository that a rule must fire on (Vulnerable) or must not
 // fire on (Safe).
@@ -133,6 +133,16 @@ func Corpus() []Case {
 		Note: "child_process exec with an interpolated argument"})
 	safe("code.js-shell", "a.ts", "async function exec(box, cmd, args) { return box.run(cmd, args); }\nawait exec(box, \"git\", [\"status\"]);\n", "the file defines its own exec and never uses child_process")
 	safe("code.html-sink", "a.ts", "const res = await post({ body: 'not valid json{{{' });\n", "template tokens in a TypeScript string")
+	const ldHelper = "export function jsonLd(data: unknown): string {\n  return JSON.stringify(data)\n    .replace(/</g, '\\\\u003c')\n}\n"
+	const ldSink = "export const Ld = ({ data }) => (\n  <script\n    type=\"application/ld+json\"\n    dangerouslySetInnerHTML={{ __html: jsonLd(data) }}\n  />\n)\n"
+	cs = append(cs, Case{Rule: "code.html-sink", Adapter: "builtin-code", Files: map[string]string{"src/lib/json-ld.ts": ldHelper, "src/app/ld.tsx": "import { jsonLd } from '../lib/json-ld'\n" + ldSink},
+		Note: "JSON-LD through an imported helper that escapes <"},
+		Case{Rule: "code.html-sink", Adapter: "builtin-code", Vulnerable: true, Files: map[string]string{"src/app/ld.tsx": "function jsonLd(data) {\n  return JSON.stringify(data)\n}\n" + ldSink},
+			Note: "JSON-LD through a helper that does not escape <"})
+	safe("code.html-sink", "a.tsx", "export const Tag = () => (\n  <script\n    type=\"text/plain\"\n    dangerouslySetInnerHTML={{\n      __html:\n        \"window.dataLayer=window.dataLayer||[];\",\n    }}\n  />\n)\n", "a whole string literal")
+	cs = append(cs, Case{Rule: "code.sql-concat", Adapter: "builtin-code", Vulnerable: true,
+		Files: map[string]string{"scripts/gen.mjs": "import { writeFileSync } from 'node:fs'\nawait db.query('delete from prices where id = ' + id)\nwriteFileSync('out.sql', 'x')\n"},
+		Note:  "a query run in a file that also writes files"})
 	safe("code.secret-logged", "a.js", "console.log(`secret saved to ${file}`);\n", "the word is message prose, the value is a path")
 	safe("code.sql-concat", "a.ts", "await sql(`select count(*) from t where e like '%x.test'`);\n", "a quote inside a template literal")
 	safe("code.weak-hash-password", "a.ts", "const ok = [\"sha1\", \"sha256\"].some(a => verify(sig, sign(id, password, a)));\n", "algorithm names without a hashing call")

@@ -171,7 +171,7 @@ var codeRules = []lineRule{
 	{ID: "code.sql-template", Control: "D-003", Title: "SQL built with string interpolation", Re: regexp.MustCompile(`(?i)(\x60[^\x60]*\b(select\s[^\x60]*\sfrom|insert\s+into|update\s+\w+\s+set|delete\s+from)\b[^\x60]*\$\{|\bf['"][^'"]*\b(select\s.*\sfrom|insert\s+into|update\s+\w+\s+set|delete\s+from)\b[^'"]*\{)`),
 		Not: regexp.MustCompile(`(?i)\bsql(<[^\x60]*>)?\x60|Prisma\.sql|sql\.raw\(\s*\x60\s*\x60`), Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-89",
 		Message: "Query text is built with string interpolation.", Fix: "Use bound parameters (tagged sql templates, placeholders) instead of interpolation."},
-	{ID: "code.sql-concat", Control: "D-003", Title: "SQL built with string concatenation", Re: sqlConcatRe, SupersededBy: "code.sql-template",
+	{ID: "code.sql-concat", Control: "D-003", Title: "SQL built with string concatenation", Re: sqlConcatRe, SupersededBy: "code.sql-template", Demote: sqlForFileOnly,
 		Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-89", Message: "Query text is concatenated with values; if a value is user controlled this is SQL injection.", Fix: "Use parameterized queries / prepared statements or the ORM query builder."},
 	{ID: "code.sql-unsafe-raw", Control: "D-003", Title: "Unsafe raw query API", Re: regexp.MustCompile(`\$(queryRawUnsafe|executeRawUnsafe)\s*\(|\.raw\(\s*f['"]|sequelize\.query\(\s*\x60[^\x60]*\$\{`),
 		Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-89", Message: "Raw query API that does not parameterize input.", Fix: "Use $queryRaw with tagged templates or replacements/bind parameters."},
@@ -203,7 +203,7 @@ var codeRules = []lineRule{
 		Severity: model.SevMedium, Confidence: model.Confirmed, CWE: "CWE-1004", Message: "Cookie protection flag explicitly disabled.", Fix: "Set HttpOnly, Secure and SameSite=Lax/Strict for session cookies; gate Secure=false to local development only."},
 
 	{ID: "code.html-sink", Control: "H-001", Title: "Raw HTML sink", Re: htmlSinkRe,
-		Not: htmlSinkNot, Post: htmlSinkDynamic, Severity: model.SevMedium, Confidence: model.Hypothesis, CWE: "CWE-79",
+		Not: htmlSinkNot, Post: htmlSinkDynamic, Proven: htmlSinkProvenSafe, Severity: model.SevMedium, Confidence: model.Hypothesis, CWE: "CWE-79",
 		Message: "Content is inserted as raw HTML. If it can contain user data this is cross-site scripting.", Fix: "Render as text, or sanitize with a maintained sanitizer (DOMPurify) right at the sink."},
 	// Unescaped output tags of template engines exist only in template files.
 	{ID: "code.html-sink", Control: "H-001", Title: "Raw HTML sink", Langs: langs("template", "html", "php"), Re: regexp.MustCompile(`\|\s*safe\b|\{\{\{[^}]|<%-|\{!!\s`),
@@ -266,8 +266,18 @@ func (a codeAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 				if !r.Re.MatchString(m) || (r.Not != nil && r.Not.MatchString(l)) || (r.Post != nil && !r.Post(l, text)) {
 					continue
 				}
+				lc := lineCtx{Inv: c.Inv, File: f, Index: i, Text: text}
+				if r.Proven != nil && r.Proven(lc) {
+					continue
+				}
 				emitted[r.ID] = true
-				res.Signals = append(res.Signals, sig(r, f, i+1, a.Name()))
+				s := sig(r, f, i+1, a.Name())
+				if r.Demote != nil {
+					if d := r.Demote(lc); d != nil {
+						s.Severity, s.Confidence, s.Title, s.Message, s.Fix = model.SevInfo, model.Hypothesis, d.Title, d.Message, d.Fix
+					}
+				}
+				res.Signals = append(res.Signals, s)
 			}
 			if llmFiles[f.Path] && llmOutputExec(l, text) {
 				res.Signals = append(res.Signals, sig(lineRule{ID: "code.llm-output-exec", Control: "P-001", Title: "Model output may reach code or shell execution",

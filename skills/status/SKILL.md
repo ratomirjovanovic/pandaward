@@ -1,11 +1,11 @@
 ---
 name: status
-description: Show resumable PandaWard assessment state: latest assessment, decisive coverage, open findings, stale files changed since the scan, blockers and the next action.
+description: Show resumable PandaWard assessment state: latest assessment, decisive coverage and how it was decided, open findings, stale files changed since the scan, blockers, the next action and the path to 100%.
 ---
 
 # PandaWard status
 
-Call the `pandaward_get_status` MCP tool (or `pandaward status`). Report coverage, open confirmed vs suspected findings, stale files and blockers, then the next action the ledger recommends. If files are stale, name the STALE controls the ledger lists and say their results are outdated until a retest, and offer to run it (`pandaward_retest`); other controls keep their decisions. Stale files include edits made outside Claude Code (editor, `git pull`), which PandaWard finds by comparing content hashes.
+Call the `pandaward_get_status` MCP tool (or `pandaward status`). Report coverage with its split by how controls were decided (`decided_automatic`, `decided_runtime`, `decided_attested`; not applicable controls are outside the denominator), open confirmed vs suspected findings, stale files and blockers, then the next action the ledger recommends. Then give the path to 100% from `path_to_100`: each step with its count and controls, largest group first, worded as the ledger words it. Do not add steps of your own, and keep a step that says a control cannot be decided in this release as it is. If files are stale, name the STALE controls the ledger lists and say their results are outdated until a retest, and offer to run it (`pandaward_retest`); other controls keep their decisions. Stale files include edits made outside Claude Code (editor, `git pull`), which PandaWard finds by comparing content hashes.
 
 ## Ground rules (always)
 

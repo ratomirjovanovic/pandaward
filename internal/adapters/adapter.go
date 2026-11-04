@@ -112,6 +112,14 @@ type lineRule struct {
 	// SkipFile, when set, drops the rule for a whole file when it returns
 	// true for the file's text.
 	SkipFile func(text string) bool
+	// Proven, when set, runs after Post with the file, the line and the
+	// inventory (for checks that read an imported module); returning true
+	// drops the match because the code proves the value safe.
+	Proven func(c lineCtx) bool
+	// Demote, when set, may return a listing that replaces title, message
+	// and fix and lowers the signal to info: the code shows why the match is
+	// probably harmless here, but not proof, so it is listed, not dropped.
+	Demote func(c lineCtx) *demotion
 	// SupersededBy names a rule that, when it fired on the same line, makes
 	// this one redundant. It must come earlier in the rule table.
 	SupersededBy string
@@ -121,6 +129,26 @@ type lineRule struct {
 	Message      string
 	Fix          string
 }
+
+// lineCtx is one matched line with its file and the inventory.
+type lineCtx struct {
+	Inv   *inventory.Inventory
+	File  *inventory.File
+	Index int // zero-based line index
+	Text  string
+}
+
+// offset returns where the line starts in Text.
+func (c lineCtx) offset() int {
+	n := 0
+	for _, l := range c.File.Lines[:c.Index] {
+		n += len(l) + 1
+	}
+	return n
+}
+
+// demotion is the wording that replaces a demoted signal's own.
+type demotion struct{ Title, Message, Fix string }
 
 func langs(ls ...string) map[string]bool {
 	m := map[string]bool{}

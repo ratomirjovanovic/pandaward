@@ -61,14 +61,16 @@ Run `pandaward report` so the reports include the reviewers' hypotheses. End wit
 PandaWard assessment - by Ratomir Jovanovic
 ==============================================================
 Coverage     [#########---------------]  38%  (19 of 50 controls)
+Decided by   19 automatic, 0 runtime, 0 attested; 22 not applicable
 Findings     22 confirmed, 11 suspected, 4 new hypotheses
 Fix first    PW-0022  critical  pull_request_target checkout
 Not decided  BLOCKED 9, UNSUPPORTED 11, SUSPECTED 10
+Path to 100% 10 triage suspected findings, 6 review manually, 2 install a scanner, ...
 Reports      .pandaward/reports/<name>.html
 ==============================================================
 ```
 
-Fill it only with numbers from the ledger and the `pandaward assess` output. Then list, briefly, what a human still has to decide or test (runtime authorization, business logic, anything BLOCKED for lack of a tool or approval).
+Fill it only with numbers from the ledger and the `pandaward assess` output; the "Decided by" line and the "Path to 100%" groups come from the summary's own lines of those names (or `coverage` and `path_to_100` in `pandaward_get_status`). Then list, briefly, what a human still has to decide or test, using the path to 100% steps as worded (runtime authorization, business logic, anything BLOCKED for lack of a tool or approval).
 
 ## 6. One question, then do it
 

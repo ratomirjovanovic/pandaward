@@ -531,7 +531,9 @@ func cmdStatus(args []string, w io.Writer) error {
 		fmt.Fprintf(w, "Latest assessment: %s (%s) started %s\n", s.Assessment.ID, s.Assessment.Status, s.Assessment.StartedAt)
 		fmt.Fprintf(w, "Decisive coverage: %d/%d (%.0f%%); edges %d (%d verified, %d failed, %d open)\n", s.Coverage.Decisive, s.Coverage.Applicable, s.Coverage.Ratio*100,
 			s.Coverage.EdgesTotal, s.Coverage.EdgesVerified, s.Coverage.EdgesFailed, s.Coverage.EdgesOpen)
+		fmt.Fprintf(w, "  %s\n", report.Breakdown(*s.Coverage))
 		fmt.Fprintf(w, "Open findings: %d confirmed, %d suspected  %v\n", s.Confirmed, s.Suspected, s.Findings)
+		printPath(w, s.PathTo100, "")
 	}
 	if len(s.StaleFiles) > 0 {
 		outside := map[string]bool{}
