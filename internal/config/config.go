@@ -70,7 +70,16 @@ type Config struct {
 		// retest after a turn that edited files.
 		AutoRetest bool `yaml:"auto_retest"`
 	} `yaml:"hooks"`
+	Attest struct {
+		// MaxAgeDays is how long an accepted attestation of a manual
+		// control stays valid: 1 to 365 days, 180 by default.
+		MaxAgeDays int `yaml:"max_age_days"`
+	} `yaml:"attest"`
 }
+
+// MaxAttestDays caps attest.max_age_days: an attestation never lasts
+// longer than a year.
+const MaxAttestDays = 365
 
 // Default returns the default configuration.
 func Default(name string) *Config {
@@ -89,6 +98,7 @@ func Default(name string) *Config {
 	c.Report.IncludeUntested = true
 	c.Policy.AIAnalysis = "opt_in"
 	c.Hooks.AutoRetest = true
+	c.Attest.MaxAgeDays = 180
 	return c
 }
 
@@ -145,6 +155,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Policy.AIAnalysis != "opt_in" && c.Policy.AIAnalysis != "off" && c.Policy.AIAnalysis != "on" {
 		return fmt.Errorf("policy.ai_analysis must be opt_in, on or off")
+	}
+	if c.Attest.MaxAgeDays < 1 || c.Attest.MaxAgeDays > MaxAttestDays {
+		return fmt.Errorf("attest.max_age_days must be between 1 and %d", MaxAttestDays)
 	}
 	return nil
 }

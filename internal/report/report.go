@@ -33,7 +33,11 @@ type Report struct {
 	Attestation   string           `json:"attestation"`
 	Coverage      engine.Coverage  `json:"coverage"`
 	// PathTo100 groups the undecided applicable controls by next step.
-	PathTo100     []engine.PathGroup        `json:"path_to_100,omitempty"`
+	PathTo100 []engine.PathGroup `json:"path_to_100,omitempty"`
+	// Attestations are the human attestations that decide (or decided,
+	// when stale) manual controls, then the pending proposals, which
+	// decide nothing.
+	Attestations  []store.Attestation       `json:"attestations,omitempty"`
 	StaleFiles    []string                  `json:"stale_files,omitempty"`
 	Controls      []model.ControlResult     `json:"controls"`
 	Edges         []model.Edge              `json:"edges"`
@@ -110,6 +114,9 @@ func BuildFor(e *engine.Engine, a *store.Assessment) (*Report, error) {
 	engine.Annotate(r.Controls, fs)
 	r.Coverage = engine.ComputeCoverage(r.Controls, r.Edges, len(r.StaleFiles))
 	r.PathTo100 = engine.PathTo100(r.Controls, fs)
+	if r.Attestations, err = e.ReportAttestations(); err != nil {
+		return nil, err
+	}
 	r.DomainSummary = map[string]map[string]int{}
 	for _, c := range r.Controls {
 		if r.DomainSummary[c.Domain] == nil {
@@ -273,6 +280,16 @@ func Markdown(r *Report) string {
 		w("\n")
 	}
 
+	if len(r.Attestations) > 0 {
+		w("## Attested controls\n\n")
+		w("Manual controls are decided only when a person accepts a reviewer's proposal with `pandaward attest`. A pending proposal decides nothing; a stale attestation no longer decides its control.\n\n")
+		w("| Control | Verdict | State | Reviewer | Date | Evidence |\n|---|---|---|---|---|---|\n")
+		for _, a := range r.Attestations {
+			w("| %s | %s | %s | %s | %s | %s |\n", a.ControlID, a.Verdict, esc(AttestState(a)), esc(AttestReviewer(a)), AttestDate(a), esc(AttestEvidence(a)))
+		}
+		w("\n")
+	}
+
 	if d := r.Delta; d != nil {
 		w("## Changes since %s\n\n", d.From)
 		w("New %d, reopened %d, remediated %d, moved %d, stale %d, waived %d, unchanged %d.\n\n", len(d.New), len(d.Reopened), len(d.Remediated), len(d.Moved), len(d.Stale), len(d.Waived), d.Unchanged)
@@ -369,10 +386,60 @@ func CoverageCSV(r *Report) string {
 	return b.String()
 }
 
+// AttestState describes where an attestation stands.
+func AttestState(a store.Attestation) string {
+	switch a.Status {
+	case store.AttestPending:
+		return "pending: decides nothing until a person accepts it"
+	case store.AttestStale:
+		return "STALE: " + a.StaleReason
+	}
+	s := "accepted, valid until " + dateOf(a.ExpiresAt)
+	if a.Note != "" {
+		s += ": " + a.Note
+	}
+	return s
+}
+
+// AttestReviewer names who proposed and who decided.
+func AttestReviewer(a store.Attestation) string {
+	if a.DecidedBy == "" {
+		return "proposed by " + a.ProposedBy
+	}
+	return a.DecidedBy + " (proposed by " + a.ProposedBy + ")"
+}
+
+// AttestDate is the decision date, or the proposal date while pending.
+func AttestDate(a store.Attestation) string {
+	if a.DecidedAt != "" {
+		return dateOf(a.DecidedAt)
+	}
+	return dateOf(a.CreatedAt)
+}
+
+// AttestEvidence lists the citations as file:line (why), and the command.
+func AttestEvidence(a store.Attestation) string {
+	var parts []string
+	for _, c := range a.Citations {
+		parts = append(parts, fmt.Sprintf("%s:%d (%s)", c.File, c.Line, c.Why))
+	}
+	if a.Command != "" {
+		parts = append(parts, "shown by: "+a.Command)
+	}
+	return strings.Join(parts, "; ")
+}
+
+func dateOf(ts string) string {
+	if len(ts) >= 10 {
+		return ts[:10]
+	}
+	return ts
+}
+
 // Breakdown says how the decisive controls were decided and how many
 // controls are not applicable, and so outside the denominator.
 func Breakdown(c engine.Coverage) string {
-	return fmt.Sprintf("Decided by: %d automatic (static and external adapters), %d runtime (approved runtime profiles), %d attested (recorded manual review; not available yet); %d not applicable, outside the denominator",
+	return fmt.Sprintf("Decided by: %d automatic (static and external adapters), %d runtime (approved runtime profiles), %d attested (manual controls a person accepted after review); %d not applicable, outside the denominator",
 		c.Automatic, c.Runtime, c.Attested, c.NotApplicable)
 }
 

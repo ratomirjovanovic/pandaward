@@ -677,6 +677,11 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 		return nil, err
 	}
 
+	// Manual controls are decided only by accepted attestations.
+	if err := e.applyAttestations(results, time.Now()); err != nil {
+		return nil, err
+	}
+
 	// Evidence integrity (R-001).
 	okN, bad, err := evidence.Verify(e.St, e.Private(), asmt.ID, cy.carried())
 	if err != nil {

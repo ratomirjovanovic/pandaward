@@ -44,6 +44,9 @@ type Status struct {
 	// PathTo100 groups the undecided applicable controls by what must
 	// happen for each to be decided.
 	PathTo100 []PathGroup `json:"path_to_100,omitempty"`
+	// PendingAttestations are proposed verdicts for manual controls that
+	// wait for a person to accept or reject them; they decide nothing.
+	PendingAttestations []store.Attestation `json:"pending_attestations,omitempty"`
 }
 
 // Status returns the current state from the ledger.
@@ -51,6 +54,9 @@ func (e *Engine) Status() (*Status, error) {
 	s := &Status{Initialized: true, Project: e.Cfg.Project.Name, Findings: map[string]int{}}
 	a, err := e.St.LatestAssessment(e.ProjectID)
 	if err != nil {
+		return nil, err
+	}
+	if s.PendingAttestations, err = e.PendingAttestations(); err != nil {
 		return nil, err
 	}
 	if a == nil {
@@ -115,6 +121,8 @@ func (e *Engine) Status() (*Status, error) {
 		s.NextAction = "review findings (`pandaward findings`) and build a fix plan (/pandaward:fix-plan)"
 	case s.Suspected > 0:
 		s.NextAction = "triage suspected signals (/pandaward:review triage)"
+	case len(s.PendingAttestations) > 0:
+		s.NextAction = fmt.Sprintf("%d attestation proposal(s) wait for a person: show them with `pandaward attest --list`, then the user decides each with `pandaward attest <control> --accept --by <name>` or `--reject`", len(s.PendingAttestations))
 	default:
 		s.NextAction = "run manual-assisted review for BLOCKED controls (/pandaward:review) and generate a report"
 	}
@@ -175,22 +183,7 @@ func (e *Engine) RecordHypothesis(in HypothesisInput) (*model.Finding, error) {
 	if len(in.Rationale) > 4000 || len(in.Fix) > 4000 {
 		return nil, errors.New("rationale and fix are limited to 4000 characters")
 	}
-	clean := filepath.ToSlash(filepath.Clean(in.File))
-	if in.File == "" || filepath.IsAbs(in.File) || strings.HasPrefix(clean, "../") || clean == ".." || strings.HasPrefix(clean, ".pandaward/") || strings.HasPrefix(clean, ".git/") {
-		return nil, errors.New("file must be a relative path inside the project")
-	}
-	abs := filepath.Join(e.Root, filepath.FromSlash(clean))
-	fi, err := os.Lstat(abs)
-	if err != nil {
-		return nil, fmt.Errorf("file %s does not exist", clean)
-	}
-	if fi.Mode()&os.ModeSymlink != 0 || !fi.Mode().IsRegular() {
-		return nil, errors.New("file must be a regular file (symlinks are not followed)")
-	}
-	if fi.Size() > e.Cfg.Inventory.MaxFileBytes {
-		return nil, errors.New("file is larger than inventory.max_file_bytes")
-	}
-	b, err := os.ReadFile(abs)
+	clean, b, err := e.readCited(in.File)
 	if err != nil {
 		return nil, err
 	}
@@ -252,6 +245,33 @@ func (e *Engine) RecordHypothesis(in HypothesisInput) (*model.Finding, error) {
 		return nil, err
 	}
 	return &f, e.St.Event(e.ProjectID, id, "", "OPEN", "hypothesis recorded by "+proposer)
+}
+
+// readCited reads a file a reviewer cites: a relative path inside the
+// project, outside .pandaward and .git, a regular file (symlinks are not
+// followed) no larger than inventory.max_file_bytes. It returns the clean
+// slash path and the content.
+func (e *Engine) readCited(file string) (string, []byte, error) {
+	clean := filepath.ToSlash(filepath.Clean(file))
+	if file == "" || filepath.IsAbs(file) || strings.HasPrefix(clean, "../") || clean == ".." || strings.HasPrefix(clean, ".pandaward/") || strings.HasPrefix(clean, ".git/") {
+		return "", nil, errors.New("file must be a relative path inside the project")
+	}
+	abs := filepath.Join(e.Root, filepath.FromSlash(clean))
+	fi, err := os.Lstat(abs)
+	if err != nil {
+		return "", nil, fmt.Errorf("file %s does not exist", clean)
+	}
+	if fi.Mode()&os.ModeSymlink != 0 || !fi.Mode().IsRegular() {
+		return "", nil, errors.New("file must be a regular file (symlinks are not followed)")
+	}
+	if fi.Size() > e.Cfg.Inventory.MaxFileBytes {
+		return "", nil, errors.New("file is larger than inventory.max_file_bytes")
+	}
+	b, err := os.ReadFile(abs)
+	if err != nil {
+		return "", nil, err
+	}
+	return clean, b, nil
 }
 
 // Triage changes the disposition of a finding. Only humans should call this;

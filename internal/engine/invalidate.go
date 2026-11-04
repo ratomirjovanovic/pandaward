@@ -169,9 +169,19 @@ func (e *Engine) StaleView(asmt string, cs []model.ControlResult, es []model.Edg
 		if err != nil {
 			return nil, nil, Changes{}, err
 		}
+		// An attestation depends on the files it cites, not on its whole
+		// domain; attestStaleView checks those.
+		for id := range attestedControls(cs) {
+			delete(affected, id)
+		}
 		cs, es = ApplyStale(cs, es, affected, ch.Files)
 	}
-	cs, es, err = e.runtimeStaleView(cs, es, ch.Files, time.Now())
+	now := time.Now()
+	cs, es, err = e.runtimeStaleView(cs, es, ch.Files, now)
+	if err != nil {
+		return nil, nil, Changes{}, err
+	}
+	cs, es, err = e.attestStaleView(cs, es, now)
 	if err != nil {
 		return nil, nil, Changes{}, err
 	}

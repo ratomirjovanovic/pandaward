@@ -57,6 +57,12 @@ var migrations = []string{
 	CREATE TABLE IF NOT EXISTS runtime_verdicts(project_id TEXT NOT NULL, control_id TEXT NOT NULL, profile TEXT NOT NULL, status TEXT NOT NULL, reason TEXT,
 		assessment_id TEXT NOT NULL, decided_at TEXT NOT NULL, approval_id TEXT, manifest_hash TEXT, config_hash TEXT, catalog_version TEXT, deps_json TEXT,
 		PRIMARY KEY(project_id, control_id));`,
+	// 4: attestations of manual controls. A reviewer proposes a verdict
+	// with file:line evidence; only a person accepts or rejects it.
+	`CREATE TABLE IF NOT EXISTS attestations(id TEXT PRIMARY KEY, project_id TEXT NOT NULL, control_id TEXT NOT NULL, verdict TEXT NOT NULL, status TEXT NOT NULL,
+		proposed_by TEXT NOT NULL, decided_by TEXT, note TEXT, stale_reason TEXT, evidence_json TEXT NOT NULL, catalog_version TEXT NOT NULL,
+		created_at TEXT NOT NULL, decided_at TEXT, expires_at TEXT);
+	CREATE INDEX IF NOT EXISTS idx_attestations_project ON attestations(project_id, control_id, status);`,
 }
 
 // Open opens (and migrates) the database under the private directory.
@@ -454,6 +460,87 @@ func (s *Store) RuntimeVerdicts(projectID string) (map[string]RuntimeVerdict, er
 		v.Status = model.Status(st)
 		v.Deps = unjs[map[string]string](deps)
 		out[v.ControlID] = v
+	}
+	return out, rows.Err()
+}
+
+// Attestation states. Only an accepted attestation decides a control.
+const (
+	AttestPending  = "pending"
+	AttestAccepted = "accepted"
+	AttestRejected = "rejected"
+	AttestStale    = "stale"
+)
+
+// Citation is one file:line a proposal rests on. PandaWard reads the line
+// and hashes the file itself; the proposer supplies only the location and
+// why it matters.
+type Citation struct {
+	File string `json:"file"`
+	Line int    `json:"line"`
+	Why  string `json:"why"`
+	// Snippet is the cited line as PandaWard read it, redacted.
+	Snippet string `json:"snippet,omitempty"`
+	// SHA256 is the file content hash when the proposal was recorded;
+	// AcceptedSHA256 is the hash a person accepted.
+	SHA256         string `json:"sha256"`
+	AcceptedSHA256 string `json:"accepted_sha256,omitempty"`
+}
+
+// AttestationEvidence is what evidence_json holds.
+type AttestationEvidence struct {
+	Citations []Citation `json:"citations"`
+	// Command is an optional test or command that shows the verdict.
+	Command string `json:"command,omitempty"`
+}
+
+// Attestation is a proposed or decided verdict for a manual control.
+type Attestation struct {
+	ID             string       `json:"id"`
+	ControlID      string       `json:"control_id"`
+	Verdict        model.Status `json:"verdict"`
+	Status         string       `json:"status"`
+	ProposedBy     string       `json:"proposed_by"`
+	DecidedBy      string       `json:"decided_by,omitempty"`
+	Note           string       `json:"note,omitempty"`
+	StaleReason    string       `json:"stale_reason,omitempty"`
+	Citations      []Citation   `json:"citations"`
+	Command        string       `json:"command,omitempty"`
+	CatalogVersion string       `json:"catalog_version"`
+	CreatedAt      string       `json:"created_at"`
+	DecidedAt      string       `json:"decided_at,omitempty"`
+	ExpiresAt      string       `json:"expires_at,omitempty"`
+}
+
+// PutAttestation inserts or replaces an attestation.
+func (s *Store) PutAttestation(projectID string, a Attestation) error {
+	_, err := s.DB.Exec(`INSERT OR REPLACE INTO attestations(id,project_id,control_id,verdict,status,proposed_by,decided_by,note,stale_reason,evidence_json,catalog_version,created_at,decided_at,expires_at)
+		VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, a.ID, projectID, a.ControlID, string(a.Verdict), a.Status, a.ProposedBy, a.DecidedBy, a.Note, a.StaleReason,
+		js(AttestationEvidence{Citations: a.Citations, Command: a.Command}), a.CatalogVersion, a.CreatedAt, a.DecidedAt, a.ExpiresAt)
+	return err
+}
+
+// Attestations returns every attestation of a project, oldest first.
+func (s *Store) Attestations(projectID string) ([]Attestation, error) {
+	rows, err := s.DB.Query(`SELECT id,control_id,verdict,status,proposed_by,COALESCE(decided_by,''),COALESCE(note,''),COALESCE(stale_reason,''),evidence_json,catalog_version,
+		created_at,COALESCE(decided_at,''),COALESCE(expires_at,'') FROM attestations WHERE project_id=? ORDER BY created_at, rowid`, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []Attestation
+	for rows.Next() {
+		var a Attestation
+		var verdict string
+		var ev sql.NullString
+		if err := rows.Scan(&a.ID, &a.ControlID, &verdict, &a.Status, &a.ProposedBy, &a.DecidedBy, &a.Note, &a.StaleReason, &ev, &a.CatalogVersion,
+			&a.CreatedAt, &a.DecidedAt, &a.ExpiresAt); err != nil {
+			return nil, err
+		}
+		a.Verdict = model.Status(verdict)
+		e := unjs[AttestationEvidence](ev)
+		a.Citations, a.Command = e.Citations, e.Command
+		out = append(out, a)
 	}
 	return out, rows.Err()
 }

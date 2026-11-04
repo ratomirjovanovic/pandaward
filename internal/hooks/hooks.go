@@ -126,6 +126,9 @@ func sessionStart(in Input, w io.Writer) int {
 		if len(s.Blockers) > 0 {
 			fmt.Fprintf(&b, "%d blocker(s); details in pandaward_get_status.\n", len(s.Blockers))
 		}
+		if n := len(s.PendingAttestations); n > 0 {
+			fmt.Fprintf(&b, "%d attestation proposal(s) for manual controls wait for the user's decision (`pandaward attest --list`); only the user accepts or rejects them.\n", n)
+		}
 		fmt.Fprintf(&b, "Suggested next step: %s.\n", s.NextAction)
 		b.WriteString("Do not ask the user to type PandaWard commands: offer the next step in one sentence and run it yourself after a yes. After you edit code in this project, run pandaward_retest yourself and report the delta.\n")
 	}
@@ -167,11 +170,16 @@ func preCompact(in Input) int {
 
 var (
 	humanOnlyCmd = regexp.MustCompile(`(?i)\b(pandaward|pensec)(\.exe)?["']?\s+(scope\s+(approve|revoke)|test\b|findings\s+(false-positive|accept-risk|reopen|confirm|remediated|apply)\b|purge\b|init\s+--force)`)
-	feedbackSend = regexp.MustCompile(`(?i)\b(pandaward|pensec)(\.exe)?["']?\s+feedback\s+submit\b`)
-	applyFile    = regexp.MustCompile(`(?i)\bfindings\s+apply\b.*?--file[=\s]+(?:"([^"]+)"|'([^']+)'|(\S+))`)
-	privateRef   = regexp.MustCompile(`(?i)\.(pandaward|pensec)[\\/]+(private|reports)\b|state\.db`)
-	scopeRef     = regexp.MustCompile(`(?i)\.(pandaward|pensec)[\\/]+(scope|config)\.ya?ml`)
-	readOnlyCmd  = regexp.MustCompile(`(?i)^\s*(cat|type|less|more|head|tail|Get-Content|gc|bat)\s`)
+	// attestDecide is a person's decision on an attestation proposal:
+	// `pandaward attest <control> --accept|--reject`. Listing, showing and
+	// proposing are not decisions.
+	attestDecide  = regexp.MustCompile(`(?is)\b(pandaward|pensec)(\.exe)?["']?\s+attest\b.*?\s-{1,2}(accept|reject)\b`)
+	attestControl = regexp.MustCompile(`(?i)\battest\b.*?\b([A-R]-\d{3})\b`)
+	feedbackSend  = regexp.MustCompile(`(?i)\b(pandaward|pensec)(\.exe)?["']?\s+feedback\s+submit\b`)
+	applyFile     = regexp.MustCompile(`(?i)\bfindings\s+apply\b.*?--file[=\s]+(?:"([^"]+)"|'([^']+)'|(\S+))`)
+	privateRef    = regexp.MustCompile(`(?i)\.(pandaward|pensec)[\\/]+(private|reports)\b|state\.db`)
+	scopeRef      = regexp.MustCompile(`(?i)\.(pandaward|pensec)[\\/]+(scope|config)\.ya?ml`)
+	readOnlyCmd   = regexp.MustCompile(`(?i)^\s*(cat|type|less|more|head|tail|Get-Content|gc|bat)\s`)
 )
 
 type decision struct {
@@ -203,6 +211,9 @@ func GuardDecision(toolName string, toolInput json.RawMessage) (string, string) 
 		c := ti.Command
 		if feedbackSend.MatchString(c) {
 			return "ask", "PandaWard: this sends feedback reports to " + feedback.Repo + " as GitHub issues or comments under your account."
+		}
+		if attestDecide.MatchString(c) {
+			return "ask", "PandaWard: this accepts or rejects an attestation of a manual control. An accepted attestation decides the control as PASS or FAIL in every report until a cited file changes, so only the human operator may decide it; a reviewer agent may only propose."
 		}
 		if humanOnlyCmd.MatchString(c) {
 			return "ask", "PandaWard: this command approves scope, sends network traffic, or changes a finding disposition. It must be confirmed by the human operator."
@@ -244,6 +255,9 @@ func preTool(in Input, w io.Writer) int {
 	}
 	if feedbackSend.MatchString(ti.Command) {
 		reason += "\n" + submitSummary(in)
+	}
+	if attestDecide.MatchString(ti.Command) {
+		reason += "\n" + attestSummary(in, ti.Command)
 	}
 	return emit(w, d, reason)
 }
@@ -307,6 +321,45 @@ func applySummary(cmd, dir string) string {
 		if d.Expires != "" {
 			fmt.Fprintf(&b, " (until %s)", redact.Line(d.Expires))
 		}
+	}
+	return b.String()
+}
+
+// attestSummary shows the proposal a `pandaward attest --accept|--reject`
+// command would decide, so the person sees the verdict and its evidence.
+func attestSummary(in Input, cmd string) string {
+	m := attestControl.FindStringSubmatch(cmd)
+	if m == nil {
+		return "No control named; the command will fail."
+	}
+	cid := strings.ToUpper(m[1])
+	e := openEngine(in)
+	if e == nil {
+		return "The project could not be opened; the command will fail."
+	}
+	defer e.Close()
+	a, err := e.PendingAttestation(cid)
+	if err != nil {
+		return "The proposal could not be read (" + redact.Line(err.Error()) + "); the command will fail."
+	}
+	if a == nil {
+		return "There is no pending proposal for " + cid + "; the command will fail."
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "Proposal %s: %s %s, proposed by %s with %d citation(s):", a.ID, cid, a.Verdict, redact.Line(a.ProposedBy), len(a.Citations))
+	for i, c := range a.Citations {
+		if i == 10 {
+			fmt.Fprintf(&b, "\n  and %d more (pandaward attest %s --show)", len(a.Citations)-i, cid)
+			break
+		}
+		why := redact.Line(c.Why)
+		if r := []rune(why); len(r) > 120 {
+			why = string(r[:117]) + "..."
+		}
+		fmt.Fprintf(&b, "\n  %s:%d %s", redact.Line(c.File), c.Line, why)
+	}
+	if a.Command != "" {
+		fmt.Fprintf(&b, "\n  shown by: %s", redact.Line(a.Command))
 	}
 	return b.String()
 }

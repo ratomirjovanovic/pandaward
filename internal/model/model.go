@@ -123,7 +123,7 @@ type ControlResult struct {
 	Refs        []string `json:"refs,omitempty"`
 	// DecidedBy says how a PASS or FAIL was reached: DecidedAutomatic,
 	// DecidedRuntime or DecidedAttested. Empty while undecided. Reports
-	// derive it from the method unless a recorded attestation sets it.
+	// derive it from the method unless the scan recorded it.
 	DecidedBy string `json:"decided_by,omitempty"`
 	// NextStep says what must happen for an undecided control to be
 	// decided. Reports fill it; it is empty for PASS, FAIL and N/A.
@@ -136,8 +136,9 @@ const (
 	DecidedAutomatic = "automatic"
 	// DecidedRuntime is a runtime profile (observe, staging, local runtime).
 	DecidedRuntime = "runtime"
-	// DecidedAttested is a recorded human attestation. Nothing records one
-	// yet; the value is reserved so coverage can count it once it exists.
+	// DecidedAttested is a human attestation of a manual control: a
+	// reviewer proposed it with evidence and a person accepted it with
+	// `pandaward attest`.
 	DecidedAttested = "attested"
 )
 

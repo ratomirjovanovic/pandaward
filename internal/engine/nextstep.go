@@ -11,8 +11,8 @@ import (
 
 // DecidedBy says how a decisive control was reached: a recorded value wins,
 // otherwise runtime controls count as runtime, manual controls as attested
-// and static or external controls as automatic. It is "" for undecided and
-// not applicable controls.
+// (only an accepted attestation decides one) and static or external
+// controls as automatic. It is "" for undecided and not applicable controls.
 func DecidedBy(c model.ControlResult) string {
 	if !c.Status.Decisive() {
 		return ""
@@ -42,10 +42,18 @@ type Step struct {
 func same(s string) Step { return Step{Group: s, Text: s} }
 
 const (
-	stepRetest      = "run `pandaward retest`"
-	reviewManually  = "review it manually with /pandaward:review; this release cannot record that review as an attestation, so the control stays undecided until attestation exists"
-	reviewNoAdapter = "no adapter decides it in this release; review it manually with /pandaward:review (it stays undecided until attestation exists)"
+	stepRetest = "run `pandaward retest`"
+	// reviewManually is the group of the manual controls a person has not
+	// attested yet; attestStep fills in the control.
+	reviewManually  = "review it with /pandaward:review: the reviewer proposes an attestation with file:line evidence, then a person accepts or rejects it with `pandaward attest <control> --accept --by <name>` or `--reject`"
+	reattest        = "a cited file changed, the catalog changed or the attestation expired: a reviewer proposes a fresh attestation (/pandaward:review), then a person accepts it with `pandaward attest <control> --accept --by <name>`"
+	reviewNoAdapter = "no adapter decides it in this release and only manual controls can be attested; review it manually with /pandaward:review and record what you find as hypotheses (it stays undecided)"
 )
+
+// attestStep is a manual-control step with the control ID filled in.
+func attestStep(group, id string) Step {
+	return Step{Group: group, Text: strings.ReplaceAll(group, "<control>", id)}
+}
 
 // NextStep returns the next step for a control from its catalog method,
 // profile and adapter, its status and its stored reason. openSuspected is
@@ -66,6 +74,14 @@ func NextStep(c model.ControlResult, openSuspected int) Step {
 		rerun = "run `pandaward test --profile " + profile + "`"
 	}
 	reason := strings.TrimSpace(c.Reason)
+	if c.Method == catalog.MethodManual {
+		// Only an accepted attestation decides a manual control; a scan
+		// cannot.
+		if c.Status == model.StatusStale && c.DecidedBy == model.DecidedAttested {
+			return attestStep(reattest, c.ID)
+		}
+		return attestStep(reviewManually, c.ID)
+	}
 	switch c.Status {
 	case model.StatusStale:
 		if runtime && profile != "" {
@@ -107,9 +123,6 @@ func NextStep(c model.ControlResult, openSuspected int) Step {
 			Text: "resolve what made it inconclusive (" + reason + "), then " + rerun}
 
 	case model.StatusBlocked:
-		if c.Method == catalog.MethodManual {
-			return same(reviewManually)
-		}
 		if runtime {
 			return runtimeBlocked(c, profile, reason, rerun)
 		}
@@ -216,6 +229,8 @@ type PathGroup struct {
 // PathTo100 groups the undecided applicable controls by next step, largest
 // group first. Deciding every group would bring decisive coverage to 100%,
 // except where a step says the control cannot be decided in this release.
+// Attested manual controls are decided, so they are not listed; a manual
+// control waits in the attestation group until a person accepts a proposal.
 func PathTo100(cs []model.ControlResult, fs []model.Finding) []PathGroup {
 	n := SuspectedCounts(fs)
 	by := map[string]*PathGroup{}
