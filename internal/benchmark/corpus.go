@@ -14,7 +14,7 @@ import (
 )
 
 // CorpusVersion changes whenever cases are added, removed or edited.
-const CorpusVersion = "2026.11.1"
+const CorpusVersion = "2026.11.2"
 
 // Case is one repository that a rule must fire on (Vulnerable) or must not
 // fire on (Safe).
