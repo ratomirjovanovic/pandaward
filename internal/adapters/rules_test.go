@@ -11,8 +11,8 @@ import (
 // RuleIDs, so the benchmark corpus cannot silently miss a rule.
 func TestRuleIDsMatchSource(t *testing.T) {
 	ids := RuleIDs()
-	lit := regexp.MustCompile(`"((?:code|cicd|infra|sql|supply|mobile|secret|inventory)\.[a-z0-9-]+)"`)
-	for _, f := range []string{"builtin_code.go", "builtin_static.go", "cicd_supply.go", "mobile.go", "csp_config.go", "sqlrls.go"} {
+	lit := regexp.MustCompile(`"((?:code|cicd|infra|sql|supply|mobile|secret|inventory|prompt)\.[a-z0-9-]+)"`)
+	for _, f := range []string{"builtin_code.go", "builtin_static.go", "cicd_supply.go", "mobile.go", "csp_config.go", "sqlrls.go", "agent_text.go"} {
 		b, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)
