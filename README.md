@@ -188,7 +188,7 @@ While the specialist reviewers run, you can see what each one is doing. Their ro
 | E Secrets and crypto | 16 high-specificity secret formats, tracked `.env` and key files, disabled TLS verification, weak hash or random | |
 | F Business logic | | invariants, idempotency, races (manual-assisted) |
 | G APIs and webhooks | webhook signature verification presence | contract vs runtime |
-| H Web | raw HTML sinks, CORS wildcard with credentials | security headers (`production-observe`) |
+| H Web | raw HTML sinks, CORS wildcard with credentials, CSP allowing `'unsafe-inline'` or `'unsafe-eval'` scripts in `vercel.json`, `netlify.toml`, `_headers` and literal Next.js `headers()` values | security headers and weak CSP (`production-observe`) |
 | I Supply chain | missing lockfiles, npm install scripts, unpinned Python requirements | advisories via osv-scanner |
 | J Infrastructure | Dockerfile root and unpinned base, privileged containers, public storage and admin ports in Terraform | trivy |
 | K, L Mobile | Android manifest flags and exported components, credentials in SharedPreferences, world-readable storage; iOS ATS, `get-task-allow` in release entitlements, Keychain accessibility and credentials in UserDefaults | built APKs via apktool; built APKs and IPAs via a local MobSF server; plain credentials in app storage on an emulator or simulator (`local-runtime`) |
