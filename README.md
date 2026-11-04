@@ -192,7 +192,7 @@ While the specialist reviewers run, you can see what each one is doing. Their ro
 | I Supply chain | missing lockfiles, npm install scripts, unpinned Python requirements | advisories via osv-scanner |
 | J Infrastructure | Dockerfile root and unpinned base, privileged containers, public storage and admin ports in Terraform | trivy |
 | K, L Mobile | Android manifest flags and exported components, credentials in SharedPreferences, world-readable storage; iOS ATS, `get-task-allow` in release entitlements, Keychain accessibility and credentials in UserDefaults | built APKs via apktool; built APKs and IPAs via a local MobSF server; plain credentials in app storage on an emulator or simulator (`local-runtime`) |
-| N CI/CD | unpinned actions, script injection, `pull_request_target` checkout, token permissions | |
+| N CI/CD | unpinned actions, container images without a digest, floating global tool installs in privileged jobs, script injection, `pull_request_target` checkout, token permissions | |
 | O Observability | credentials in log calls | alerting review |
 | P AI and MCP | model output reaching exec sinks, MCP server pinning and inline credentials | prompt-injection tests |
 | R Assurance | evidence integrity, imported SARIF results | |
