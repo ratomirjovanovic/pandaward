@@ -28,7 +28,8 @@ type externalTool struct {
 	name     string
 	binary   string
 	controls []string
-	network  bool // tool needs network (advisory DB / rule download)
+	network  bool   // tool needs network (advisory DB / rule download)
+	sends    string // what leaves the machine when network is allowed
 	verArgs  []string
 	args     func(c *Context, out string) ([]string, error)
 	// okExit lists exit codes that mean "ran successfully".
@@ -98,7 +99,7 @@ func (t *externalTool) Run(ctx context.Context, c *Context) (Result, model.Run) 
 	}
 	run := newRun(t.name, t.Version(ctx))
 	if t.network && !c.Cfg.Scan.AllowToolNetwork {
-		return res, finish(run, model.ExitBlocked, t.name+" needs network access for its advisory database or rules; set scan.allow_tool_network: true to permit it (no target is contacted)", 0)
+		return res, finish(run, model.ExitBlocked, t.name+" needs network access: it "+t.sends+". Set scan.allow_tool_network: true in .pandaward/config.yaml to allow it; no project target is contacted", 0)
 	}
 	out := filepath.Join(c.RunDir, t.name+".json")
 	args, err := t.args(c, out)
@@ -429,7 +430,7 @@ func lastSegment(s string) string {
 
 func osvScanner() Adapter {
 	return &externalTool{
-		name: "osv-scanner", binary: "osv-scanner", controls: []string{"I-003"}, network: true, verArgs: []string{"--version"},
+		name: "osv-scanner", binary: "osv-scanner", controls: []string{"I-003"}, network: true, sends: "sends the package names and versions from your lockfiles to api.osv.dev to look up advisories", verArgs: []string{"--version"},
 		okExit:  map[int]bool{0: true, 1: true},
 		noInput: map[int]string{128: "osv-scanner found no lockfile or SBOM it can read (exit 128); commit a lockfile to check dependencies against advisories"},
 		args: func(c *Context, out string) ([]string, error) {
@@ -483,7 +484,7 @@ func osvScanner() Adapter {
 
 func trivy() Adapter {
 	return &externalTool{
-		name: "trivy", binary: "trivy", controls: []string{"J-005"}, network: true, verArgs: []string{"--version"},
+		name: "trivy", binary: "trivy", controls: []string{"J-005"}, network: true, sends: "downloads its vulnerability database and sends nothing about the project", verArgs: []string{"--version"},
 		okExit: map[int]bool{0: true},
 		args: func(c *Context, out string) ([]string, error) {
 			return []string{"config", "--format", "json", "--output", out, "--exit-code", "0", "--quiet", c.Root}, nil
