@@ -19,6 +19,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/ratomirjovanovic/pandaward/internal/evidence"
 	"github.com/ratomirjovanovic/pandaward/internal/feedback"
 	"github.com/ratomirjovanovic/pandaward/internal/hooks"
+	"github.com/ratomirjovanovic/pandaward/internal/inventory"
 	"github.com/ratomirjovanovic/pandaward/internal/mcp"
 	"github.com/ratomirjovanovic/pandaward/internal/model"
 	"github.com/ratomirjovanovic/pandaward/internal/progress"
@@ -76,7 +78,7 @@ Assessment (local, no target network traffic):
                   mode ask|batch|off, summary
 
 Network-active (human authorization required):
-  scope           init | show | validate | approve --by <name> | revoke
+  scope           init [--print] [--target URL] | show | validate | approve --by <name> | revoke
   test            --profile production-observe  (headers and cookies of approved origins)
                   --profile staging-active      (permission checks with test identities, ZAP; staging or local)
                   --profile local-runtime       (mobile test build storage on an emulator or simulator)
@@ -1211,6 +1213,8 @@ func cmdScope(args []string, stdin io.Reader, w io.Writer) error {
 	fs, root := newFS("scope")
 	by := fs.String("by", "", "approver name")
 	hours := fs.Int("hours", 8, "approval validity in hours (max 72)")
+	printOnly := fs.Bool("print", false, "init: write the draft to stdout instead of .pandaward/scope.yaml")
+	target := fs.String("target", "", "init: target URL to use instead of the local dev URLs found in the project")
 	if _, err := parse(fs, args); err != nil {
 		return err
 	}
@@ -1222,13 +1226,43 @@ func cmdScope(args []string, stdin io.Reader, w io.Writer) error {
 	switch sub {
 	case "init":
 		p := scope.Path(e.Root)
-		if _, err := os.Stat(p); err == nil {
-			return fmt.Errorf("%s already exists", p)
+		if !*printOnly {
+			if _, err := os.Stat(p); err == nil {
+				return exitErr{3, p + " already exists; scope init never overwrites it (use --print to see a fresh draft)"}
+			}
 		}
-		if err := os.WriteFile(p, []byte(scope.Template), 0o644); err != nil {
+		inv, err := inventory.Walk(e.Root, inventory.Options{Exclude: e.Cfg.Inventory.Exclude, MaxFileBytes: e.Cfg.Inventory.MaxFileBytes, MaxFiles: e.Cfg.Inventory.MaxFiles})
+		if err != nil {
 			return err
 		}
-		fmt.Fprintf(w, "Wrote %s. Fill it in yourself; then run `pandaward scope approve --by \"<name>\"` in an interactive terminal.\n", p)
+		d, err := scope.BuildDraft(inv, scope.DraftOptions{Target: *target})
+		if err != nil {
+			return exitErr{2, err.Error()}
+		}
+		text := d.Render()
+		if *printOnly {
+			_, err := io.WriteString(w, text)
+			return err
+		}
+		f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if err != nil {
+			return err
+		}
+		if _, err := f.WriteString(text); err != nil {
+			f.Close()
+			return err
+		}
+		if err := f.Close(); err != nil {
+			return err
+		}
+		roles := 0
+		for _, r := range d.Roles {
+			if r.Name != "" {
+				roles++
+			}
+		}
+		fmt.Fprintf(w, "Drafted %s: %d target(s), %d readable route(s), %d role(s) found in code.\n", p, len(d.Targets), len(d.Routes), roles)
+		fmt.Fprintln(w, "The draft is not approved and cannot run as written. Review it, fill in the authorization block, then run `pandaward scope approve --by \"<name>\"` yourself in an interactive terminal.")
 		return nil
 	case "show", "validate":
 		m, err := scope.Load(e.Root)
@@ -1238,6 +1272,12 @@ func cmdScope(args []string, stdin io.Reader, w io.Writer) error {
 		fmt.Fprintf(w, "Scope manifest sha256: %s\nEnvironment: %s\nTargets:\n", m.Hash(), m.Environment)
 		for _, t := range m.Targets {
 			fmt.Fprintln(w, "  "+redact.Line(t.URL))
+		}
+		if ip := m.IdentityProvisioning; ip != nil {
+			fmt.Fprintf(w, "Identity provisioning: %s\n", argvLine(ip.Provision))
+			if len(ip.Cleanup) > 0 {
+				fmt.Fprintf(w, "Identity cleanup: %s\n", argvLine(ip.Cleanup))
+			}
 		}
 		probs := m.Validate(time.Now())
 		if _, ap, _ := e.CheckScope(time.Now()); ap != nil {
@@ -1276,6 +1316,16 @@ func cmdScope(args []string, stdin io.Reader, w io.Writer) error {
 			fmt.Fprintln(w, "  "+t.URL)
 		}
 		fmt.Fprintf(w, "Owner: %s\nReference: %s\nEnvironment: %s\nBudget: %d requests, %.1f req/s\n", m.Authorization.Owner, m.Authorization.Reference, m.Environment, m.Limits.MaxRequestsTotal, m.Limits.RequestsPerSecond)
+		if ip := m.IdentityProvisioning; ip != nil {
+			fmt.Fprintf(w, "\nThis manifest runs project commands on this machine before and after each staging-active test:\n  provision: %s\n", argvLine(ip.Provision))
+			if len(ip.Cleanup) > 0 {
+				fmt.Fprintf(w, "  cleanup:   %s\n", argvLine(ip.Cleanup))
+			}
+			for _, f := range m.ProvisionFiles(e.Root) {
+				fmt.Fprintf(w, "  bound file: %s\n", f)
+			}
+			fmt.Fprintln(w, "Editing any bound file invalidates this approval.")
+		}
 		// The code binds what the human types to this exact manifest.
 		want := "APPROVE " + m.Hash()[:8]
 		fmt.Fprintf(w, "\nI confirm I am authorized to test every target above.\nTo approve, type exactly this line and press Enter (anything else cancels):\n\n    %s\n\n> ", want)
@@ -1304,7 +1354,19 @@ func cmdScope(args []string, stdin io.Reader, w io.Writer) error {
 		fmt.Fprintf(w, "Revoked %d approval(s).\n", n)
 		return nil
 	}
-	return exitErr{2, "scope subcommands: init, show, validate, approve --by <name> [--hours N], revoke"}
+	return exitErr{2, "scope subcommands: init [--print] [--target URL], show, validate, approve --by <name> [--hours N], revoke"}
+}
+
+// argvLine prints a command list for a person to read.
+func argvLine(argv []string) string {
+	parts := make([]string, len(argv))
+	for i, a := range argv {
+		if a == "" || strings.ContainsAny(a, " \t\"'") {
+			a = strconv.Quote(a)
+		}
+		parts[i] = a
+	}
+	return redact.Line(strings.Join(parts, " "))
 }
 
 func cmdTest(ctx context.Context, args []string, w, ew io.Writer) error {

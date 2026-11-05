@@ -1,11 +1,13 @@
 package engine
 
 import (
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/ratomirjovanovic/pandaward/internal/catalog"
 	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/zap"
 )
 
 // ctl builds a control result from the catalog entry with the given status
@@ -97,11 +99,14 @@ func TestNextStep(t *testing.T) {
 			want:  "fill in .pandaward/scope.yaml (`pandaward scope init` creates it), have a human approve it (`pandaward scope approve --by <name>`), then run `pandaward test --profile production-observe`",
 			group: "fill in .pandaward/scope.yaml (`pandaward scope init` creates it), have a human approve it (`pandaward scope approve --by <name>`), then run `pandaward test --profile production-observe`"},
 		{name: "runtime zap active planned", id: "D-005", status: model.StatusBlocked, reason: "needs zap.active_scan: true in an approved scope manifest",
-			want:  "install ZAP, fill in .pandaward/scope.yaml with zap.active_scan: true (`pandaward scope init` creates it), have a human approve it (`pandaward scope approve --by <name>`), then run `pandaward test --profile staging-active`",
+			want:  zapInstallStep() + ", fill in .pandaward/scope.yaml with zap.active_scan: true (`pandaward scope init` creates it), have a human approve it (`pandaward scope approve --by <name>`), then run `pandaward test --profile staging-active`",
 			group: "fill in .pandaward/scope.yaml (`pandaward scope init` creates it), have a human approve it (`pandaward scope approve --by <name>`), then run `pandaward test --profile staging-active`"},
 		{name: "runtime zap planned", id: "M-001", status: model.StatusBlocked, reason: "needs `pandaward test --profile staging-active` with an approved scope manifest and ZAP installed",
-			want:  "install ZAP, fill in .pandaward/scope.yaml (`pandaward scope init` creates it), have a human approve it (`pandaward scope approve --by <name>`), then run `pandaward test --profile staging-active`",
+			want:  zapInstallStep() + ", fill in .pandaward/scope.yaml (`pandaward scope init` creates it), have a human approve it (`pandaward scope approve --by <name>`), then run `pandaward test --profile staging-active`",
 			group: "fill in .pandaward/scope.yaml (`pandaward scope init` creates it), have a human approve it (`pandaward scope approve --by <name>`), then run `pandaward test --profile staging-active`"},
+		{name: "runtime zap missing after a run", id: "M-001", status: model.StatusBlocked, reason: zap.MissingReason(runtime.GOOS),
+			want:  zapInstallStep() + ", then run `pandaward test --profile staging-active`",
+			group: "install ZAP, then run `pandaward test --profile staging-active`"},
 		{name: "runtime authz revoked planned", id: "B-004", status: model.StatusBlocked, reason: "needs an identity with revoked: true",
 			want:  "fill in .pandaward/scope.yaml with an identity marked revoked: true and authorization_checks (`pandaward scope init` creates it), have a human approve it (`pandaward scope approve --by <name>`), then run `pandaward test --profile staging-active`",
 			group: "fill in .pandaward/scope.yaml (`pandaward scope init` creates it), have a human approve it (`pandaward scope approve --by <name>`), then run `pandaward test --profile staging-active`"},

@@ -232,7 +232,7 @@ Five controls cannot be decided by automation: A-004 (threat model), C-003 (auth
 | `pandaward progress [--watch] [--json]` | What the reviewer subagents of a guided review are doing; `--watch` prints a line per start, hypothesis and finish until all are done |
 | `pandaward export --bundle out.zip` | Report and redacted evidence with a SHA-256 manifest for a reviewer; never raw tool output |
 | `pandaward verify-bundle out.zip` | Recompute every hash in a bundle; compare the printed manifest hash with the sender's |
-| `pandaward scope init \| validate \| approve \| revoke` | Authorization for network tests |
+| `pandaward scope init [--print] [--target URL] \| validate \| approve \| revoke` | Authorization for network tests |
 | `pandaward test --profile production-observe` | Header and cookie review of approved origins |
 | `pandaward test --profile local-runtime` | Storage of the configured Android test build on a running emulator and the iOS test build in a booted simulator; real devices are refused |
 | `pandaward test --profile staging-active` | Authorization checks with test identities, then a ZAP spider and passive scan of approved staging origins, active scan when the manifest allows it |
@@ -267,8 +267,8 @@ pandaward findings apply --file decisions.json --by "Jane"   # many at once, all
 Network tests are off until you turn them on yourself:
 
 ```sh
-pandaward scope init                       # writes .pandaward/scope.yaml, unusable as shipped
-# fill in owner, written permission reference, purpose, targets, limits, acknowledged: true
+pandaward scope init                       # drafts .pandaward/scope.yaml from the project, not approved
+# review it; fill in owner, written permission reference, purpose, acknowledged: true
 pandaward scope approve --by "Jane"        # interactive terminal only, bound to the file's SHA-256
 pandaward test --profile production-observe
 pandaward test --profile staging-active    # staging or local targets, needs ZAP
@@ -279,13 +279,21 @@ pandaward test --profile staging-active    # staging or local targets, needs ZAP
 | Profile | Covers | Decides | Needs | Local target |
 |---|---|---|---|---|
 | `production-observe` | Passive look at a deployed site: one GET per approved origin, then the security response headers, a weak CSP and cookie flags. No payloads, no login, redirects are not followed. | H-003 (needs approved origins that answer without errors) | scope.yaml approved with `pandaward scope approve` (GET in allowed_methods). No identities, no ZAP. Works for any environment, production included. | only when the manifest sets allow_private_addresses: true |
-| `staging-active` | Permission checks with test identities (who may read which object or privileged route, and whether a revoked credential is still accepted), then a ZAP spider and passive scan, and the ZAP active scan when the manifest allows it. | B-004 (needs an identity marked revoked: true)<br>C-001 (needs an authorization check of kind object)<br>C-002 (needs an authorization check of kind function)<br>D-005 (needs ZAP installed and zap.active_scan: true)<br>M-001 (needs ZAP installed)<br>not automated yet: B-003, F-002, G-002, P-003, Q-002 | scope.yaml approved with `pandaward scope approve`; identities and authorization_checks in it, with each credential in the environment variable its value_env names; ZAP installed (Java 17+) for M-001 and D-005. Refused for environment: production. | yes, with environment: staging or local; loopback and private addresses need allow_private_addresses: true. Use this profile for permission checks against an app running on your machine |
+| `staging-active` | Permission checks with test identities (who may read which object or privileged route, and whether a revoked credential is still accepted), then a ZAP spider and passive scan, and the ZAP active scan when the manifest allows it. | B-004 (needs an identity marked revoked: true)<br>C-001 (needs an authorization check of kind object)<br>C-002 (needs an authorization check of kind function)<br>D-005 (needs ZAP installed and zap.active_scan: true)<br>M-001 (needs ZAP installed)<br>not automated yet: B-003, F-002, G-002, P-003, Q-002 | scope.yaml approved with `pandaward scope approve`; identities and authorization_checks in it, with each credential in the environment variable its value_env names or returned by the identity_provisioning command; ZAP installed (Java 17+) for M-001 and D-005. Refused for environment: production. | yes, with environment: staging or local; loopback and private addresses need allow_private_addresses: true. Use this profile for permission checks against an app running on your machine |
 | `local-runtime` | Mobile apps only: what the Android or iOS test build stored on an emulator or simulator (credentials in shared preferences or the preferences plist; key names are recorded, never values). Sends no network traffic. | K-003 (needs runtime.android_package and a running Android emulator)<br>L-002 (needs runtime.ios_bundle_id and a booted iOS simulator on macOS) | runtime.android_package in .pandaward/config.yaml, adb and a running emulator with the debuggable test build; or runtime.ios_bundle_id, xcrun and a booted simulator on macOS. No scope manifest. Real devices are refused. | not a web target: it reads an emulator or simulator on this machine. For a web app on localhost use staging-active |
 | `manual-assisted` | Not a runtime profile in this release; `pandaward test` refuses it. Manual review runs through /pandaward:review. | nothing | nothing to run | not applicable |
 
+`pandaward scope init` reads the project and drafts the manifest. It never overwrites an existing `scope.yaml`, and `--print` writes the draft to stdout instead. The draft has:
+
+- **targets**: local dev URLs from package scripts (`next dev -p 3001`, `vite`, `astro dev` and others, with their default ports) and loopback URLs in `.env.example` files. A non-local URL only gets in when you pass `--target`, so a draft never points at production. With only local targets the draft sets `environment: local` and `allow_private_addresses: true`.
+- **identities**: commented, one per role found in code (role enums and union types, zod enums, Postgres and Prisma enums, role checks such as `role === 'admin'`), plus one in another tenant and one revoked. Tables with RLS policies are noted.
+- **authorization_checks**: commented, one per readable route from the route inventory, with dynamic segments as `<placeholders>` and dynamic routes first.
+
+The authorization block stays empty and `acknowledged: false`, so the draft cannot run until a person reviews it and approves it.
+
 The engine sends at most `max_requests_total` GET requests to the listed origins at the configured rate, never follows redirects, and checks every resolved address at connection time. Loopback, private and link-local addresses are refused unless the manifest explicitly allows a local fixture, and cloud metadata addresses are always refused. `pandaward scope approve` shows the exact line to type, `APPROVE` followed by the first 8 characters of the manifest's SHA-256 (for example `APPROVE ab26dcf2`), so the approval is tied to that file; anything else cancels and the error says what was expected and what was typed. Editing `scope.yaml` invalidates the approval. Approvals are also bound to a per-user key kept outside the project (`approval.key` in your user config directory), so a scope file or ledger that arrives with a repository never counts as approved.
 
-`staging-active` runs your installed [ZAP](https://www.zaproxy.org/) (it needs Java 17+; PandaWard never installs it) through its automation framework: a spider and the passive scan decide M-001, and with `zap.active_scan: true` in the manifest the active scan also decides D-005 (injection). ZAP is chained to a PandaWard proxy on loopback that terminates TLS and sends each request through the same scope guard, so origins, excluded paths, allowed methods, the request budget, the rate limit and the address checks apply to every ZAP request. The guard also stops after three consecutive 429 or 5xx answers. A ZAP run that fails is `ERROR`, a run cut short by the budget or the guard is `INCONCLUSIVE`, and targets marked `environment: production` are refused. Set `runtime.zap_path` in `.pandaward/config.yaml` when ZAP is not on `PATH` or in its default install location.
+`staging-active` runs your installed [ZAP](https://www.zaproxy.org/) (it needs Java 17+; PandaWard never installs it, and when it is missing the BLOCKED reason gives the install command for your OS: `winget install --id ZAP.ZAP -e`, `brew install --cask zap` or `sudo snap install zaproxy --classic`) through its automation framework: a spider and the passive scan decide M-001, and with `zap.active_scan: true` in the manifest the active scan also decides D-005 (injection). ZAP is chained to a PandaWard proxy on loopback that terminates TLS and sends each request through the same scope guard, so origins, excluded paths, allowed methods, the request budget, the rate limit and the address checks apply to every ZAP request. The guard also stops after three consecutive 429 or 5xx answers. A ZAP run that fails is `ERROR`, a run cut short by the budget or the guard is `INCONCLUSIVE`, and targets marked `environment: production` are refused. Set `runtime.zap_path` in `.pandaward/config.yaml` when ZAP is not on `PATH` or in its default install location.
 
 `staging-active` also runs the manifest's `authorization_checks` before ZAP. You list test identities (name, tenant, the header that carries the credential and the environment variable that holds it; the credential itself never goes in the file) and read-only requests to objects or functions that exist for the test, each with the identities allowed to reach it:
 
@@ -301,6 +309,17 @@ authorization_checks:
 ```
 
 Each check is sent once as every identity and once without credentials. The allowed identities must get a 2xx answer, otherwise the check cannot be judged and is `INCONCLUSIVE`. Any other identity that also gets a 2xx is a finding: `CONFIRMED` when its body matches what the allowed identities got, `STRONGLY_SUPPORTED` when it differs. Object checks decide C-001 (BOLA), function checks C-002, and identities marked `revoked` decide B-004 on every check. Only GET and HEAD are allowed, so no data changes and nothing needs cleaning up. Evidence keeps the status, size, content type and a body hash per identity, never headers, bodies or credentials. A missing credential variable stops the run before the first request.
+
+Instead of exporting each credential yourself, the manifest can name project commands that create the test identities before the run and remove them after it:
+
+```yaml
+identity_provisioning:
+  provision: [node, scripts/pandaward-identities.mjs, create]
+  cleanup: [node, scripts/pandaward-identities.mjs, delete]
+  timeout_seconds: 60        # per command, 1-300, default 60
+```
+
+Each command is an argument list, run without a shell from the project root, and only for an approved manifest. `provision` prints `{"credentials": {"PANDAWARD_ID_ALICE": "Bearer ...", ...}}` on stdout. The keys must be `value_env` names of the manifest's identities, and anything else stops the run. A key it leaves out is read from the environment as before. `cleanup` gets the same JSON on stdin and runs after the test, also when the test failed. The values stay in memory: they are never written to the ledger, evidence, reports or progress output, and a failing command's stderr is not repeated. The approval binds the commands and the content of every project file they name, so editing `scripts/pandaward-identities.mjs` after the approval invalidates it. `pandaward scope approve` lists the commands and the bound files before you type the approval line.
 
 ## Emulator and simulator checks
 

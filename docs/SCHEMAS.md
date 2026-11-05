@@ -20,7 +20,7 @@ SARIF output follows SARIF 2.1.0 and is not versioned separately.
 - **Adding** an optional field, a new MCP tool or a new CSV column at the end is compatible. The version stays the same; the golden file is updated in the same pull request so the change is reviewed.
 - **Removing, renaming or retyping** a field, removing an MCP tool or changing a tool's inputs is breaking. It needs a version bump, a note in the release, and readers that reject or migrate the old version. The schema test refuses such a change without the bump.
 - **Ledger**: published migrations are never edited. A schema change adds a new migration at the end; opening a ledger with a newer schema than the binary knows fails instead of guessing. Migration 3 added `runtime_verdicts` and `controls.decided_by`; migration 4 added `attestations` (proposed and decided verdicts of manual controls, with the cited files and their SHA-256 at proposal and at acceptance).
-- **Config and scope manifest**: unknown fields are rejected (strict YAML decoding), and an unknown `schema_version` is refused, so a newer file is never half-understood by an older binary.
+- **Config and scope manifest**: the optional `identity_provisioning` block (`provision`, `cleanup`, `timeout_seconds`) was added to schema version 1 as a compatible change. Unknown fields are rejected (strict YAML decoding), and an unknown `schema_version` is refused, so a newer file is never half-understood by an older binary.
 
 ## Changing a schema
 

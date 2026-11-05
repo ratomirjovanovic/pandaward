@@ -267,3 +267,17 @@ func TestRealZAP(t *testing.T) {
 		t.Fatalf("expected the missing CSP alert (10038), got %+v", res.Alerts)
 	}
 }
+
+func TestMissingReasonNamesInstallCommandAndControls(t *testing.T) {
+	for goos, cmd := range map[string]string{"windows": "winget install --id ZAP.ZAP -e", "darwin": "brew install --cask zap", "linux": "sudo snap install zaproxy --classic"} {
+		r := MissingReason(goos)
+		for _, want := range []string{"ZAP is not installed", "`" + cmd + "`", "Java 17+", "runtime.zap_path", "M-001", "D-005"} {
+			if !strings.Contains(r, want) {
+				t.Errorf("%s: %q lacks %q", goos, r, want)
+			}
+		}
+	}
+	if r := MissingReason("plan9"); !strings.Contains(r, "https://www.zaproxy.org/download/") || strings.Contains(r, "winget") {
+		t.Errorf("unknown OS: %q", r)
+	}
+}

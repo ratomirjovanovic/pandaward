@@ -98,6 +98,6 @@ func (e *Engine) ApprovalSubject(m *scope.Manifest, create bool) (string, error)
 		return "", err
 	}
 	mac := hmac.New(sha256.New, key)
-	mac.Write([]byte(e.ProjectID + "|" + m.Hash()))
+	mac.Write([]byte(e.ProjectID + "|" + m.BindHash()))
 	return hex.EncodeToString(mac.Sum(nil)), nil
 }

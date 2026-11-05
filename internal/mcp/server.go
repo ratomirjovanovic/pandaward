@@ -277,7 +277,7 @@ func (s *Server) call(ctx context.Context, name string, raw json.RawMessage) (an
 			return nil, err
 		}
 		return map[string]any{"executed": false, "how_to_authorize": []string{
-			"1. The human operator fills .pandaward/scope.yaml (pandaward scope init creates a template) with owner, written permission reference, targets and limits.",
+			"1. The human operator fills .pandaward/scope.yaml (pandaward scope init drafts one from the project) with owner, written permission reference, targets and limits.",
 			"2. The human operator runs `pandaward scope approve --by \"<name>\"` in their own interactive terminal; it cannot be run by an agent.",
 			"3. Then `pandaward test --profile production-observe` sends at most max_requests_total GET requests to the listed origins, never following redirects.",
 			"4. For targets marked staging or local, `pandaward test --profile staging-active` first sends the manifest's authorization_checks as each test identity (credentials read from environment variables the human sets) and anonymously, then runs a user-installed ZAP (spider and passive scan; the active scan only when the manifest sets zap.active_scan: true), with every ZAP request sent through the PandaWard scope guard.",

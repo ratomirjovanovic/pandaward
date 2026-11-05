@@ -2,11 +2,13 @@ package engine
 
 import (
 	"fmt"
+	"runtime"
 	"sort"
 	"strings"
 
 	"github.com/ratomirjovanovic/pandaward/internal/catalog"
 	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/zap"
 )
 
 // DecidedBy says how a decisive control was reached: a recorded value wins,
@@ -170,15 +172,18 @@ func runtimeBlocked(c model.ControlResult, profile, reason, rerun string) Step {
 	switch profile {
 	case "production-observe", "staging-active":
 		group := "fill in .pandaward/scope.yaml (`pandaward scope init` creates it), have a human approve it (`pandaward scope approve --by <name>`), then " + rerun
+		if strings.HasPrefix(reason, "ZAP is not installed") {
+			return Step{Group: "install ZAP, then " + rerun, Text: zapInstallStep() + ", then " + rerun}
+		}
 		if !strings.HasPrefix(reason, "needs ") {
 			return Step{Group: group, Text: "resolve the blocker (" + reason + "), then " + rerun}
 		}
 		var pre, need string
 		switch {
 		case c.ID == "D-005":
-			pre, need = "install ZAP, ", " with zap.active_scan: true"
+			pre, need = zapInstallStep()+", ", " with zap.active_scan: true"
 		case c.Adapter == "zap":
-			pre = "install ZAP, "
+			pre = zapInstallStep() + ", "
 		case c.ID == "B-004":
 			need = " with an identity marked revoked: true and authorization_checks"
 		case c.Adapter == "authz":
@@ -261,4 +266,12 @@ func PathTo100(cs []model.ControlResult, fs []model.Finding) []PathGroup {
 		res[i] = *g
 	}
 	return res
+}
+
+// zapInstallStep names the ZAP install command for this OS.
+func zapInstallStep() string {
+	if c := zap.InstallCommand(runtime.GOOS); c != "" {
+		return "install ZAP (`" + c + "`)"
+	}
+	return "install ZAP (https://www.zaproxy.org/download/)"
 }

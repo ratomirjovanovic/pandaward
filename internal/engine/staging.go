@@ -61,15 +61,40 @@ func (e *Engine) StagingActive(ctx context.Context, progress func(string)) (*Sta
 	if a == nil {
 		return nil, errors.New("run `pandaward scan` first; runtime results attach to the latest assessment")
 	}
+	res := &StagingResult{AssessmentID: a.ID, Budget: m.Limits.MaxRequestsTotal, Controls: map[string]string{}, ActiveScan: m.ZAP.ActiveScan}
 	var creds map[string]authzCred
 	if len(m.AuthorizationChecks) > 0 {
-		if creds, err = credentials(m); err != nil {
+		var prov *provisioned
+		if m.IdentityProvisioning != nil {
+			progress("provisioning test identities: " + argvText(m.IdentityProvisioning.Provision))
+			if prov, err = e.provisionIdentities(ctx, m); err != nil {
+				return nil, err
+			}
+			res.Notes = append(res.Notes, fmt.Sprintf("identity provisioning (%s) returned %d credential(s); values were kept in memory only", argvText(m.IdentityProvisioning.Provision), len(prov.values)))
+			_ = e.St.Event(e.ProjectID, a.ID, "", "IDENTITIES_PROVISIONED", fmt.Sprintf("%d credential(s) by %s", len(prov.values), argvText(m.IdentityProvisioning.Provision)))
+			defer func() {
+				if len(m.IdentityProvisioning.Cleanup) == 0 {
+					return
+				}
+				progress("cleaning up test identities: " + argvText(m.IdentityProvisioning.Cleanup))
+				if cerr := e.cleanupIdentities(m, prov); cerr != nil {
+					res.Notes = append(res.Notes, cerr.Error())
+					_ = e.St.Event(e.ProjectID, a.ID, "", "IDENTITIES_CLEANUP_FAILED", cerr.Error())
+				} else {
+					res.Notes = append(res.Notes, "identity cleanup ("+argvText(m.IdentityProvisioning.Cleanup)+") finished")
+				}
+			}()
+		}
+		var vals map[string]string
+		if prov != nil {
+			vals = prov.values
+		}
+		if creds, err = credentials(m, vals); err != nil {
 			return nil, err
 		}
 	}
 	rr := e.newRuntimeRun("staging-active", m, ap)
 	g := scope.NewGuard(m, guardRoots)
-	res := &StagingResult{AssessmentID: a.ID, Budget: m.Limits.MaxRequestsTotal, Controls: map[string]string{}, ActiveScan: m.ZAP.ActiveScan}
 	_ = e.St.Event(e.ProjectID, a.ID, "", "NETWORK_TEST_STARTED", fmt.Sprintf("staging-active under approval %s by %s", ap.ID, ap.ApprovedBy))
 	if len(m.AuthorizationChecks) > 0 {
 		err = e.runAuthz(ctx, a, m, ap, rr, g, creds, res, progress)

@@ -53,10 +53,34 @@ type Manifest struct {
 		ActiveScan         bool `yaml:"active_scan"`
 		MaxDurationMinutes int  `yaml:"max_duration_minutes"`
 	} `yaml:"zap"`
-	Identities          []Identity  `yaml:"identities"`
-	AuthorizationChecks []AuthCheck `yaml:"authorization_checks"`
+	Identities           []Identity            `yaml:"identities"`
+	IdentityProvisioning *IdentityProvisioning `yaml:"identity_provisioning"`
+	AuthorizationChecks  []AuthCheck           `yaml:"authorization_checks"`
 
-	hash string
+	hash     string
+	bindHash string
+}
+
+// IdentityProvisioning names project commands that create the test
+// identities before a staging-active run and remove them after it. Each
+// command is an argument list, run without a shell from the project root.
+// Provision prints {"credentials": {"<value_env>": "<header value>"}} on
+// stdout; cleanup gets that same JSON on stdin.
+type IdentityProvisioning struct {
+	Provision      []string `yaml:"provision"`
+	Cleanup        []string `yaml:"cleanup"`
+	TimeoutSeconds int      `yaml:"timeout_seconds"`
+}
+
+// DefaultProvisionTimeout applies when timeout_seconds is 0.
+const DefaultProvisionTimeout = 60
+
+// Timeout is the per-command limit.
+func (p *IdentityProvisioning) Timeout() time.Duration {
+	if p.TimeoutSeconds == 0 {
+		return DefaultProvisionTimeout * time.Second
+	}
+	return time.Duration(p.TimeoutSeconds) * time.Second
 }
 
 // Identity is a test account used by authorization checks. The credential
@@ -86,8 +110,10 @@ type AuthCheck struct {
 // Anonymous is the implicit identity without credentials.
 const Anonymous = "anonymous"
 
-// Template is written by `pandaward scope init`. All targets are empty and
-// acknowledged is false, so nothing can run until a human fills it in.
+// Template is the blank manifest the tests and the adversarial suite start
+// from; `pandaward scope init` drafts one from the project instead. All
+// targets are empty and acknowledged is false, so nothing can run until a
+// human fills it in.
 const Template = `# PandaWard scope manifest (schema v1)
 # Required before ANY network-active test. Fill in, then approve it yourself
 # from an interactive terminal:  pandaward scope approve --by "<your name>"
@@ -152,11 +178,73 @@ func Load(root string) (*Manifest, error) {
 	}
 	sum := sha256.Sum256(b)
 	m.hash = hex.EncodeToString(sum[:])
+	m.bindHash = m.hash
+	if m.IdentityProvisioning != nil {
+		h := sha256.New()
+		h.Write(sum[:])
+		for _, part := range m.ProvisionParts(root) {
+			h.Write([]byte("\x00" + part))
+		}
+		m.bindHash = hex.EncodeToString(h.Sum(nil))
+	}
 	return m, nil
 }
 
-// Hash is the SHA-256 of the manifest bytes; approvals bind to it.
+// Hash is the SHA-256 of the manifest bytes.
 func (m *Manifest) Hash() string { return m.hash }
+
+// BindHash is what an approval binds to: the manifest bytes and, when the
+// manifest provisions identities, the content of every project file the
+// provision and cleanup commands name. Editing such a script after the
+// approval invalidates it. Without provisioning it equals Hash.
+func (m *Manifest) BindHash() string { return m.bindHash }
+
+// ProvisionParts describes each argument of the provisioning commands: a
+// project file as file:<path>:<sha256>, anything else as arg:<text>. A
+// script that appears or changes later therefore changes BindHash.
+func (m *Manifest) ProvisionParts(root string) []string {
+	p := m.IdentityProvisioning
+	if p == nil {
+		return nil
+	}
+	var out []string
+	for i, argv := range [][]string{p.Provision, p.Cleanup} {
+		out = append(out, fmt.Sprintf("cmd:%d", i))
+		for _, a := range argv {
+			out = append(out, provisionPart(root, a))
+		}
+	}
+	return out
+}
+
+func provisionPart(root, a string) string {
+	if a == "" || filepath.IsAbs(a) || strings.HasPrefix(a, "-") || strings.Contains(a, "..") {
+		return "arg:" + a
+	}
+	full := filepath.Join(root, filepath.FromSlash(a))
+	st, err := os.Stat(full)
+	if err != nil || !st.Mode().IsRegular() {
+		return "arg:" + a
+	}
+	b, err := os.ReadFile(full)
+	if err != nil {
+		return "arg:" + a
+	}
+	sum := sha256.Sum256(b)
+	return "file:" + filepath.ToSlash(a) + ":" + hex.EncodeToString(sum[:])
+}
+
+// ProvisionFiles lists the project files the provisioning commands name,
+// with their SHA-256, for the approval prompt and evidence.
+func (m *Manifest) ProvisionFiles(root string) []string {
+	var out []string
+	for _, part := range m.ProvisionParts(root) {
+		if f, ok := strings.CutPrefix(part, "file:"); ok {
+			out = append(out, f)
+		}
+	}
+	return out
+}
 
 // Validate returns every problem that blocks network-active testing.
 func (m *Manifest) Validate(now time.Time) []string {
@@ -210,6 +298,7 @@ func (m *Manifest) Validate(now time.Time) []string {
 		p = append(p, "zap.active_scan is not allowed when environment is production")
 	}
 	p = append(p, m.validateAuthz()...)
+	p = append(p, m.validateProvisioning()...)
 	if m.Window.Start != "" {
 		st, err := time.Parse(time.RFC3339, m.Window.Start)
 		if err != nil {
@@ -450,4 +539,32 @@ func (m *Manifest) CheckURL(c AuthCheck) (*url.URL, error) {
 		return nil, err
 	}
 	return u, nil
+}
+
+func (m *Manifest) validateProvisioning() []string {
+	ip := m.IdentityProvisioning
+	if ip == nil {
+		return nil
+	}
+	var p []string
+	if len(ip.Provision) == 0 || strings.TrimSpace(ip.Provision[0]) == "" {
+		p = append(p, "identity_provisioning.provision must be a command as a list, such as [node, scripts/identities.mjs]")
+	}
+	if len(ip.Cleanup) > 0 && strings.TrimSpace(ip.Cleanup[0]) == "" {
+		p = append(p, "identity_provisioning.cleanup must start with a program")
+	}
+	for _, argv := range [][]string{ip.Provision, ip.Cleanup} {
+		for _, a := range argv {
+			if strings.ContainsAny(a, "\r\n\x00") {
+				p = append(p, "identity_provisioning: arguments cannot contain line breaks or NUL")
+			}
+		}
+	}
+	if ip.TimeoutSeconds < 0 || ip.TimeoutSeconds > 300 {
+		p = append(p, "identity_provisioning.timeout_seconds must be between 1 and 300 (0 means 60)")
+	}
+	if len(m.Identities) == 0 {
+		p = append(p, "identity_provisioning needs at least one identity to provision")
+	}
+	return p
 }
