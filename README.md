@@ -118,7 +118,7 @@ scoop bucket add pandaward https://github.com/ratomirjovanovic/pandaward; scoop 
 Or download a binary from the [releases page](https://github.com/ratomirjovanovic/pandaward/releases) (Linux and macOS on amd64 and arm64, Windows on amd64). For example on Linux:
 
 ```sh
-v=v0.2.12
+v=v0.2.13
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/pandaward-linux-amd64
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/SHA256SUMS
 sha256sum --ignore-missing -c SHA256SUMS
@@ -128,7 +128,7 @@ chmod +x pandaward-linux-amd64 && sudo mv pandaward-linux-amd64 /usr/local/bin/p
 On Windows (PowerShell), save `pandaward-windows-amd64.exe` as `pandaward.exe` in a folder on your `PATH`:
 
 ```powershell
-Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.12/pandaward-windows-amd64.exe -OutFile pandaward.exe
+Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.13/pandaward-windows-amd64.exe -OutFile pandaward.exe
 (Get-FileHash pandaward.exe).Hash   # compare with the line in SHA256SUMS
 ```
 
@@ -171,11 +171,20 @@ flowchart LR
 3. **Adapters** run. Built-in checks are offline and always available; gitleaks, semgrep, osv-scanner, trivy and apktool are used only if you installed them. osv-scanner and trivy also need `scan.allow_tool_network: true`, which is off by default: osv-scanner then sends the package names and versions from your lockfiles to api.osv.dev, and trivy only downloads its vulnerability database. Until it is set they are BLOCKED with a reason that says this, and `/pandaward:start` offers the switch once. When an override in the workspace root (`pnpm.overrides`, `overrides` or `resolutions` in package.json, or `overrides` in pnpm-workspace.yaml) replaces a package with a local one (`link:`, `file:`, `workspace:` or `portal:`), an osv-scanner result for that package is dropped if the lockfile entry is that local package, since the registry package's advisories do not apply to code that is not installed; the adapter line counts them and names the overrides. A result is kept, and named in the adapter line, when the lockfile still pins a registry version or the override is an `npm:` alias. A gitleaks match whose value is shaped like a placeholder (a run of 8 or more sequential or repeated characters, a word such as dummy, example or changeme, a value starting with `test_`, a JWT with a short signature or dummy claims, or the fallback after `secrets.NAME ||` in a workflow) is kept but listed as info for review instead of counting against E-005; the value is judged in memory and never stored, a `service_role` JWT is never treated as a placeholder, and the adapter line says how many were listed. apktool decodes `.apk` files found in the project (resources only, never the app's code) so the manifest checks also run on what you ship (K-005). If you run [MobSF](https://github.com/MobSF/Mobile-Security-Framework-MobSF) yourself on this machine, set `scan.mobsf_url` (for example `http://127.0.0.1:8000`) and export its REST API key as `MOBSF_API_KEY`; PandaWard uploads the `.apk` and `.ipa` files it finds to that server, runs the static scan and reports MobSF's high and warning items as hypotheses under K-006 (APK) and L-005 (IPA). Code findings that MobSF reports only in bundled library code, outside the app's own package namespace, are listed for review instead. Only loopback addresses are accepted, proxies and redirects are ignored, and the key never appears in evidence, logs or reports. The adapter is tested against MobSF 4.5.3. When semgrep is installed it runs PandaWard's bundled offline rules (see [`rules/README.md`](rules/README.md)) plus any rules you configure. SARIF 2.1.0 files from analyzers you ran yourself (CodeQL or other SAST tools) are imported from `.pandaward/sarif/*.sarif` and any paths listed in `scan.sarif_files`; PandaWard never runs those tools. Imported results are hypotheses under control R-002, with snippets read and redacted from your files rather than taken from the SARIF. The directories in `inventory.exclude` (build output such as `.next/` and `dist/`, `node_modules/` and the like) apply to every adapter: results a scanner reports there are dropped, and the adapter line in the summary says how many.
 4. **Findings** are redacted, fingerprinted and linked to evidence. Repeated runs update their lifecycle: `OPEN`, `REMEDIATED`, `REOPENED`, `FALSE_POSITIVE`, `RISK_ACCEPTED`. Identical hits in one file are told apart by position, so fixing one of them remediates that one; a finding whose file was moved or renamed keeps its ID and status and is reported as moved, never as fixed.
 5. **Edges** between domains are created only from shared assets and get their status from the linked controls.
-6. **Reports** show confirmed findings, suspected signals, coverage by domain, every undecided control and the evidence index. Decisive coverage (PASS or FAIL over applicable controls) is split by how each control was decided: automatic (static and external adapters in the passive scan), runtime (an approved runtime profile: production-observe, staging-active or local-runtime) and attested (a recorded manual review; nothing records one yet, so it is 0). Not applicable controls are counted separately and stay outside the denominator. Every undecided control gets one next step, built from its method, status and stored reason, such as "install osv-scanner (see `pandaward doctor`), then run `pandaward retest`", and a **Path to 100%** section groups the undecided controls by that step. Some steps say a control cannot be decided in this release (manual review without attestation, runtime checks without an adapter); those keep coverage below 100% on purpose.
+6. **Reports** show confirmed findings, suspected signals, coverage by domain, every undecided control and the evidence index. Decisive coverage (PASS or FAIL over applicable controls) is split by how each control was decided: automatic (static and external adapters in the passive scan), runtime (an approved runtime profile: production-observe, staging-active or local-runtime) and attested (a manual control a person accepted after review, see [Attested manual controls](#attested-manual-controls)). Not applicable controls are counted separately and stay outside the denominator. Every undecided control gets one next step, built from its method, status and stored reason, such as "install osv-scanner (see `pandaward doctor`), then run `pandaward retest`", and a **Path to 100%** section groups the undecided controls by that step. Some steps say a control cannot be decided in this release (runtime checks without an adapter); those keep coverage below 100% on purpose. Manual controls are on the path through attestation.
 
 In Claude Code, hooks keep the ledger current without any command. Edited files are marked stale as they change, and when Claude finishes a turn that edited files, PandaWard runs a changed-only passive retest (bounded at 40 seconds) and hands any new or reopened findings back to Claude, which explains them and offers a fix. A clean retest stays silent; one that runs out of time or fails says so instead of claiming anything is fixed. Set `hooks.auto_retest: false` in `.pandaward/config.yaml` to turn it off.
 
 While the specialist reviewers run, you can see what each one is doing. Their rows in the subagent panel below the prompt show the elapsed time, files read, searches, recorded hypotheses and the file or pattern they are on, refreshed by Claude Code. In the chat, Claude passes on a line when a reviewer starts, records a hypothesis or finishes, gives a short summary about once a minute in between, and warns when a reviewer has gone quiet for 10 minutes. The chat lines need Claude Code's Monitor tool, which on Windows needs Git Bash. Hooks record this to `.pandaward/private/progress.jsonl` for subagents named `pandaward:*` only. They record file names and search patterns, never file contents, and `pandaward progress` shows the same view in a terminal.
+
+### Attested manual controls
+
+Five controls cannot be decided by automation: A-004 (threat model), C-003 (authorization of every route), F-001 (business invariants), O-001 (security event alerting) and Q-001 (rate limiting). They are BLOCKED until a person attests them:
+
+1. A reviewer, usually a `/pandaward:review` agent, proposes PASS or FAIL with `pandaward_propose_attestation`, citing file and line evidence and optionally a test or command that shows it. PandaWard checks every cited file is inside the project and every line exists, reads and hashes the files itself and redacts the text. The proposal is pending and decides nothing. A proposal can also come from a file: `pandaward attest C-003 --propose --file proposal.json`.
+2. You decide: `pandaward attest C-003 --show` lists the evidence, then `pandaward attest C-003 --accept --by "Jane" --note "walked every route"` or `--reject`. When an agent runs this for you, the PandaWard hook shows the proposal and asks you to confirm; no MCP tool can accept. An accept is refused when a cited file changed since the proposal.
+3. From the next scan the control is PASS or FAIL with `decided_by: attested`, and reports list the reviewer, the date and every citation. A FAIL attestation creates no finding by itself; the concrete gaps are the hypotheses the reviewer recorded, which you confirm with `pandaward findings apply`.
+4. The attestation becomes STALE, with the reason, when a cited file changes (the file is named), when the control catalog version changes, or after `attest.max_age_days` (180 by default; it can be lowered, never raised beyond 365). It stays STALE until a fresh proposal is accepted.
 
 ## What it checks
 
@@ -212,6 +221,8 @@ While the specialist reviewers run, you can see what each one is doing. Their ro
 | `pandaward retest [--changed]` | Files changed since the last scan, re-scan, delta; `--changed` re-runs only the adapters whose controls the changes affect |
 | `pandaward status` | Coverage and how it was decided (automatic, runtime, attested, not applicable), open findings, stale files, blockers, next action, and the path to 100%: the undecided controls grouped by the step that would decide them |
 | `pandaward findings [show ID]` | List or inspect findings; `apply --file` records many decisions at once |
+| `pandaward attest --list \| <control> --show` | Attestations of manual controls: pending proposals and accepted verdicts with their evidence |
+| `pandaward attest <control> --accept\|--reject --by NAME [--note text]` | A person decides a reviewer's proposal; the hook asks for confirmation when an agent runs it |
 | `pandaward graph [--format mermaid]` | Domains and cross-domain edges |
 | `pandaward routes` | Discovered entrypoints (HTTP, Next.js pages, layouts and middleware, GraphQL, gRPC, workers, cron) with file and line |
 | `pandaward fix-plan` | Ordered remediation steps |
@@ -221,7 +232,7 @@ While the specialist reviewers run, you can see what each one is doing. Their ro
 | `pandaward progress [--watch] [--json]` | What the reviewer subagents of a guided review are doing; `--watch` prints a line per start, hypothesis and finish until all are done |
 | `pandaward export --bundle out.zip` | Report and redacted evidence with a SHA-256 manifest for a reviewer; never raw tool output |
 | `pandaward verify-bundle out.zip` | Recompute every hash in a bundle; compare the printed manifest hash with the sender's |
-| `pandaward scope init \| validate \| approve \| revoke` | Authorization for network tests |
+| `pandaward scope init [--print] [--target URL] \| validate \| approve \| revoke` | Authorization for network tests |
 | `pandaward test --profile production-observe` | Header and cookie review of approved origins |
 | `pandaward test --profile local-runtime` | Storage of the configured Android test build on a running emulator and the iOS test build in a booted simulator; real devices are refused |
 | `pandaward test --profile staging-active` | Authorization checks with test identities, then a ZAP spider and passive scan of approved staging origins, active scan when the manifest allows it |
@@ -256,8 +267,8 @@ pandaward findings apply --file decisions.json --by "Jane"   # many at once, all
 Network tests are off until you turn them on yourself:
 
 ```sh
-pandaward scope init                       # writes .pandaward/scope.yaml, unusable as shipped
-# fill in owner, written permission reference, purpose, targets, limits, acknowledged: true
+pandaward scope init                       # drafts .pandaward/scope.yaml from the project, not approved
+# review it; fill in owner, written permission reference, purpose, acknowledged: true
 pandaward scope approve --by "Jane"        # interactive terminal only, bound to the file's SHA-256
 pandaward test --profile production-observe
 pandaward test --profile staging-active    # staging or local targets, needs ZAP
@@ -268,13 +279,21 @@ pandaward test --profile staging-active    # staging or local targets, needs ZAP
 | Profile | Covers | Decides | Needs | Local target |
 |---|---|---|---|---|
 | `production-observe` | Passive look at a deployed site: one GET per approved origin, then the security response headers, a weak CSP and cookie flags. No payloads, no login, redirects are not followed. | H-003 (needs approved origins that answer without errors) | scope.yaml approved with `pandaward scope approve` (GET in allowed_methods). No identities, no ZAP. Works for any environment, production included. | only when the manifest sets allow_private_addresses: true |
-| `staging-active` | Permission checks with test identities (who may read which object or privileged route, and whether a revoked credential is still accepted), then a ZAP spider and passive scan, and the ZAP active scan when the manifest allows it. | B-004 (needs an identity marked revoked: true)<br>C-001 (needs an authorization check of kind object)<br>C-002 (needs an authorization check of kind function)<br>D-005 (needs ZAP installed and zap.active_scan: true)<br>M-001 (needs ZAP installed)<br>not automated yet: B-003, F-002, G-002, P-003, Q-002 | scope.yaml approved with `pandaward scope approve`; identities and authorization_checks in it, with each credential in the environment variable its value_env names; ZAP installed (Java 17+) for M-001 and D-005. Refused for environment: production. | yes, with environment: staging or local; loopback and private addresses need allow_private_addresses: true. Use this profile for permission checks against an app running on your machine |
+| `staging-active` | Permission checks with test identities (who may read which object or privileged route, and whether a revoked credential is still accepted), then a ZAP spider and passive scan, and the ZAP active scan when the manifest allows it. | B-004 (needs an identity marked revoked: true)<br>C-001 (needs an authorization check of kind object)<br>C-002 (needs an authorization check of kind function)<br>D-005 (needs ZAP installed and zap.active_scan: true)<br>M-001 (needs ZAP installed)<br>not automated yet: B-003, F-002, G-002, P-003, Q-002 | scope.yaml approved with `pandaward scope approve`; identities and authorization_checks in it, with each credential in the environment variable its value_env names or returned by the identity_provisioning command; ZAP installed (Java 17+) for M-001 and D-005. Refused for environment: production. | yes, with environment: staging or local; loopback and private addresses need allow_private_addresses: true. Use this profile for permission checks against an app running on your machine |
 | `local-runtime` | Mobile apps only: what the Android or iOS test build stored on an emulator or simulator (credentials in shared preferences or the preferences plist; key names are recorded, never values). Sends no network traffic. | K-003 (needs runtime.android_package and a running Android emulator)<br>L-002 (needs runtime.ios_bundle_id and a booted iOS simulator on macOS) | runtime.android_package in .pandaward/config.yaml, adb and a running emulator with the debuggable test build; or runtime.ios_bundle_id, xcrun and a booted simulator on macOS. No scope manifest. Real devices are refused. | not a web target: it reads an emulator or simulator on this machine. For a web app on localhost use staging-active |
 | `manual-assisted` | Not a runtime profile in this release; `pandaward test` refuses it. Manual review runs through /pandaward:review. | nothing | nothing to run | not applicable |
 
+`pandaward scope init` reads the project and drafts the manifest. It never overwrites an existing `scope.yaml`, and `--print` writes the draft to stdout instead. The draft has:
+
+- **targets**: local dev URLs from package scripts (`next dev -p 3001`, `vite`, `astro dev` and others, with their default ports) and loopback URLs in `.env.example` files. A non-local URL only gets in when you pass `--target`, so a draft never points at production. With only local targets the draft sets `environment: local` and `allow_private_addresses: true`.
+- **identities**: commented, one per role found in code (role enums and union types, zod enums, Postgres and Prisma enums, role checks such as `role === 'admin'`), plus one in another tenant and one revoked. Tables with RLS policies are noted.
+- **authorization_checks**: commented, one per readable route from the route inventory, with dynamic segments as `<placeholders>` and dynamic routes first.
+
+The authorization block stays empty and `acknowledged: false`, so the draft cannot run until a person reviews it and approves it.
+
 The engine sends at most `max_requests_total` GET requests to the listed origins at the configured rate, never follows redirects, and checks every resolved address at connection time. Loopback, private and link-local addresses are refused unless the manifest explicitly allows a local fixture, and cloud metadata addresses are always refused. `pandaward scope approve` shows the exact line to type, `APPROVE` followed by the first 8 characters of the manifest's SHA-256 (for example `APPROVE ab26dcf2`), so the approval is tied to that file; anything else cancels and the error says what was expected and what was typed. Editing `scope.yaml` invalidates the approval. Approvals are also bound to a per-user key kept outside the project (`approval.key` in your user config directory), so a scope file or ledger that arrives with a repository never counts as approved.
 
-`staging-active` runs your installed [ZAP](https://www.zaproxy.org/) (it needs Java 17+; PandaWard never installs it) through its automation framework: a spider and the passive scan decide M-001, and with `zap.active_scan: true` in the manifest the active scan also decides D-005 (injection). ZAP is chained to a PandaWard proxy on loopback that terminates TLS and sends each request through the same scope guard, so origins, excluded paths, allowed methods, the request budget, the rate limit and the address checks apply to every ZAP request. The guard also stops after three consecutive 429 or 5xx answers. A ZAP run that fails is `ERROR`, a run cut short by the budget or the guard is `INCONCLUSIVE`, and targets marked `environment: production` are refused. Set `runtime.zap_path` in `.pandaward/config.yaml` when ZAP is not on `PATH` or in its default install location.
+`staging-active` runs your installed [ZAP](https://www.zaproxy.org/) (it needs Java 17+; PandaWard never installs it, and when it is missing the BLOCKED reason gives the install command for your OS: `winget install --id ZAP.ZAP -e`, `brew install --cask zap` or `sudo snap install zaproxy --classic`) through its automation framework: a spider and the passive scan decide M-001, and with `zap.active_scan: true` in the manifest the active scan also decides D-005 (injection). ZAP is chained to a PandaWard proxy on loopback that terminates TLS and sends each request through the same scope guard, so origins, excluded paths, allowed methods, the request budget, the rate limit and the address checks apply to every ZAP request. The guard also stops after three consecutive 429 or 5xx answers. A ZAP run that fails is `ERROR`, a run cut short by the budget or the guard is `INCONCLUSIVE`, and targets marked `environment: production` are refused. Set `runtime.zap_path` in `.pandaward/config.yaml` when ZAP is not on `PATH` or in its default install location.
 
 `staging-active` also runs the manifest's `authorization_checks` before ZAP. You list test identities (name, tenant, the header that carries the credential and the environment variable that holds it; the credential itself never goes in the file) and read-only requests to objects or functions that exist for the test, each with the identities allowed to reach it:
 
@@ -290,6 +309,17 @@ authorization_checks:
 ```
 
 Each check is sent once as every identity and once without credentials. The allowed identities must get a 2xx answer, otherwise the check cannot be judged and is `INCONCLUSIVE`. Any other identity that also gets a 2xx is a finding: `CONFIRMED` when its body matches what the allowed identities got, `STRONGLY_SUPPORTED` when it differs. Object checks decide C-001 (BOLA), function checks C-002, and identities marked `revoked` decide B-004 on every check. Only GET and HEAD are allowed, so no data changes and nothing needs cleaning up. Evidence keeps the status, size, content type and a body hash per identity, never headers, bodies or credentials. A missing credential variable stops the run before the first request.
+
+Instead of exporting each credential yourself, the manifest can name project commands that create the test identities before the run and remove them after it:
+
+```yaml
+identity_provisioning:
+  provision: [node, scripts/pandaward-identities.mjs, create]
+  cleanup: [node, scripts/pandaward-identities.mjs, delete]
+  timeout_seconds: 60        # per command, 1-300, default 60
+```
+
+Each command is an argument list, run without a shell from the project root, and only for an approved manifest. `provision` prints `{"credentials": {"PANDAWARD_ID_ALICE": "Bearer ...", ...}}` on stdout. The keys must be `value_env` names of the manifest's identities, and anything else stops the run. A key it leaves out is read from the environment as before. `cleanup` gets the same JSON on stdin and runs after the test, also when the test failed. The values stay in memory: they are never written to the ledger, evidence, reports or progress output, and a failing command's stderr is not repeated. The approval binds the commands and the content of every project file they name, so editing `scripts/pandaward-identities.mjs` after the approval invalidates it. `pandaward scope approve` lists the commands and the bound files before you type the approval line.
 
 ## Emulator and simulator checks
 
@@ -342,7 +372,7 @@ With [pre-commit](https://pre-commit.com), add this to `.pre-commit-config.yaml`
 ```yaml
 repos:
   - repo: https://github.com/ratomirjovanovic/pandaward
-    rev: v0.2.12
+    rev: v0.2.13
     hooks:
       - id: pandaward-system   # uses the pandaward on your PATH; use id: pandaward to build it with Go 1.26+
 ```
