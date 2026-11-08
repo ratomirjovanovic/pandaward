@@ -1344,6 +1344,11 @@ func cmdScope(args []string, stdin io.Reader, w io.Writer) error {
 					fmt.Fprintf(w, "  %s: %s %s sent %d times %s\n", redact.Line(c.Name), c.Action.Method, redact.Line(c.Action.Path), c.Repeat, how)
 				}
 			}
+			for _, c := range m.LLMChecks {
+				if scope.StateChanging(c.Request.Method) {
+					fmt.Fprintf(w, "  %s: %s %s sent %d times with prompt-injection payloads\n", redact.Line(c.Name), c.Request.Method, redact.Line(c.Request.Path), scope.LLMPayloadCount)
+				}
+			}
 		}
 		// The code binds what the human types to this exact manifest.
 		want := "APPROVE " + m.Hash()[:8]

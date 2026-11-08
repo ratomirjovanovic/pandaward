@@ -63,6 +63,7 @@ type Manifest struct {
 	AuthorizationChecks  []AuthCheck           `yaml:"authorization_checks"`
 	FlowChecks           []FlowCheck           `yaml:"flow_checks"`
 	EffectChecks         []EffectCheck         `yaml:"effect_checks"`
+	LLMChecks            []LLMCheck            `yaml:"llm_checks"`
 
 	hash     string
 	bindHash string
@@ -203,6 +204,14 @@ effect_checks: []
 #    repeat: 5
 #    probe: {method: GET, path: /api/me, as: alice, json: balance}
 #    expect_delta: 5
+# Prompt-injection checks (staging-active, P-003): built-in payloads sent in
+# a field the application treats as data (a document, a transcript, a
+# retrieved page), never the user's own instruction field. The body
+# template comes from body_env and must contain {{payload}}.
+llm_checks: []
+#  - name: document summary
+#    request: {method: POST, path: /api/summarize, as: alice, content_type: application/json, body_env: PANDAWARD_LLM_BODY}
+#    # PANDAWARD_LLM_BODY={"document":"Quarterly notes. {{payload}}"}
 `
 
 // Path returns the manifest path.
@@ -345,12 +354,14 @@ func (m *Manifest) Validate(now time.Time) []string {
 	p = append(p, fp...)
 	ep, effectRequests := m.validateEffects()
 	p = append(p, ep...)
-	flowRequests += effectRequests
+	lp, llmRequests := m.validateLLM()
+	p = append(p, lp...)
+	flowRequests += effectRequests + llmRequests
 	if authz := len(m.AuthorizationChecks) * (len(m.Identities) + 1); flowRequests > 0 && authz+flowRequests > m.Limits.MaxRequestsTotal && m.Limits.MaxRequestsTotal > 0 {
-		p = append(p, fmt.Sprintf("authorization, flow and effect checks need %d requests together; raise limits.max_requests_total", authz+flowRequests))
+		p = append(p, fmt.Sprintf("authorization, flow, effect and LLM checks need %d requests together; raise limits.max_requests_total", authz+flowRequests))
 	}
 	if m.StateMethodsUsed() && m.Environment != "staging" && m.Environment != "local" {
-		p = append(p, "flow and effect checks with state-changing methods run only when environment is staging or local")
+		p = append(p, "flow, effect and LLM checks with state-changing methods run only when environment is staging or local")
 	}
 	p = append(p, m.validateProvisioning()...)
 	if m.Window.Start != "" {

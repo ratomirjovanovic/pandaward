@@ -205,6 +205,8 @@ func (e *Engine) Plan(inv *inventory.Inventory) []PlanItem {
 				it.Status, it.Reason = model.StatusBlocked, "needs effect_checks with control Q-002 (an action sent at once, a read-only probe and expect_delta) in an approved scope manifest, then `pandaward test --profile staging-active`"
 			case c.Adapter == "effect":
 				it.Status, it.Reason = model.StatusBlocked, "needs effect_checks with control F-002 (an action sent in sequence, a read-only probe and expect_delta) in an approved scope manifest, then `pandaward test --profile staging-active`"
+			case c.Adapter == "llm":
+				it.Status, it.Reason = model.StatusBlocked, "needs llm_checks (an endpoint and a body template with {{payload}} in a data field) in an approved scope manifest, then `pandaward test --profile staging-active`"
 			case c.Adapter == "contract":
 				it.Status, it.Reason = model.StatusBlocked, "needs an OpenAPI document that declares security, contract.check: true in an approved scope manifest, then `pandaward test --profile staging-active`"
 			case c.Adapter == "zap":

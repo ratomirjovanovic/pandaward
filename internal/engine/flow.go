@@ -42,6 +42,11 @@ func checkInputs(m *scope.Manifest, provided map[string]string) (map[string]stri
 		}
 		out[env] = v
 	}
+	for _, c := range m.LLMChecks {
+		if !strings.Contains(out[c.Request.BodyEnv], scope.PayloadSlot) {
+			return nil, fmt.Errorf("llm check %q: the body template in %s must contain %s where the payload goes", c.Name, c.Request.BodyEnv, scope.PayloadSlot)
+		}
+	}
 	return out, nil
 }
 

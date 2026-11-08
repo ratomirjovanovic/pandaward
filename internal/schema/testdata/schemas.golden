@@ -306,6 +306,15 @@ identity_provisioning.timeout_seconds int
 limits.max_requests_total int
 limits.requests_per_second float64
 limits.timeout_seconds int
+llm_checks[].name string
+llm_checks[].request.as string
+llm_checks[].request.body_env string
+llm_checks[].request.content_type string
+llm_checks[].request.expect string
+llm_checks[].request.header_env{} string
+llm_checks[].request.method string
+llm_checks[].request.path string
+llm_checks[].request.target string
 schema_version int
 targets[].url string
 window.end string

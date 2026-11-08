@@ -43,7 +43,8 @@ var injectionCWEs = map[int]bool{22: true, 74: true, 77: true, 78: true, 79: tru
 
 // StagingActive runs the staging-active profile against the approved
 // manifest: the authorization checks (C-001, C-002, B-004) first, the flow
-// checks (B-003), the effect checks (F-002, Q-002), the OpenAPI contract check (G-002) when contract.check is set, then a
+// checks (B-003), the effect checks (F-002, Q-002), the prompt-injection
+// checks (P-003), the OpenAPI contract check (G-002) when contract.check is set, then a
 // ZAP spider and passive scan (M-001) and, when the manifest sets
 // zap.active_scan, the ZAP active scan (D-005). Every request goes through
 // one scope guard, so all of them share the request budget.
@@ -111,6 +112,9 @@ func (e *Engine) StagingActive(ctx context.Context, progress func(string)) (*Sta
 	}
 	if err == nil && len(m.EffectChecks) > 0 {
 		err = e.runEffects(ctx, a, m, ap, rr, g, creds, inputs, res, progress)
+	}
+	if err == nil && len(m.LLMChecks) > 0 {
+		err = e.runLLM(ctx, a, m, ap, rr, g, creds, inputs, res, progress)
 	}
 	if err == nil && m.Contract.Check {
 		err = e.runContract(ctx, a, m, ap, rr, g, res, progress)
