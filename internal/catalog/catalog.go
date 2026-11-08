@@ -77,7 +77,7 @@ var Controls = []Control{
 
 	{ID: "B-001", Domain: "B", Title: "JWT verification is not disabled and does not accept the 'none' algorithm", Method: MethodStatic, Adapter: "builtin-code", Requires: "code", Refs: []string{"CWE-347"}},
 	{ID: "B-002", Domain: "B", Title: "Session cookies are not explicitly configured without Secure/HttpOnly", Method: MethodStatic, Adapter: "builtin-code", Requires: "web", Refs: []string{"CWE-614", "CWE-1004"}},
-	{ID: "B-003", Domain: "B", Title: "Login, reset and MFA state machine tested with negative cases", Method: MethodRuntime, Requires: "auth", Profile: "staging-active", Refs: []string{"API2:2023"}},
+	{ID: "B-003", Domain: "B", Title: "Login, reset and MFA state machine tested with negative cases", Method: MethodRuntime, Adapter: "flow", Requires: "auth", Profile: "staging-active", Refs: []string{"API2:2023"}},
 	{ID: "B-004", Domain: "B", Title: "Session expiry and revocation enforced server-side", Method: MethodRuntime, Adapter: "authz", Requires: "auth", Profile: "staging-active", Refs: []string{"CWE-613"}},
 
 	{ID: "C-001", Domain: "C", Title: "Object-level authorization enforced on parameterized routes (BOLA)", Method: MethodRuntime, Adapter: "authz", Requires: "param_routes", Profile: "staging-active", Refs: []string{"API1:2023", "CWE-639"}},
@@ -230,10 +230,11 @@ var TestProfiles = []TestProfile{
 		Local:  "only when the manifest sets allow_private_addresses: true",
 		When:   map[string]string{"H-003": "approved origins that answer without errors"}},
 	{Name: "staging-active",
-		Covers: "Permission checks with test identities (who may read which object or privileged route, and whether a revoked credential is still accepted), the OpenAPI contract checked without credentials when the manifest asks for it, then a ZAP spider and passive scan, and the ZAP active scan when the manifest allows it.",
-		Needs:  "scope.yaml approved with `pandaward scope approve`; identities and authorization_checks in it, with each credential in the environment variable its value_env names or returned by the identity_provisioning command; ZAP installed (Java 17+) for M-001 and D-005. Refused for environment: production.",
+		Covers: "Permission checks with test identities (who may read which object or privileged route, and whether a revoked credential is still accepted), login, reset and MFA flows with negative cases, the OpenAPI contract checked without credentials when the manifest asks for it, then a ZAP spider and passive scan, and the ZAP active scan when the manifest allows it.",
+		Needs:  "scope.yaml approved with `pandaward scope approve`; identities and authorization_checks in it, with each credential in the environment variable its value_env names or returned by the identity_provisioning command; ZAP installed (Java 17+) for M-001 and D-005. State-changing methods only for flow checks, with environment staging or local. Refused for environment: production.",
 		Local:  "yes, with environment: staging or local; loopback and private addresses need allow_private_addresses: true. Use this profile for permission checks against an app running on your machine",
 		When: map[string]string{
+			"B-003": "flow_checks with a step that expects denied",
 			"B-004": "an identity marked revoked: true",
 			"C-001": "an authorization check of kind object",
 			"C-002": "an authorization check of kind function",
