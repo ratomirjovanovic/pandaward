@@ -217,6 +217,29 @@ func (a codeAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 			continue
 		}
 		text := strings.Join(f.Lines, "\n")
+		// In Go files a match that lies wholly inside a string literal is
+		// data: a regexp pattern is dropped, any other string is listed as
+		// info. lineStart maps a line to its offset in text.
+		var gl *goLiterals
+		var lineStart []int
+		if f.Lang == "go" {
+			gl = scanGoLiterals(text)
+			lineStart = make([]int, len(f.Lines))
+			for i, off := 1, 0; i < len(f.Lines); i++ {
+				off += len(f.Lines[i-1]) + 1
+				lineStart[i] = off
+			}
+		}
+		goVerdict := func(re *regexp.Regexp, i int) string {
+			if gl == nil {
+				return ""
+			}
+			loc := re.FindStringIndex(f.Lines[i])
+			if loc == nil {
+				return ""
+			}
+			return gl.verdict(lineStart[i]+loc[0], lineStart[i]+loc[1])
+		}
 		skipFile := map[int]bool{}
 		for k, r := range codeRules {
 			if r.SkipFile != nil && r.SkipFile(text) {
@@ -246,9 +269,18 @@ func (a codeAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 				if r.Proven != nil && r.Proven(lc) {
 					continue
 				}
+				inString := ""
+				if r.Prep == nil {
+					inString = goVerdict(r.Re, i)
+				}
+				if inString == "pattern" {
+					continue
+				}
 				emitted[r.ID] = true
 				s := sig(r, f, i+1, a.Name())
-				if r.Demote != nil {
+				if inString == "string" {
+					goStringDemote(&s)
+				} else if r.Demote != nil {
 					if d := r.Demote(lc); d != nil {
 						s.Severity, s.Confidence, s.Title, s.Message, s.Fix = model.SevInfo, model.Hypothesis, d.Title, d.Message, d.Fix
 					}
@@ -266,10 +298,18 @@ func (a codeAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 		if credRe.MatchString(text) {
 			for i, l := range f.Lines {
 				if corsAnyRe.MatchString(l) {
-					res.Signals = append(res.Signals, sig(lineRule{ID: "code.cors-wildcard-credentials", Control: "H-002", Title: "CORS allows any origin with credentials",
+					v := goVerdict(corsAnyRe, i)
+					if v == "pattern" {
+						continue
+					}
+					s := sig(lineRule{ID: "code.cors-wildcard-credentials", Control: "H-002", Title: "CORS allows any origin with credentials",
 						Severity: model.SevHigh, Confidence: model.StronglySupported, CWE: "CWE-942",
 						Message: "Any origin (or a reflected origin) is allowed together with credentials, so other sites can make authenticated reads.",
-						Fix:     "Use an explicit allowlist of trusted origins when credentials are enabled."}, f, i+1, a.Name()))
+						Fix:     "Use an explicit allowlist of trusted origins when credentials are enabled."}, f, i+1, a.Name())
+					if v == "string" {
+						goStringDemote(&s)
+					}
+					res.Signals = append(res.Signals, s)
 				}
 			}
 		}

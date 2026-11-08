@@ -14,6 +14,9 @@ import (
 	"path/filepath"
 )
 
+const invoiceCols = `id,
+	total`
+
 func lookup(db *sql.DB, id string) {
 	// ruleid: pandaward-go-sql-string
 	db.Query(fmt.Sprintf("SELECT * FROM invoices WHERE id = %s", id))
@@ -21,6 +24,8 @@ func lookup(db *sql.DB, id string) {
 	db.Exec("DELETE FROM invoices WHERE id = " + id)
 	// ok: pandaward-go-sql-string
 	db.Query("SELECT * FROM invoices WHERE id = $1", id)
+	// ok: pandaward-go-sql-string
+	db.QueryRow(`SELECT `+invoiceCols+` FROM invoices WHERE id = ?`, id)
 }
 
 func run(dir string) {

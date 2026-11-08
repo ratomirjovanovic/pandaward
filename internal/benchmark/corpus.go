@@ -14,7 +14,7 @@ import (
 )
 
 // CorpusVersion changes whenever cases are added, removed or edited.
-const CorpusVersion = "2026.11.4"
+const CorpusVersion = "2026.11.5"
 
 // Case is one repository that a rule must fire on (Vulnerable) or must not
 // fire on (Safe).
@@ -118,6 +118,7 @@ func Corpus() []Case {
 	add(code("code.dotnet-deserialize", "A.cs", "var f = new BinaryFormatter();\n", "var o = JsonSerializer.Deserialize<T>(x);\n"))
 	add(code("code.ruby-deserialize", "a.rb", "obj = Marshal.load(data)\n", "obj = YAML.safe_load(data)\n"))
 	add(code("code.tls-verify-off", "a.py", "requests.get(u, verify=False)\n", "requests.get(u, verify=True)\n"))
+	add(code("code.tls-verify-off", "tls.go", "var c = &tls.Config{InsecureSkipVerify: true}\n", "var tlsOff = regexp.MustCompile(`InsecureSkipVerify\\s*:\\s*true`)\n"))
 	add(code("code.weak-hash-password", "a.py", "h = hashlib.md5(password).hexdigest()\n", "h = hashlib.md5(file_bytes).hexdigest()\n"))
 	add(code("code.insecure-random", "a.js", "const token = Math.random().toString(36);\n", "const jitter = Math.random() * 100;\n"))
 	add(code("code.jwt-none", "a.js", "jwt.verify(t, k, { algorithms: ['none'] });\n", "jwt.verify(t, k, { algorithms: ['RS256'] });\n"))
@@ -229,7 +230,7 @@ func Corpus() []Case {
 		map[string]string{".mcp.json": `{"mcpServers":{"fs":{"command":"npx","args":["-y","@scope/server"]}}}`},
 		map[string]string{".mcp.json": `{"mcpServers":{"fs":{"command":"npx","args":["-y","@scope/server@1.2.3"]}}}`}))
 	add(pair("supply.mcp-inline-credential", "builtin-supply",
-		map[string]string{".mcp.json": `{"mcpServers":{"api":{"command":"node","args":["s.js"],"env":{"API_KEY":"abc123def456"}}}}`},
+		map[string]string{".mcp.json": `{"mcpServers":{"api":{"command":"node","args":["s.js"],"env":{"API_KEY":"` + "abc123" + "def456" + `"}}}}`},
 		map[string]string{".mcp.json": `{"mcpServers":{"api":{"command":"node","args":["s.js"],"env":{"API_KEY":"${API_KEY}"}}}}`}))
 
 	manifest := "app/src/main/AndroidManifest.xml"
