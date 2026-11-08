@@ -1327,12 +1327,21 @@ func cmdScope(args []string, stdin io.Reader, w io.Writer) error {
 			fmt.Fprintln(w, "Editing any bound file invalidates this approval.")
 		}
 		if m.StateMethodsUsed() {
-			fmt.Fprintln(w, "\nThese flow checks send requests that can change data on the targets (use test accounts and fixtures only):")
+			fmt.Fprintln(w, "\nThese checks send requests that can change data on the targets (use test accounts and fixtures only):")
 			for _, c := range m.FlowChecks {
 				for i, s := range c.Steps {
 					if scope.StateChanging(s.Method) {
 						fmt.Fprintf(w, "  %s step %d: %s %s (expect %s)\n", redact.Line(c.Name), i+1, s.Method, redact.Line(s.Path), s.Expect)
 					}
+				}
+			}
+			for _, c := range m.EffectChecks {
+				if scope.StateChanging(c.Action.Method) {
+					how := "in sequence"
+					if c.Control == "Q-002" {
+						how = "at once"
+					}
+					fmt.Fprintf(w, "  %s: %s %s sent %d times %s\n", redact.Line(c.Name), c.Action.Method, redact.Line(c.Action.Path), c.Repeat, how)
 				}
 			}
 		}

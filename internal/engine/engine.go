@@ -201,6 +201,10 @@ func (e *Engine) Plan(inv *inventory.Inventory) []PlanItem {
 				it.Status, it.Reason = model.StatusBlocked, "needs runtime.android_package, a running emulator with the debuggable test build, and `pandaward test --profile local-runtime`"
 			case c.Adapter == "flow":
 				it.Status, it.Reason = model.StatusBlocked, "needs flow_checks with negative cases (expect: denied) in an approved scope manifest, then `pandaward test --profile staging-active`"
+			case c.Adapter == "effect" && c.ID == "Q-002":
+				it.Status, it.Reason = model.StatusBlocked, "needs effect_checks with control Q-002 (an action sent at once, a read-only probe and expect_delta) in an approved scope manifest, then `pandaward test --profile staging-active`"
+			case c.Adapter == "effect":
+				it.Status, it.Reason = model.StatusBlocked, "needs effect_checks with control F-002 (an action sent in sequence, a read-only probe and expect_delta) in an approved scope manifest, then `pandaward test --profile staging-active`"
 			case c.Adapter == "contract":
 				it.Status, it.Reason = model.StatusBlocked, "needs an OpenAPI document that declares security, contract.check: true in an approved scope manifest, then `pandaward test --profile staging-active`"
 			case c.Adapter == "zap":

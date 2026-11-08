@@ -62,6 +62,7 @@ type Manifest struct {
 	IdentityProvisioning *IdentityProvisioning `yaml:"identity_provisioning"`
 	AuthorizationChecks  []AuthCheck           `yaml:"authorization_checks"`
 	FlowChecks           []FlowCheck           `yaml:"flow_checks"`
+	EffectChecks         []EffectCheck         `yaml:"effect_checks"`
 
 	hash     string
 	bindHash string
@@ -185,6 +186,23 @@ flow_checks: []
 #    steps:
 #      - {method: POST, path: /api/auth/reset, content_type: application/json, body_env: PANDAWARD_BODY_RESET, expect: allowed}
 #      - {method: POST, path: /api/auth/reset, content_type: application/json, body_env: PANDAWARD_BODY_RESET, expect: denied}
+# Effect checks (staging-active): one action sent repeat times, in sequence
+# for F-002 (idempotency, webhook replay) or at once for Q-002 (concurrency).
+# A read-only probe reads a number before and after; it must change by
+# expect_delta, the effect of exactly one action.
+effect_checks: []
+#  - name: webhook replay credits once
+#    control: F-002
+#    action: {method: POST, path: /api/webhooks/payment, body_env: PANDAWARD_BODY_EVENT, header_env: {Webhook-Signature: PANDAWARD_SIG_EVENT}}
+#    repeat: 3
+#    probe: {method: GET, path: /api/me, as: alice, json: credits}
+#    expect_delta: 10
+#  - name: coupon redeemed once under concurrency
+#    control: Q-002
+#    action: {method: POST, path: /api/coupons/redeem, as: alice, body_env: PANDAWARD_BODY_COUPON}
+#    repeat: 5
+#    probe: {method: GET, path: /api/me, as: alice, json: balance}
+#    expect_delta: 5
 `
 
 // Path returns the manifest path.
@@ -325,11 +343,14 @@ func (m *Manifest) Validate(now time.Time) []string {
 	p = append(p, m.validateAuthz()...)
 	fp, flowRequests := m.validateFlows()
 	p = append(p, fp...)
+	ep, effectRequests := m.validateEffects()
+	p = append(p, ep...)
+	flowRequests += effectRequests
 	if authz := len(m.AuthorizationChecks) * (len(m.Identities) + 1); flowRequests > 0 && authz+flowRequests > m.Limits.MaxRequestsTotal && m.Limits.MaxRequestsTotal > 0 {
-		p = append(p, fmt.Sprintf("authorization and flow checks need %d requests together; raise limits.max_requests_total", authz+flowRequests))
+		p = append(p, fmt.Sprintf("authorization, flow and effect checks need %d requests together; raise limits.max_requests_total", authz+flowRequests))
 	}
 	if m.StateMethodsUsed() && m.Environment != "staging" && m.Environment != "local" {
-		p = append(p, "flow checks with state-changing methods run only when environment is staging or local")
+		p = append(p, "flow and effect checks with state-changing methods run only when environment is staging or local")
 	}
 	p = append(p, m.validateProvisioning()...)
 	if m.Window.Start != "" {
