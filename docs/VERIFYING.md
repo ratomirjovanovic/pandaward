@@ -5,6 +5,7 @@ Every release on GitHub carries, next to the binaries:
 - `SHA256SUMS`: checksums of every binary and of the SBOM
 - `pandaward.cdx.json`: a CycloneDX 1.6 SBOM listing every Go module linked into the binaries, with its version, hash and license
 - build provenance and SBOM attestations, signed through GitHub's Sigstore integration and stored with the repository
+- `pandaward.intoto.jsonl` (from 0.2.15): the signed build provenance as a Sigstore bundle, for verification without querying GitHub's attestation store
 
 The binaries are reproducible: building the tag again with the same Go version gives byte-identical files. The release workflow and CI both build twice and fail if the hashes differ.
 
@@ -22,6 +23,12 @@ gh attestation verify pandaward-linux-amd64 -R ratomirjovanovic/pandaward
 ```
 
 This proves the file was built by this repository's release workflow from the tagged commit. Repeat for the binary you use.
+
+With the bundle from the release, the check needs no lookup in GitHub's attestation store:
+
+```sh
+gh attestation verify pandaward-linux-amd64 -R ratomirjovanovic/pandaward --bundle pandaward.intoto.jsonl
+```
 
 ## 3. Check the SBOM attestation
 
