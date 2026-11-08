@@ -207,7 +207,7 @@ func (e *Engine) changes(asmt string) (Changes, error) {
 		ctx, cancel = context.WithTimeout(ctx, e.HashBudget)
 		defer cancel()
 	}
-	cur, err := inventory.Hashes(ctx, e.Root, inventory.Options{Exclude: e.Cfg.Inventory.Exclude, MaxFileBytes: e.Cfg.Inventory.MaxFileBytes, MaxFiles: e.Cfg.Inventory.MaxFiles})
+	cur, err := inventory.Hashes(ctx, e.Root, inventory.Options{Exclude: e.Cfg.Inventory.Exclude, MaxFileBytes: e.Cfg.Inventory.MaxFileBytes, MaxFiles: e.Cfg.Inventory.MaxFiles, IncludeIgnored: e.Cfg.Inventory.IncludeIgnored})
 	if errors.Is(err, context.DeadlineExceeded) {
 		ch.Note = fmt.Sprintf("hash check for changes made outside Claude Code skipped after %s; run `pandaward status` for a full check", e.HashBudget)
 		return ch, nil

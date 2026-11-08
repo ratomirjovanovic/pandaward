@@ -123,7 +123,7 @@ func (e *Engine) Private() string { return config.PrivateDir(e.Root) }
 
 // Inventory walks the repository.
 func (e *Engine) Inventory() (*inventory.Inventory, error) {
-	inv, err := inventory.Walk(e.Root, inventory.Options{Exclude: e.Cfg.Inventory.Exclude, MaxFileBytes: e.Cfg.Inventory.MaxFileBytes, MaxFiles: e.Cfg.Inventory.MaxFiles})
+	inv, err := inventory.Walk(e.Root, inventory.Options{Exclude: e.Cfg.Inventory.Exclude, MaxFileBytes: e.Cfg.Inventory.MaxFileBytes, MaxFiles: e.Cfg.Inventory.MaxFiles, IncludeIgnored: e.Cfg.Inventory.IncludeIgnored})
 	if err != nil {
 		return nil, err
 	}
@@ -523,9 +523,9 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 		out, run := safeRun(ctx, ad, actx)
 		stop()
 		m.finish(i, run, time.Since(began))
-		if n := e.dropExcluded(&out); n > 0 {
+		if n := e.dropExcluded(&out, inv); n > 0 {
 			run.SignalsCount -= n
-			run.Detail += fmt.Sprintf("; %d signal(s) in excluded paths dropped", n)
+			run.Detail += fmt.Sprintf("; %d signal(s) in excluded or git-ignored paths dropped", n)
 		}
 		if err := e.St.PutRun(asmt.ID, run); err != nil {
 			return nil, err
@@ -1114,8 +1114,9 @@ func edgeStatus(tests []string, byID map[string]model.ControlResult) (model.Stat
 // dropExcluded removes signals in directories inventory.exclude skips, such
 // as build output. Built-in checks never see those files, but external tools
 // walk the tree themselves (gitleaks with --no-git scans everything), and
-// generated files there are not the project's code.
-func (e *Engine) dropExcluded(out *adapters.Result) int {
+// generated files there are not the project's code. The same holds for
+// directories git ignores and does not track, which the walk skipped.
+func (e *Engine) dropExcluded(out *adapters.Result, inv *inventory.Inventory) int {
 	kept := out.Signals[:0]
 	n := 0
 	for _, s := range out.Signals {
@@ -1128,7 +1129,10 @@ func (e *Engine) dropExcluded(out *adapters.Result) int {
 			}
 			rel = r
 		}
-		if rel != "" && inventory.Excluded(rel, e.Cfg.Inventory.Exclude) {
+		// A secret on disk matters wherever it is, so gitleaks keeps listing
+		// it in a git-ignored directory (as info, see IgnoredLocal).
+		ignored := inv.InIgnoredDir(rel) && !(s.ControlID == "E-005" && s.Severity == model.SevInfo)
+		if rel != "" && (inventory.Excluded(rel, e.Cfg.Inventory.Exclude) || ignored) {
 			n++
 			continue
 		}

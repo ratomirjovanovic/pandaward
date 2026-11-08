@@ -51,6 +51,10 @@ type Inventory struct {
 	SensitiveNames []string // .env-like files found (content not read)
 	// NextJS is the Next.js route table, nil when no Next.js app was found.
 	NextJS *RouteTable
+	// IgnoredDirs are directories git ignores and does not track that the
+	// walk skipped (without a trailing slash). Directories inventory.exclude
+	// already skips are not listed.
+	IgnoredDirs []string
 }
 
 // Options control the walk.
@@ -58,6 +62,12 @@ type Options struct {
 	Exclude      []string
 	MaxFileBytes int64
 	MaxFiles     int
+	// IncludeIgnored walks directories git ignores and does not track,
+	// which are skipped by default in a git repository.
+	IncludeIgnored bool
+	// skipDirs are project-relative directories skipped in addition to
+	// Exclude: the git-ignored ones, unless IncludeIgnored is set.
+	skipDirs map[string]bool
 }
 
 var langByExt = map[string]string{
@@ -203,6 +213,10 @@ func Walk(root string, opt Options) (*Inventory, error) {
 	}
 	inv := &Inventory{Root: absRoot, Features: map[string][]string{}, Languages: map[string]int{}}
 	inv.Tracked, inv.Ignored, inv.GitCommit, inv.GitDirty = gitInfo(absRoot)
+	if !opt.IncludeIgnored {
+		inv.IgnoredDirs = ignoredDirs(inv.Ignored, opt.Exclude)
+		opt.skipDirs = dirSet(inv.IgnoredDirs)
+	}
 	err = walkFiles(context.Background(), absRoot, opt, true, func(f *File) {
 		inv.Files = append(inv.Files, f)
 		inv.Languages[f.Lang]++
@@ -227,6 +241,10 @@ func Hashes(ctx context.Context, root string, opt Options) (map[string]string, e
 	absRoot, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
+	}
+	if !opt.IncludeIgnored {
+		_, ignored, _, _ := gitInfo(absRoot)
+		opt.skipDirs = dirSet(ignoredDirs(ignored, opt.Exclude))
 	}
 	out := map[string]string{}
 	err = walkFiles(ctx, absRoot, opt, false, func(f *File) { out[f.Path] = f.SHA256 }, func(string, string) {}, func(string) {})
@@ -298,7 +316,8 @@ func Excluded(rel string, exclude []string) bool {
 // names by name only, size cap, text files of known types) and reports each
 // analyzable file to add. Lines are read only when withLines is set.
 func walkFiles(ctx context.Context, absRoot string, opt Options, withLines bool, add func(*File), skip func(rel, why string), sensitive func(rel string)) error {
-	skipDir := newExcluder(opt.Exclude).dir
+	x := newExcluder(opt.Exclude)
+	skipDir := func(rel, name string) bool { return opt.skipDirs[rel] || x.dir(rel, name) }
 	count := 0
 	deadline, hasDeadline := ctx.Deadline()
 	return filepath.WalkDir(absRoot, func(p string, d fs.DirEntry, werr error) error {
@@ -512,6 +531,49 @@ func gitInfo(root string) (map[string]bool, []string, string, bool) {
 		dirty = len(bytes.TrimSpace(out)) > 0
 	}
 	return tracked, ignored, commit, dirty
+}
+
+// ignoredDirs returns the directories among git's ignored, untracked paths
+// (listed with a trailing slash) that exclude does not already skip. Such a
+// directory holds no tracked file: git lists it whole only then.
+func ignoredDirs(ignored, exclude []string) []string {
+	var out []string
+	for _, p := range ignored {
+		if !strings.HasSuffix(p, "/") {
+			continue
+		}
+		d := strings.TrimSuffix(p, "/")
+		if d == "" || Excluded(d+"/x", exclude) {
+			continue
+		}
+		out = append(out, d)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func dirSet(dirs []string) map[string]bool {
+	m := make(map[string]bool, len(dirs))
+	for _, d := range dirs {
+		m[d] = true
+	}
+	return m
+}
+
+// InIgnoredDir reports whether the project-relative path rel lies in a
+// git-ignored directory the walk skipped. Adapters that walk the tree
+// themselves can report files there; the engine drops those signals.
+func (inv *Inventory) InIgnoredDir(rel string) bool {
+	if inv == nil {
+		return false
+	}
+	rel = path.Clean(filepath.ToSlash(rel))
+	for _, d := range inv.IgnoredDirs {
+		if strings.HasPrefix(rel, d+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // IgnoredLocal reports whether a project-relative path is a file git

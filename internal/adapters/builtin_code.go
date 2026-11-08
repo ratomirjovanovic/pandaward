@@ -110,7 +110,15 @@ func (a inventoryAdapter) Run(_ context.Context, c *Context) (Result, model.Run)
 			}
 		}
 	}
-	return res, finish(run, model.ExitOK, fmt.Sprintf("%d assets", len(inv.Assets)), len(res.Signals))
+	detail := fmt.Sprintf("%d assets", len(inv.Assets))
+	if n := len(inv.IgnoredDirs); n > 0 {
+		ex := inv.IgnoredDirs
+		if len(ex) > 3 {
+			ex = ex[:3]
+		}
+		detail += fmt.Sprintf("; %d git-ignored, untracked director%s not scanned (%s/); set inventory.include_ignored to scan them", n, map[bool]string{true: "y", false: "ies"}[n == 1], strings.Join(ex, "/, "))
+	}
+	return res, finish(run, model.ExitOK, detail, len(res.Signals))
 }
 
 // ---- code heuristics: B-001 B-002 D-001..D-004 E-003 E-004 H-001 H-002 H-004 O-002 P-001 G-001, C-004 from SQL migrations and P-004 from agent text ----

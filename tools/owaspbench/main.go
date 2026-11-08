@@ -90,7 +90,7 @@ func measure(ctx context.Context, repo, expectedPath string) (*Output, error) {
 		return nil, fmt.Errorf("%s has no test cases", expectedPath)
 	}
 	cfg := config.Default("BenchmarkJava")
-	inv, err := inventory.Walk(repo, inventory.Options{Exclude: cfg.Inventory.Exclude, MaxFileBytes: cfg.Inventory.MaxFileBytes, MaxFiles: cfg.Inventory.MaxFiles})
+	inv, err := inventory.Walk(repo, inventory.Options{Exclude: cfg.Inventory.Exclude, MaxFileBytes: cfg.Inventory.MaxFileBytes, MaxFiles: cfg.Inventory.MaxFiles, IncludeIgnored: cfg.Inventory.IncludeIgnored})
 	if err != nil {
 		return nil, err
 	}
