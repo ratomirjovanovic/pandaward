@@ -1,6 +1,7 @@
 /bin/
 /dist/
-.pandaward/
+.pandaward/*
+!.pandaward/config.yaml
 *.test
 *.out
 site/_out/

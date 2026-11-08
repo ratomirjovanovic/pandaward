@@ -1,0 +1,78 @@
+# PandaWard project configuration (schema v1). Safe to commit.
+# Private state lives in .pandaward/private/ and is gitignored.
+schema_version: 1
+project:
+    name: pandaward
+profile: local-passive
+inventory:
+    exclude:
+        - node_modules
+        - vendor
+        - dist
+        - build
+        - .git
+        - .next
+        - .next-*
+        - .nuxt
+        - target
+        - bin
+        - obj
+        - .venv
+        - venv
+        - __pycache__
+        - .pandaward
+        - coverage
+        - .terraform
+        - Pods
+        - .gradle
+        # Generated output and local tool state.
+        - .claude
+        - site/_out
+        # Intentionally vulnerable test targets: semgrep rule tests and the
+        # fixtures behind the engine, adversarial and demo tests.
+        - rules/semgrep
+        - internal/testfixture
+        - internal/adversarial
+        - tools/demofixture
+    max_file_bytes: 2097152
+    max_files: 200000
+scan:
+    max_duration_minutes: 45
+    adapter_timeout_seconds: 600
+    fail_on_adapter_error: true
+    allow_tool_network: false
+    semgrep_config: ""
+    semgrep_include_tests: false
+    adapters:
+        - builtin-inventory
+        - builtin-secrets
+        - builtin-code
+        - builtin-cicd
+        - builtin-infra
+        - builtin-supply
+        - builtin-mobile
+        - apktool
+        - mobsf
+        - gitleaks
+        - semgrep
+        - osv-scanner
+        - trivy
+    sarif_files: []
+    mobsf_url: ""
+report:
+    formats:
+        - html
+        - markdown
+        - json
+        - sarif
+    include_untested: true
+policy:
+    ai_analysis: opt_in
+runtime:
+    zap_path: ""
+    android_package: ""
+    ios_bundle_id: ""
+hooks:
+    auto_retest: true
+attest:
+    max_age_days: 180
