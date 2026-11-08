@@ -5,13 +5,14 @@ import (
 	"fmt"
 	"mime"
 	"net/url"
+	"regexp"
 	"sort"
 	"strings"
 )
 
 // State-changing requests (POST, PUT, PATCH, DELETE) are allowed only when
 // the manifest lists the method, the environment is staging or local, and
-// the request comes from a check that declares it (flow checks today). The
+// the request comes from a check that declares it (flow and effect checks). The
 // guard refuses them from anything else, so ZAP, its spider and the
 // authorization checks stay read-only whatever allowed_methods says.
 
@@ -84,13 +85,24 @@ func (m *Manifest) StepURL(target, path string) (*url.URL, error) {
 	return u, nil
 }
 
+// requestSteps lists every request a flow or effect check declares, the
+// probes of effect checks as read-only GET steps.
+func (m *Manifest) requestSteps() []FlowStep {
+	var out []FlowStep
+	for _, c := range m.FlowChecks {
+		out = append(out, c.Steps...)
+	}
+	for _, c := range m.EffectChecks {
+		out = append(out, c.Action, c.Probe.Step())
+	}
+	return out
+}
+
 // StateMethodsUsed reports whether any check sends a state-changing method.
 func (m *Manifest) StateMethodsUsed() bool {
-	for _, c := range m.FlowChecks {
-		for _, s := range c.Steps {
-			if StateChanging(s.Method) {
-				return true
-			}
+	for _, s := range m.requestSteps() {
+		if StateChanging(s.Method) {
+			return true
 		}
 	}
 	return false
@@ -101,11 +113,9 @@ func (m *Manifest) NeedsIdentities() bool {
 	if len(m.AuthorizationChecks) > 0 {
 		return true
 	}
-	for _, c := range m.FlowChecks {
-		for _, s := range c.Steps {
-			if s.As != "" && s.As != Anonymous {
-				return true
-			}
+	for _, s := range m.requestSteps() {
+		if s.As != "" && s.As != Anonymous {
+			return true
 		}
 	}
 	return false
@@ -116,14 +126,12 @@ func (m *Manifest) NeedsIdentities() bool {
 // hold a line break).
 func (m *Manifest) InputEnvs() map[string]bool {
 	out := map[string]bool{}
-	for _, c := range m.FlowChecks {
-		for _, s := range c.Steps {
-			if _, seen := out[s.BodyEnv]; s.BodyEnv != "" && !seen {
-				out[s.BodyEnv] = false
-			}
-			for _, env := range s.HeaderEnv {
-				out[env] = true
-			}
+	for _, s := range m.requestSteps() {
+		if _, seen := out[s.BodyEnv]; s.BodyEnv != "" && !seen {
+			out[s.BodyEnv] = false
+		}
+		for _, env := range s.HeaderEnv {
+			out[env] = true
 		}
 	}
 	return out
@@ -241,4 +249,82 @@ func (m *Manifest) validateStep(where string, s FlowStep, ids map[string]*Identi
 		}
 	}
 	return p
+}
+
+// EffectCheck sends one action several times and reads a numeric value
+// before and after with a read-only probe. The value must change by
+// ExpectDelta, the effect of exactly one action, however often the action
+// arrives: in sequence for F-002 (idempotency, replay), at once for Q-002
+// (concurrency).
+type EffectCheck struct {
+	Name        string    `yaml:"name"`
+	Control     string    `yaml:"control"`
+	Action      FlowStep  `yaml:"action"`
+	Repeat      int       `yaml:"repeat"`
+	Probe       ProbeStep `yaml:"probe"`
+	ExpectDelta float64   `yaml:"expect_delta"`
+}
+
+// ProbeStep is a read-only request whose JSON answer holds a number at a
+// dot path (items.0.count).
+type ProbeStep struct {
+	Method string `yaml:"method"`
+	Path   string `yaml:"path"`
+	Target string `yaml:"target"`
+	As     string `yaml:"as"`
+	JSON   string `yaml:"json"`
+}
+
+// Step returns the probe as a read-only flow step.
+func (p ProbeStep) Step() FlowStep {
+	return FlowStep{Method: p.Method, Path: p.Path, Target: p.Target, As: p.As}
+}
+
+// MaxEffectRepeat caps how often one action is sent.
+const MaxEffectRepeat = 10
+
+var jsonPathRe = regexp.MustCompile(`^[A-Za-z0-9_$-]+(\.[A-Za-z0-9_$-]+)*$`)
+
+// validateEffects checks the effect checks and returns how many requests
+// they need.
+func (m *Manifest) validateEffects() ([]string, int) {
+	var p []string
+	ids := map[string]*Identity{}
+	for i := range m.Identities {
+		ids[m.Identities[i].Name] = &m.Identities[i]
+	}
+	names := map[string]bool{}
+	requests := 0
+	for i, c := range m.EffectChecks {
+		where := fmt.Sprintf("effect_checks[%d] %q", i, c.Name)
+		if strings.TrimSpace(c.Name) == "" {
+			p = append(p, fmt.Sprintf("effect_checks[%d].name is empty", i))
+		} else if names[c.Name] {
+			p = append(p, where+" is listed twice")
+		}
+		names[c.Name] = true
+		if c.Control != "F-002" && c.Control != "Q-002" {
+			p = append(p, where+": control must be F-002 (sent in sequence) or Q-002 (sent at once)")
+		}
+		if c.Repeat < 2 || c.Repeat > MaxEffectRepeat {
+			p = append(p, fmt.Sprintf("%s: repeat must be between 2 and %d", where, MaxEffectRepeat))
+		}
+		if c.Action.Expect != "" {
+			p = append(p, where+": the action takes no expect; expect_delta says what it must do")
+		}
+		p = append(p, m.validateStep(where+" action", c.Action, ids)...)
+		if c.Probe.Method != "GET" {
+			p = append(p, where+": probe.method must be GET")
+		} else {
+			p = append(p, m.validateStep(where+" probe", c.Probe.Step(), ids)...)
+		}
+		if !jsonPathRe.MatchString(c.Probe.JSON) {
+			p = append(p, where+": probe.json must be a dot path to a number, such as credits or items.0.count")
+		}
+		if c.ExpectDelta == 0 {
+			p = append(p, where+": expect_delta must be the non-zero change one action makes")
+		}
+		requests += c.Repeat + 2
+	}
+	return p, requests
 }

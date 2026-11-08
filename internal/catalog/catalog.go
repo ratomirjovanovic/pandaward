@@ -99,7 +99,7 @@ var Controls = []Control{
 	{ID: "E-005", Domain: "E", Title: "Gitleaks reports no secrets", Method: MethodExternal, Adapter: "gitleaks", Requires: "any", Refs: []string{"CWE-798"}},
 
 	{ID: "F-001", Domain: "F", Title: "Business invariants for money and entitlement flows documented and reviewed", Method: MethodManual, Requires: "payments"},
-	{ID: "F-002", Domain: "F", Title: "Idempotency and double-processing tested with synthetic fixtures", Method: MethodRuntime, Requires: "payments", Profile: "staging-active", Refs: []string{"CWE-362"}},
+	{ID: "F-002", Domain: "F", Title: "Idempotency and double-processing tested with synthetic fixtures", Method: MethodRuntime, Adapter: "effect", Requires: "payments", Profile: "staging-active", Refs: []string{"CWE-362"}},
 
 	{ID: "G-001", Domain: "G", Title: "Webhook handlers verify a signature before acting on the payload", Method: MethodStatic, Adapter: "builtin-code", Requires: "webhooks", Refs: []string{"CWE-345"}},
 	{ID: "G-002", Domain: "G", Title: "Runtime API authorization matches the declared contract", Method: MethodRuntime, Adapter: "contract", Requires: "web", Profile: "staging-active", Refs: []string{"API1:2023", "API3:2023"}},
@@ -149,7 +149,7 @@ var Controls = []Control{
 	{ID: "P-004", Domain: "P", Title: "Agent instructions and tool descriptions free of hidden or injected instructions", Method: MethodStatic, Adapter: "builtin-code", Requires: "agent_text", Refs: []string{"CWE-1427"}},
 
 	{ID: "Q-001", Domain: "Q", Title: "Rate limiting applied to authentication and expensive routes", Method: MethodManual, Requires: "web", Refs: []string{"API4:2023", "CWE-770"}},
-	{ID: "Q-002", Domain: "Q", Title: "Concurrency and duplicate-action tests on stateful flows", Method: MethodRuntime, Requires: "payments", Profile: "staging-active", Refs: []string{"CWE-362"}},
+	{ID: "Q-002", Domain: "Q", Title: "Concurrency and duplicate-action tests on stateful flows", Method: MethodRuntime, Adapter: "effect", Requires: "payments", Profile: "staging-active", Refs: []string{"CWE-362"}},
 
 	{ID: "R-001", Domain: "R", Title: "All evidence artifacts of this assessment verify against recorded SHA-256", Method: MethodStatic, Adapter: "builtin-evidence", Requires: "any"},
 	{ID: "R-002", Domain: "R", Title: "Imported third-party analyzer results (SARIF) report no findings", Method: MethodExternal, Adapter: "sarif-import", Requires: "sarif"},
@@ -230,8 +230,8 @@ var TestProfiles = []TestProfile{
 		Local:  "only when the manifest sets allow_private_addresses: true",
 		When:   map[string]string{"H-003": "approved origins that answer without errors"}},
 	{Name: "staging-active",
-		Covers: "Permission checks with test identities (who may read which object or privileged route, and whether a revoked credential is still accepted), login, reset and MFA flows with negative cases, the OpenAPI contract checked without credentials when the manifest asks for it, then a ZAP spider and passive scan, and the ZAP active scan when the manifest allows it.",
-		Needs:  "scope.yaml approved with `pandaward scope approve`; identities and authorization_checks in it, with each credential in the environment variable its value_env names or returned by the identity_provisioning command; ZAP installed (Java 17+) for M-001 and D-005. State-changing methods only for flow checks, with environment staging or local. Refused for environment: production.",
+		Covers: "Permission checks with test identities (who may read which object or privileged route, and whether a revoked credential is still accepted), login, reset and MFA flows with negative cases, repeated and concurrent actions that must take effect once, the OpenAPI contract checked without credentials when the manifest asks for it, then a ZAP spider and passive scan, and the ZAP active scan when the manifest allows it.",
+		Needs:  "scope.yaml approved with `pandaward scope approve`; identities and authorization_checks in it, with each credential in the environment variable its value_env names or returned by the identity_provisioning command; ZAP installed (Java 17+) for M-001 and D-005. State-changing methods only for flow and effect checks, with environment staging or local. Refused for environment: production.",
 		Local:  "yes, with environment: staging or local; loopback and private addresses need allow_private_addresses: true. Use this profile for permission checks against an app running on your machine",
 		When: map[string]string{
 			"B-003": "flow_checks with a step that expects denied",
@@ -240,6 +240,8 @@ var TestProfiles = []TestProfile{
 			"C-002": "an authorization check of kind function",
 			"M-001": "ZAP installed",
 			"D-005": "ZAP installed and zap.active_scan: true",
+			"F-002": "effect_checks with control F-002",
+			"Q-002": "effect_checks with control Q-002",
 			"G-002": "an OpenAPI document and contract.check: true",
 		}},
 	{Name: "local-runtime",

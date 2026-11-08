@@ -202,6 +202,13 @@ func TestFlowChecksNeedInputsBeforeAnyRequest(t *testing.T) {
 func assertNoInputs(t *testing.T, e *engine.Engine) {
 	t.Helper()
 	assertNoTokens(t, e)
+	assertAbsent(t, e, "wrong-pw-5c1e", "reset-tok-93fa0b", "reset-tok-1d2c3b", "new-pw-77de", headerOTP)
+}
+
+// assertAbsent checks that no value appears in any file under .pandaward
+// except the manifest.
+func assertAbsent(t *testing.T, e *engine.Engine, values ...string) {
+	t.Helper()
 	err := filepath.Walk(filepath.Join(e.Root, ".pandaward"), func(p string, info os.FileInfo, err error) error {
 		if err != nil || info.IsDir() || strings.HasSuffix(p, "scope.yaml") {
 			return err
@@ -210,9 +217,9 @@ func assertNoInputs(t *testing.T, e *engine.Engine) {
 		if err != nil {
 			return err
 		}
-		for _, v := range []string{"wrong-pw-5c1e", "reset-tok-93fa0b", "reset-tok-1d2c3b", "new-pw-77de", headerOTP} {
+		for _, v := range values {
 			if strings.Contains(string(b), v) {
-				t.Errorf("input %q found in %s", v, p)
+				t.Errorf("value %q found in %s", v, p)
 			}
 		}
 		return nil

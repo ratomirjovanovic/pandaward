@@ -1,6 +1,7 @@
 package scope
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -36,6 +37,16 @@ type Guard struct {
 	streak  int
 	halted  string
 	refused map[string]int
+	bursts  map[string]time.Time
+}
+
+type burstKey struct{}
+
+// WithBurst marks requests that must start at the same moment, such as the
+// parallel actions of a concurrency check: they share one rate-limit slot.
+// Each still counts against the request budget.
+func WithBurst(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, burstKey{}, id)
 }
 
 // NewGuard builds a guard for a validated manifest. roots replaces the
@@ -51,7 +62,7 @@ func NewGuard(m *Manifest, roots *x509.CertPool) *Guard {
 		MaxIdleConns:          4,
 		DisableCompression:    true,
 	}
-	return &Guard{m: m, rt: tr, interval: time.Duration(float64(time.Second) / m.Limits.RequestsPerSecond), refused: map[string]int{}}
+	return &Guard{m: m, rt: tr, interval: time.Duration(float64(time.Second) / m.Limits.RequestsPerSecond), refused: map[string]int{}, bursts: map[string]time.Time{}}
 }
 
 // Client returns an HTTP client that sends through the guard and never
@@ -108,7 +119,7 @@ func (g *Guard) admit(req *http.Request) error {
 		return refuse("method " + req.Method + " is not in allowed_methods")
 	}
 	if StateChanging(req.Method) && !stateAllowed(req.Context()) {
-		return refuse("method " + req.Method + " changes state and is sent only by flow checks")
+		return refuse("method " + req.Method + " changes state and is sent only by flow and effect checks")
 	}
 	if StateChanging(req.Method) && g.m.Environment != "staging" && g.m.Environment != "local" {
 		return refuse("method " + req.Method + " changes state and is refused when environment is " + g.m.Environment)
@@ -124,11 +135,18 @@ func (g *Guard) admit(req *http.Request) error {
 	}
 	g.sent++
 	now := time.Now()
-	slot := g.next
-	if slot.Before(now) {
-		slot = now
+	b, burst := req.Context().Value(burstKey{}).(string)
+	slot, shared := g.bursts[b]
+	if !burst || !shared {
+		slot = g.next
+		if slot.Before(now) {
+			slot = now
+		}
+		g.next = slot.Add(g.interval)
+		if burst {
+			g.bursts[b] = slot
+		}
 	}
-	g.next = slot.Add(g.interval)
 	g.mu.Unlock()
 	if wait := time.Until(slot); wait > 0 {
 		t := time.NewTimer(wait)
