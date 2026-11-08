@@ -53,6 +53,11 @@ type Manifest struct {
 		ActiveScan         bool `yaml:"active_scan"`
 		MaxDurationMinutes int  `yaml:"max_duration_minutes"`
 	} `yaml:"zap"`
+	// Contract turns on the G-002 check: every secured GET/HEAD operation
+	// of the repository's OpenAPI contract is sent once without credentials.
+	Contract struct {
+		Check bool `yaml:"check"`
+	} `yaml:"contract"`
 	Identities           []Identity            `yaml:"identities"`
 	IdentityProvisioning *IdentityProvisioning `yaml:"identity_provisioning"`
 	AuthorizationChecks  []AuthCheck           `yaml:"authorization_checks"`
@@ -141,6 +146,9 @@ limits:
 zap:                 # ZAP baseline, run by: pandaward test --profile staging-active
   active_scan: false   # true sends ZAP attack payloads; never on production
   max_duration_minutes: 10
+contract:            # G-002, run by: pandaward test --profile staging-active
+  check: false         # true sends each secured GET/HEAD operation of the repository's
+                       # OpenAPI contract once without credentials; it must be refused
 # Authorization checks (staging-active). Each check is one read-only request
 # to an object or function that exists for the test; it is sent as every
 # identity and without credentials, and only "allowed" may succeed.

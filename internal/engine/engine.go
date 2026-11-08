@@ -199,6 +199,8 @@ func (e *Engine) Plan(inv *inventory.Inventory) []PlanItem {
 				it.Status, it.Reason = model.StatusBlocked, "needs runtime.ios_bundle_id, a booted simulator on macOS with the test build, and `pandaward test --profile local-runtime`"
 			case c.Adapter == "local-runtime":
 				it.Status, it.Reason = model.StatusBlocked, "needs runtime.android_package, a running emulator with the debuggable test build, and `pandaward test --profile local-runtime`"
+			case c.Adapter == "contract":
+				it.Status, it.Reason = model.StatusBlocked, "needs an OpenAPI document that declares security, contract.check: true in an approved scope manifest, then `pandaward test --profile staging-active`"
 			case c.Adapter == "zap":
 				it.Status, it.Reason = model.StatusBlocked, "needs `pandaward test --profile staging-active` with an approved scope manifest and ZAP installed"
 			default:

@@ -42,7 +42,8 @@ var ZAPRunner = zap.Run
 var injectionCWEs = map[int]bool{22: true, 74: true, 77: true, 78: true, 79: true, 89: true, 90: true, 91: true, 94: true, 95: true, 97: true, 113: true, 611: true, 643: true, 917: true, 943: true, 1336: true}
 
 // StagingActive runs the staging-active profile against the approved
-// manifest: the authorization checks (C-001, C-002, B-004) first, then a
+// manifest: the authorization checks (C-001, C-002, B-004) first, the
+// OpenAPI contract check (G-002) when contract.check is set, then a
 // ZAP spider and passive scan (M-001) and, when the manifest sets
 // zap.active_scan, the ZAP active scan (D-005). Every request goes through
 // one scope guard, so all of them share the request budget.
@@ -98,6 +99,9 @@ func (e *Engine) StagingActive(ctx context.Context, progress func(string)) (*Sta
 	_ = e.St.Event(e.ProjectID, a.ID, "", "NETWORK_TEST_STARTED", fmt.Sprintf("staging-active under approval %s by %s", ap.ID, ap.ApprovedBy))
 	if len(m.AuthorizationChecks) > 0 {
 		err = e.runAuthz(ctx, a, m, ap, rr, g, creds, res, progress)
+	}
+	if err == nil && m.Contract.Check {
+		err = e.runContract(ctx, a, m, ap, rr, g, res, progress)
 	}
 	if err == nil {
 		err = e.runZAP(ctx, a, m, ap, rr, g, res, progress)

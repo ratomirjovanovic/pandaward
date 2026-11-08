@@ -102,7 +102,7 @@ var Controls = []Control{
 	{ID: "F-002", Domain: "F", Title: "Idempotency and double-processing tested with synthetic fixtures", Method: MethodRuntime, Requires: "payments", Profile: "staging-active", Refs: []string{"CWE-362"}},
 
 	{ID: "G-001", Domain: "G", Title: "Webhook handlers verify a signature before acting on the payload", Method: MethodStatic, Adapter: "builtin-code", Requires: "webhooks", Refs: []string{"CWE-345"}},
-	{ID: "G-002", Domain: "G", Title: "Runtime API authorization matches the declared contract", Method: MethodRuntime, Requires: "web", Profile: "staging-active", Refs: []string{"API1:2023", "API3:2023"}},
+	{ID: "G-002", Domain: "G", Title: "Runtime API authorization matches the declared contract", Method: MethodRuntime, Adapter: "contract", Requires: "web", Profile: "staging-active", Refs: []string{"API1:2023", "API3:2023"}},
 
 	{ID: "H-001", Domain: "H", Title: "No raw HTML injection sinks (innerHTML, dangerouslySetInnerHTML, v-html, |safe)", Method: MethodStatic, Adapter: "builtin-code", Requires: "code", Refs: []string{"CWE-79"}},
 	{ID: "H-002", Domain: "H", Title: "CORS is not configured as wildcard together with credentials", Method: MethodStatic, Adapter: "builtin-code", Requires: "web", Refs: []string{"CWE-942"}},
@@ -230,7 +230,7 @@ var TestProfiles = []TestProfile{
 		Local:  "only when the manifest sets allow_private_addresses: true",
 		When:   map[string]string{"H-003": "approved origins that answer without errors"}},
 	{Name: "staging-active",
-		Covers: "Permission checks with test identities (who may read which object or privileged route, and whether a revoked credential is still accepted), then a ZAP spider and passive scan, and the ZAP active scan when the manifest allows it.",
+		Covers: "Permission checks with test identities (who may read which object or privileged route, and whether a revoked credential is still accepted), the OpenAPI contract checked without credentials when the manifest asks for it, then a ZAP spider and passive scan, and the ZAP active scan when the manifest allows it.",
 		Needs:  "scope.yaml approved with `pandaward scope approve`; identities and authorization_checks in it, with each credential in the environment variable its value_env names or returned by the identity_provisioning command; ZAP installed (Java 17+) for M-001 and D-005. Refused for environment: production.",
 		Local:  "yes, with environment: staging or local; loopback and private addresses need allow_private_addresses: true. Use this profile for permission checks against an app running on your machine",
 		When: map[string]string{
@@ -239,6 +239,7 @@ var TestProfiles = []TestProfile{
 			"C-002": "an authorization check of kind function",
 			"M-001": "ZAP installed",
 			"D-005": "ZAP installed and zap.active_scan: true",
+			"G-002": "an OpenAPI document and contract.check: true",
 		}},
 	{Name: "local-runtime",
 		Covers: "Mobile apps only: what the Android or iOS test build stored on an emulator or simulator (credentials in shared preferences or the preferences plist; key names are recorded, never values). Sends no network traffic.",

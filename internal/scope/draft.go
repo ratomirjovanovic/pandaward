@@ -421,6 +421,9 @@ authorization:
 zap:                 # ZAP baseline, run by: pandaward test --profile staging-active
   active_scan: false   # true sends ZAP attack payloads; never on production
   max_duration_minutes: 10
+contract:            # G-002, run by: pandaward test --profile staging-active
+  check: false         # true sends each secured GET/HEAD operation of the repository's
+                       # OpenAPI contract once without credentials; it must be refused
 # Test identities. Credentials never go in this file: value_env names the
 # environment variable with the full header value. A project command can
 # create them instead (see identity_provisioning below).
