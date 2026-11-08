@@ -1,0 +1,30 @@
+name: self-scan
+
+# PandaWard scans this repository with the latest release, through the
+# action, and with the exclusions in .pandaward/config.yaml. Pull requests
+# fail on findings of medium or higher that the base does not have; pushes
+# to main only report counts.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Scan this repository
+        uses: ./
+        with:
+          fail-on: ${{ github.event_name == 'pull_request' && 'medium' || '' }}
+          new-only: ${{ github.event_name == 'pull_request' }}
+          output-dir: pandaward-self-scan
