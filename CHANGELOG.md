@@ -6,6 +6,7 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 
 ### Fixed
 - In Go files, a rule match inside a string literal is data: inside a `regexp` pattern it is dropped, inside other strings it is listed as info. Go SQL built only from literals and constants is no longer reported (#306).
+- A-003 no longer compares routes from test and fixture files with the OpenAPI contract, so test servers do not raise `inventory.undeclared-route` findings or keep A-003 from passing (#310).
 
 ## [0.2.14] - 2026-11-08
 

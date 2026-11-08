@@ -62,10 +62,18 @@ func (a inventoryAdapter) Run(_ context.Context, c *Context) (Result, model.Run)
 			res.Decisions["A-003"] = Decision{model.StatusError, "OpenAPI documents could not be parsed: " + strings.Join(parseErr, ", ")}
 		} else {
 			undeclared := map[string]string{}
+			compared, testRoutes := 0, 0
 			for _, as := range inv.Assets {
 				if as.Kind != "route" {
 					continue
 				}
+				// Routes registered by test servers and fixtures are not part
+				// of the product surface the contract describes.
+				if IsTestPath(as.Locator) {
+					testRoutes++
+					continue
+				}
+				compared++
 				nr := normRoute(as.Meta["path"])
 				matched := declared[nr]
 				if !matched {
@@ -93,8 +101,12 @@ func (a inventoryAdapter) Run(_ context.Context, c *Context) (Result, model.Run)
 					})
 				}
 			}
-			if len(undeclared) == 0 && len(inv.Features["routes"]) > 0 {
-				res.Decisions["A-003"] = Decision{model.StatusPass, fmt.Sprintf("all %d discovered routes appear in the contract (%d declared paths)", len(inv.Features["routes"]), len(declared))}
+			if len(undeclared) == 0 && compared > 0 {
+				detail := fmt.Sprintf("all %d discovered routes appear in the contract (%d declared paths)", compared, len(declared))
+				if testRoutes > 0 {
+					detail += fmt.Sprintf("; %d routes in test or fixture files not compared", testRoutes)
+				}
+				res.Decisions["A-003"] = Decision{model.StatusPass, detail}
 			}
 		}
 	}
