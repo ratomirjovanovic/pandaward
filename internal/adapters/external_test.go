@@ -246,6 +246,8 @@ func TestPlaceholderSecret(t *testing.T) {
 		{"placeholder word", "my" + "-placeholder-" + "value", "x.go", "", true},
 		{"your prefix", "your" + "_api_key_here", "x.go", "", true},
 		{"test_ prefix", "test" + "_api_secret_" + pseudoRandom(12, 1), "x_test.go", "", true},
+		{"test- prefix", "test" + "-secrets-key-" + pseudoRandom(12, 8), "src/lib/ai/config.test.ts", "", true},
+		{"test inside the value", "my" + "-test-" + pseudoRandom(16, 9), "src/config.ts", "", false},
 		{"random 40", pseudoRandom(40, 2), "src/config.ts", "", false},
 		{"random stripe test key", sk + "51" + pseudoRandom(24, 3), "x_test.go", "", false},
 		{"jwt short signature", fakeJWT(`{"ref":"dummy","role":"anon"}`, "abcde"), "x.go", "", true},

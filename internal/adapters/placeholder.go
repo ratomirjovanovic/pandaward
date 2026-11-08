@@ -19,6 +19,7 @@ import (
 var (
 	placeholderWordRe = regexp.MustCompile(`(?i)dummy|example|placeholder|fake|changeme|your[_-]|redacted`)
 	jwtSegRe          = regexp.MustCompile(`^[A-Za-z0-9_-]*$`)
+	testPrefixRe      = regexp.MustCompile(`(?i)^test[_-]`)
 )
 
 // placeholderSecret reports whether value, matched by a secret rule in file
@@ -27,7 +28,7 @@ var (
 //   - a run of at least 8 sequential (abcdefgh, 01234567) or repeated
 //     (xxxxxxxx) characters;
 //   - a placeholder word (dummy, example, placeholder, fake, changeme, your_,
-//     redacted), or a value that starts with test_;
+//     redacted), or a value that starts with test_ or test-;
 //   - a JWT whose signature is shorter than 16 characters or whose payload
 //     claims say dummy or example;
 //   - the fallback literal of `secrets.NAME || '...'` inside `${{ }}` in a
@@ -45,7 +46,7 @@ func placeholderSecret(value, file, line string) bool {
 	if hasRun(value, 8) {
 		return true
 	}
-	if placeholderWordRe.MatchString(value) || strings.HasPrefix(strings.ToLower(value), "test_") {
+	if placeholderWordRe.MatchString(value) || testPrefixRe.MatchString(value) {
 		return true
 	}
 	if isJWT && (len(sig) < 16 || claimsMention(claims, "dummy", "example")) {
