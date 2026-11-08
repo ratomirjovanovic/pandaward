@@ -37,7 +37,7 @@
     <p class="sub">The rules below are enforced by the engine, not by prompts.</p>
     <div class="cards">
       <div class="card"><h3>Passive by default</h3><p>Reads the repository as data. Never runs install scripts, builds or repository hooks, and sends no traffic to any target.</p></div>
-      <div class="card"><h3>Human-approved network tests</h3><p>A scope manifest drafted from your project and completed by you, approved from an interactive terminal, bound to the file's hash and to any identity scripts it runs, with a request budget and no redirects. Test identities can come from your own provisioning command and are kept in memory only.</p></div>
+      <div class="card"><h3>Human-approved network tests</h3><p>A scope manifest drafted from your project and completed by you, approved from an interactive terminal, bound to the file's hash and to any identity scripts it runs, with a request budget and no redirects. Test identities can come from your own provisioning command and are kept in memory only. Requests that change state are a separate opt-in, allowed only against staging or local targets and only for the flow, effect and prompt-injection checks you declare.</p></div>
       <div class="card"><h3>Secrets stay masked</h3><p>Values are redacted before they are stored, printed, reported or returned to a model. Invisible characters that could hide instructions are stripped from every snippet, and agent instructions and MCP tool descriptions in your repository are checked for them. <code>.env</code> and key files are recorded by name only.</p></div>
       <div class="card"><h3>No AI-confirmed findings</h3><p>Agents are read-only and can only record hypotheses. PandaWard reads the cited lines itself, so a model cannot supply evidence.</p></div>
       <div class="card"><h3>State that survives</h3><p>A local SQLite ledger keeps assessments, findings and evidence across sessions, compaction and restarts. A fix counts only when the check runs again and no longer sees the problem; a moved file keeps its findings instead of reading as fixed.</p></div>
@@ -132,7 +132,7 @@ pandaward assess</pre>
 
   <section>
     <h2>What it is not</h2>
-    <p class="note">PandaWard is alpha software and an automated technical assessment. It is not a certification, attestation, legal opinion or independently signed penetration test, and it cannot prove the absence of vulnerabilities. Runtime profiles beyond passive header review are on the roadmap.</p>
+    <p class="note">PandaWard is alpha software and an automated technical assessment. It is not a certification, attestation, legal opinion or independently signed penetration test, and it cannot prove the absence of vulnerabilities. Runtime checks cover the cases you declare in the scope manifest, against the targets you approve; PASS means those cases held, not that the application has no other flaw.</p>
   </section>
 </main>
 
