@@ -12,7 +12,7 @@ import (
 
 // State-changing requests (POST, PUT, PATCH, DELETE) are allowed only when
 // the manifest lists the method, the environment is staging or local, and
-// the request comes from a check that declares it (flow and effect checks). The
+// the request comes from a check that declares it (flow, effect and LLM checks). The
 // guard refuses them from anything else, so ZAP, its spider and the
 // authorization checks stay read-only whatever allowed_methods says.
 
@@ -94,6 +94,9 @@ func (m *Manifest) requestSteps() []FlowStep {
 	}
 	for _, c := range m.EffectChecks {
 		out = append(out, c.Action, c.Probe.Step())
+	}
+	for _, c := range m.LLMChecks {
+		out = append(out, c.Request)
 	}
 	return out
 }
@@ -325,6 +328,49 @@ func (m *Manifest) validateEffects() ([]string, int) {
 			p = append(p, where+": expect_delta must be the non-zero change one action makes")
 		}
 		requests += c.Repeat + 2
+	}
+	return p, requests
+}
+
+// LLMCheck sends the built-in prompt-injection payloads to an endpoint
+// that passes text to a language model (P-003). Request.BodyEnv names the
+// environment variable with the body template; {{payload}} in it is
+// replaced by each payload.
+type LLMCheck struct {
+	Name    string   `yaml:"name"`
+	Request FlowStep `yaml:"request"`
+}
+
+// PayloadSlot is the placeholder an LLM check body template must contain.
+const PayloadSlot = "{{payload}}"
+
+// LLMPayloadCount is how many requests one LLM check sends.
+const LLMPayloadCount = 5
+
+func (m *Manifest) validateLLM() ([]string, int) {
+	var p []string
+	ids := map[string]*Identity{}
+	for i := range m.Identities {
+		ids[m.Identities[i].Name] = &m.Identities[i]
+	}
+	names := map[string]bool{}
+	requests := 0
+	for i, c := range m.LLMChecks {
+		where := fmt.Sprintf("llm_checks[%d] %q", i, c.Name)
+		if strings.TrimSpace(c.Name) == "" {
+			p = append(p, fmt.Sprintf("llm_checks[%d].name is empty", i))
+		} else if names[c.Name] {
+			p = append(p, where+" is listed twice")
+		}
+		names[c.Name] = true
+		if c.Request.Expect != "" {
+			p = append(p, where+": the request takes no expect")
+		}
+		if c.Request.BodyEnv == "" {
+			p = append(p, where+": request.body_env must name the variable with the body template that holds "+PayloadSlot)
+		}
+		p = append(p, m.validateStep(where+" request", c.Request, ids)...)
+		requests += LLMPayloadCount
 	}
 	return p, requests
 }

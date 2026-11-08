@@ -145,7 +145,7 @@ var Controls = []Control{
 
 	{ID: "P-001", Domain: "P", Title: "Model output is not executed as code or shell", Method: MethodStatic, Adapter: "builtin-code", Requires: "llm", Refs: []string{"CWE-94"}},
 	{ID: "P-002", Domain: "P", Title: "MCP server configs pinned and free of inline credentials", Method: MethodStatic, Adapter: "builtin-supply", Requires: "mcp_config", Refs: []string{"CWE-829", "CWE-798"}},
-	{ID: "P-003", Domain: "P", Title: "Prompt-injection and tool-authorization cases tested", Method: MethodRuntime, Requires: "llm", Profile: "staging-active"},
+	{ID: "P-003", Domain: "P", Title: "Prompt-injection and tool-authorization cases tested", Method: MethodRuntime, Adapter: "llm", Requires: "llm", Profile: "staging-active"},
 	{ID: "P-004", Domain: "P", Title: "Agent instructions and tool descriptions free of hidden or injected instructions", Method: MethodStatic, Adapter: "builtin-code", Requires: "agent_text", Refs: []string{"CWE-1427"}},
 
 	{ID: "Q-001", Domain: "Q", Title: "Rate limiting applied to authentication and expensive routes", Method: MethodManual, Requires: "web", Refs: []string{"API4:2023", "CWE-770"}},
@@ -230,8 +230,8 @@ var TestProfiles = []TestProfile{
 		Local:  "only when the manifest sets allow_private_addresses: true",
 		When:   map[string]string{"H-003": "approved origins that answer without errors"}},
 	{Name: "staging-active",
-		Covers: "Permission checks with test identities (who may read which object or privileged route, and whether a revoked credential is still accepted), login, reset and MFA flows with negative cases, repeated and concurrent actions that must take effect once, the OpenAPI contract checked without credentials when the manifest asks for it, then a ZAP spider and passive scan, and the ZAP active scan when the manifest allows it.",
-		Needs:  "scope.yaml approved with `pandaward scope approve`; identities and authorization_checks in it, with each credential in the environment variable its value_env names or returned by the identity_provisioning command; ZAP installed (Java 17+) for M-001 and D-005. State-changing methods only for flow and effect checks, with environment staging or local. Refused for environment: production.",
+		Covers: "Permission checks with test identities (who may read which object or privileged route, and whether a revoked credential is still accepted), login, reset and MFA flows with negative cases, repeated and concurrent actions that must take effect once, prompt-injection payloads against an LLM endpoint, the OpenAPI contract checked without credentials when the manifest asks for it, then a ZAP spider and passive scan, and the ZAP active scan when the manifest allows it.",
+		Needs:  "scope.yaml approved with `pandaward scope approve`; identities and authorization_checks in it, with each credential in the environment variable its value_env names or returned by the identity_provisioning command; ZAP installed (Java 17+) for M-001 and D-005. State-changing methods only for flow, effect and LLM checks, with environment staging or local. Refused for environment: production.",
 		Local:  "yes, with environment: staging or local; loopback and private addresses need allow_private_addresses: true. Use this profile for permission checks against an app running on your machine",
 		When: map[string]string{
 			"B-003": "flow_checks with a step that expects denied",
@@ -239,6 +239,7 @@ var TestProfiles = []TestProfile{
 			"C-001": "an authorization check of kind object",
 			"C-002": "an authorization check of kind function",
 			"M-001": "ZAP installed",
+			"P-003": "llm_checks with a body template that holds {{payload}}",
 			"D-005": "ZAP installed and zap.active_scan: true",
 			"F-002": "effect_checks with control F-002",
 			"Q-002": "effect_checks with control Q-002",
