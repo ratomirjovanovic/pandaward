@@ -12,6 +12,9 @@ rules:
           - pattern: $DB.$Q("$SQL" + $X, ...)
           - pattern: $DB.$Q($CTX, fmt.Sprintf($FMT, ...), ...)
           - pattern: $DB.$Q($CTX, "$SQL" + $X, ...)
+      # SQL built only from literals and constants is fixed text.
+      - pattern-not: $DB.$Q("...", ...)
+      - pattern-not: $DB.$Q($CTX, "...", ...)
       - metavariable-regex:
           metavariable: $Q
           regex: ^(Query|QueryRow|Exec|QueryContext|QueryRowContext|ExecContext|Prepare|PrepareContext|Raw|Select|Get)$

@@ -2,6 +2,11 @@
 
 All notable changes to PandaWard. Versions follow the release tags; each release page has binaries, checksums, the SBOM and build provenance. PandaWard was called PenSec before 0.2.0.
 
+## [Unreleased]
+
+### Fixed
+- In Go files, a rule match inside a string literal is data: inside a `regexp` pattern it is dropped, inside other strings it is listed as info. Go SQL built only from literals and constants is no longer reported (#306).
+
 ## [0.2.14] - 2026-11-08
 
 ### Added
@@ -185,6 +190,7 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 - Deterministic SBOM serial number for the release attestation (#39)
 
 
+[Unreleased]: https://github.com/ratomirjovanovic/pandaward/compare/v0.2.14...HEAD
 [0.2.14]: https://github.com/ratomirjovanovic/pandaward/compare/v0.2.13...v0.2.14
 [0.2.13]: https://github.com/ratomirjovanovic/pandaward/compare/v0.2.12...v0.2.13
 [0.2.12]: https://github.com/ratomirjovanovic/pandaward/compare/v0.2.11...v0.2.12
