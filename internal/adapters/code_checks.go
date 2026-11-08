@@ -198,7 +198,7 @@ func safeHelper(c lineCtx, name string) bool {
 	if !ok {
 		return false
 	}
-	if isLtEscapedJSON(ret) {
+	if isLtEscapedJSON(ret) || isEntityEscape(ret) {
 		return true
 	}
 	callee, args, ok := wholeCall(ret)

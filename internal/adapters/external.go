@@ -352,7 +352,7 @@ func semgrep() Adapter {
 				return nil, err
 			}
 			var out []model.Signal
-			skipped, audit := 0, 0
+			skipped, audit, proven := 0, 0, 0
 			for _, r := range doc.Results {
 				// Results in test and fixture code are skipped, as in the
 				// built-in checks: registry rules match the fake keys and
@@ -365,6 +365,13 @@ func semgrep() Adapter {
 						skipped++
 						continue
 					}
+				}
+				// The built-in check proves some raw HTML assignments safe
+				// (escaped or constant markup); the bundled semgrep rule
+				// cannot see that, so the same proof applies to its results.
+				if lastSegment(r.CheckID) == "pandaward-js-html-sink" && semgrepHTMLSinkProven(c, filepath.ToSlash(relPath(c.Root, r.Path)), r.Start.Line) {
+					proven++
+					continue
 				}
 				// Registry rules rate their own precision. A low-confidence
 				// audit rule only points at code worth a look: it is listed as
@@ -413,6 +420,9 @@ func semgrep() Adapter {
 			}
 			if audit > 0 {
 				t.note += fmt.Sprintf("; %d low-confidence audit result(s) listed as info", audit)
+			}
+			if proven > 0 {
+				t.note += fmt.Sprintf("; %d raw HTML result(s) proven to write only escaped or constant markup", proven)
 			}
 			return out, nil
 		},

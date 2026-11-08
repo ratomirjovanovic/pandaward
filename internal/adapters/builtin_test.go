@@ -110,6 +110,10 @@ func TestCodeRuleFalsePositiveGuards(t *testing.T) {
 		{"code.sql-concat", "a.py", "cur.execute('SELECT * FROM u WHERE n = %s' % name)\n", true},
 		{"code.sql-concat", "a.js", "db.query(`SELECT * FROM u WHERE id = ${id}` + order);\n", false}, // reported as code.sql-template
 		{"code.sql-template", "a.js", "db.query(`SELECT * FROM u WHERE id = ${id}` + order);\n", true},
+		// Prisma's tagged $queryRaw/$executeRaw bind every ${} as a parameter (#294).
+		{"code.sql-template", "a.ts", "await tx.$queryRaw`SELECT 1 AS ok FROM (SELECT pg_advisory_xact_lock(hashtext(${key}))) AS l`;\n", false},
+		{"code.sql-template", "a.ts", "await prisma.$executeRaw<number>`DELETE FROM t WHERE id = ${id}`;\n", false},
+		{"code.sql-template", "a.ts", "await prisma.$queryRawUnsafe(`SELECT * FROM t WHERE id = ${id}`);\n", true},
 
 		// code.weak-hash-password: a hashing call, not just the word.
 		{"code.weak-hash-password", "a.ts", "const ok = [\"sha1\", \"sha256\"].some(a => verify(sig, sign(id, password, a)));\n", false},
