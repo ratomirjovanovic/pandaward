@@ -268,6 +268,16 @@ authorization_checks[].target string
 contract.check bool
 environment string
 excluded_paths[] string
+flow_checks[].control string
+flow_checks[].name string
+flow_checks[].steps[].as string
+flow_checks[].steps[].body_env string
+flow_checks[].steps[].content_type string
+flow_checks[].steps[].expect string
+flow_checks[].steps[].header_env{} string
+flow_checks[].steps[].method string
+flow_checks[].steps[].path string
+flow_checks[].steps[].target string
 identities[].header string
 identities[].name string
 identities[].revoked bool

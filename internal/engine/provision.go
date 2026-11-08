@@ -23,6 +23,7 @@ const maxProvisionOutput = 256 << 10
 // memory only: they are never written to the ledger, evidence or reports.
 type provisioned struct {
 	values map[string]string // value_env -> header value
+	inputs map[string]string // body_env or header_env -> value
 	raw    []byte            // stdout, handed to cleanup on stdin
 }
 
@@ -98,6 +99,7 @@ func (e *Engine) provisionIdentities(ctx context.Context, m *scope.Manifest) (*p
 	out, err := ProvisionCommand(ctx, e.Root, ip.Provision, nil, ip.Timeout())
 	var doc struct {
 		Credentials map[string]string `json:"credentials"`
+		Inputs      map[string]string `json:"inputs"`
 	}
 	known := map[string]bool{}
 	for _, id := range m.Identities {
@@ -105,7 +107,7 @@ func (e *Engine) provisionIdentities(ctx context.Context, m *scope.Manifest) (*p
 	}
 	parseErr := json.Unmarshal(bytes.TrimSpace(out), &doc)
 	if err != nil {
-		return nil, fmt.Errorf("identity provisioning (%s) failed: %s", argvText(ip.Provision), scrub(err.Error(), doc.Credentials))
+		return nil, fmt.Errorf("identity provisioning (%s) failed: %s", argvText(ip.Provision), scrub(scrub(err.Error(), doc.Credentials), doc.Inputs))
 	}
 	if parseErr != nil {
 		return nil, fmt.Errorf("identity provisioning (%s) did not print JSON {\"credentials\": {\"<value_env>\": \"<header value>\"}}", argvText(ip.Provision))
@@ -125,7 +127,21 @@ func (e *Engine) provisionIdentities(ctx context.Context, m *scope.Manifest) (*p
 		sort.Strings(unknown)
 		return nil, fmt.Errorf("identity provisioning returned %s, which no identity declares as value_env", strings.Join(unknown, ", "))
 	}
-	return &provisioned{values: doc.Credentials, raw: out}, nil
+	envs := m.InputEnvs()
+	for k, v := range doc.Inputs {
+		header, ok := envs[k]
+		switch {
+		case !ok:
+			unknown = append(unknown, k)
+		case header && strings.ContainsAny(v, "\r\n"):
+			return nil, fmt.Errorf("identity provisioning returned a header value with a line break for %s", k)
+		}
+	}
+	if len(unknown) > 0 {
+		sort.Strings(unknown)
+		return nil, fmt.Errorf("identity provisioning returned inputs %s, which no check declares as body_env or header_env", strings.Join(unknown, ", "))
+	}
+	return &provisioned{values: doc.Credentials, inputs: doc.Inputs, raw: out}, nil
 }
 
 // cleanupIdentities runs the cleanup command with the provision output on
@@ -136,7 +152,7 @@ func (e *Engine) cleanupIdentities(m *scope.Manifest, p *provisioned) error {
 		return nil
 	}
 	if _, err := ProvisionCommand(context.Background(), e.Root, ip.Cleanup, p.raw, ip.Timeout()); err != nil {
-		return fmt.Errorf("identity cleanup (%s) failed: %s", argvText(ip.Cleanup), scrub(err.Error(), p.values))
+		return fmt.Errorf("identity cleanup (%s) failed: %s", argvText(ip.Cleanup), scrub(scrub(err.Error(), p.values), p.inputs))
 	}
 	return nil
 }

@@ -107,6 +107,12 @@ func (g *Guard) admit(req *http.Request) error {
 	if !g.m.MethodAllowed(req.Method) {
 		return refuse("method " + req.Method + " is not in allowed_methods")
 	}
+	if StateChanging(req.Method) && !stateAllowed(req.Context()) {
+		return refuse("method " + req.Method + " changes state and is sent only by flow checks")
+	}
+	if StateChanging(req.Method) && g.m.Environment != "staging" && g.m.Environment != "local" {
+		return refuse("method " + req.Method + " changes state and is refused when environment is " + g.m.Environment)
+	}
 	g.mu.Lock()
 	if g.halted != "" {
 		g.mu.Unlock()

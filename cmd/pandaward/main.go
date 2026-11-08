@@ -1326,6 +1326,16 @@ func cmdScope(args []string, stdin io.Reader, w io.Writer) error {
 			}
 			fmt.Fprintln(w, "Editing any bound file invalidates this approval.")
 		}
+		if m.StateMethodsUsed() {
+			fmt.Fprintln(w, "\nThese flow checks send requests that can change data on the targets (use test accounts and fixtures only):")
+			for _, c := range m.FlowChecks {
+				for i, s := range c.Steps {
+					if scope.StateChanging(s.Method) {
+						fmt.Fprintf(w, "  %s step %d: %s %s (expect %s)\n", redact.Line(c.Name), i+1, s.Method, redact.Line(s.Path), s.Expect)
+					}
+				}
+			}
+		}
 		// The code binds what the human types to this exact manifest.
 		want := "APPROVE " + m.Hash()[:8]
 		fmt.Fprintf(w, "\nI confirm I am authorized to test every target above.\nTo approve, type exactly this line and press Enter (anything else cancels):\n\n    %s\n\n> ", want)

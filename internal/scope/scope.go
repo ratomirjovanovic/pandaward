@@ -61,6 +61,7 @@ type Manifest struct {
 	Identities           []Identity            `yaml:"identities"`
 	IdentityProvisioning *IdentityProvisioning `yaml:"identity_provisioning"`
 	AuthorizationChecks  []AuthCheck           `yaml:"authorization_checks"`
+	FlowChecks           []FlowCheck           `yaml:"flow_checks"`
 
 	hash     string
 	bindHash string
@@ -164,6 +165,26 @@ authorization_checks: []
 #    method: GET
 #    path: /api/invoices/inv_acme_1
 #    allowed: [alice]                # every other identity and anonymous must be denied
+# Flow checks (staging-active, B-003): ordered requests of a login, reset or
+# MFA flow; each step marked denied is a negative case the server must
+# refuse. State-changing methods (POST, PUT, PATCH, DELETE) must be listed
+# in allowed_methods and work only with environment staging or local; only
+# these checks may send them. Bodies and extra header values come from
+# environment variables, never from this file.
+flow_checks: []
+#  - name: wrong password refused
+#    control: B-003
+#    steps:
+#      - method: POST
+#        path: /api/auth/login
+#        content_type: application/json
+#        body_env: PANDAWARD_BODY_BAD_LOGIN   # {"email":"...","password":"wrong"}
+#        expect: denied
+#  - name: reset token works once
+#    control: B-003
+#    steps:
+#      - {method: POST, path: /api/auth/reset, content_type: application/json, body_env: PANDAWARD_BODY_RESET, expect: allowed}
+#      - {method: POST, path: /api/auth/reset, content_type: application/json, body_env: PANDAWARD_BODY_RESET, expect: denied}
 `
 
 // Path returns the manifest path.
@@ -285,11 +306,7 @@ func (m *Manifest) Validate(now time.Time) []string {
 			p = append(p, fmt.Sprintf("target %q: %v", t.URL, err))
 		}
 	}
-	for _, meth := range m.AllowedMethods {
-		if meth != "GET" && meth != "HEAD" && meth != "OPTIONS" {
-			p = append(p, fmt.Sprintf("allowed_methods: %s is not supported by any implemented adapter; only GET, HEAD, OPTIONS", meth))
-		}
-	}
+	p = append(p, m.validateMethods()...)
 	if m.Limits.RequestsPerSecond <= 0 || m.Limits.RequestsPerSecond > 10 {
 		p = append(p, "limits.requests_per_second must be >0 and <=10")
 	}
@@ -306,6 +323,14 @@ func (m *Manifest) Validate(now time.Time) []string {
 		p = append(p, "zap.active_scan is not allowed when environment is production")
 	}
 	p = append(p, m.validateAuthz()...)
+	fp, flowRequests := m.validateFlows()
+	p = append(p, fp...)
+	if authz := len(m.AuthorizationChecks) * (len(m.Identities) + 1); flowRequests > 0 && authz+flowRequests > m.Limits.MaxRequestsTotal && m.Limits.MaxRequestsTotal > 0 {
+		p = append(p, fmt.Sprintf("authorization and flow checks need %d requests together; raise limits.max_requests_total", authz+flowRequests))
+	}
+	if m.StateMethodsUsed() && m.Environment != "staging" && m.Environment != "local" {
+		p = append(p, "flow checks with state-changing methods run only when environment is staging or local")
+	}
 	p = append(p, m.validateProvisioning()...)
 	if m.Window.Start != "" {
 		st, err := time.Parse(time.RFC3339, m.Window.Start)
@@ -571,8 +596,8 @@ func (m *Manifest) validateProvisioning() []string {
 	if ip.TimeoutSeconds < 0 || ip.TimeoutSeconds > 300 {
 		p = append(p, "identity_provisioning.timeout_seconds must be between 1 and 300 (0 means 60)")
 	}
-	if len(m.Identities) == 0 {
-		p = append(p, "identity_provisioning needs at least one identity to provision")
+	if len(m.Identities) == 0 && len(m.InputEnvs()) == 0 {
+		p = append(p, "identity_provisioning needs at least one identity or check input to provision")
 	}
 	return p
 }

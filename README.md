@@ -279,7 +279,7 @@ pandaward test --profile staging-active    # staging or local targets, needs ZAP
 | Profile | Covers | Decides | Needs | Local target |
 |---|---|---|---|---|
 | `production-observe` | Passive look at a deployed site: one GET per approved origin, then the security response headers, a weak CSP and cookie flags. No payloads, no login, redirects are not followed. | H-003 (needs approved origins that answer without errors) | scope.yaml approved with `pandaward scope approve` (GET in allowed_methods). No identities, no ZAP. Works for any environment, production included. | only when the manifest sets allow_private_addresses: true |
-| `staging-active` | Permission checks with test identities (who may read which object or privileged route, and whether a revoked credential is still accepted), the OpenAPI contract checked without credentials when the manifest asks for it, then a ZAP spider and passive scan, and the ZAP active scan when the manifest allows it. | B-004 (needs an identity marked revoked: true)<br>C-001 (needs an authorization check of kind object)<br>C-002 (needs an authorization check of kind function)<br>D-005 (needs ZAP installed and zap.active_scan: true)<br>G-002 (needs an OpenAPI document and contract.check: true)<br>M-001 (needs ZAP installed)<br>not automated yet: B-003, F-002, P-003, Q-002 | scope.yaml approved with `pandaward scope approve`; identities and authorization_checks in it, with each credential in the environment variable its value_env names or returned by the identity_provisioning command; ZAP installed (Java 17+) for M-001 and D-005. Refused for environment: production. | yes, with environment: staging or local; loopback and private addresses need allow_private_addresses: true. Use this profile for permission checks against an app running on your machine |
+| `staging-active` | Permission checks with test identities (who may read which object or privileged route, and whether a revoked credential is still accepted), login, reset and MFA flows with negative cases, the OpenAPI contract checked without credentials when the manifest asks for it, then a ZAP spider and passive scan, and the ZAP active scan when the manifest allows it. | B-003 (needs flow_checks with a step that expects denied)<br>B-004 (needs an identity marked revoked: true)<br>C-001 (needs an authorization check of kind object)<br>C-002 (needs an authorization check of kind function)<br>D-005 (needs ZAP installed and zap.active_scan: true)<br>G-002 (needs an OpenAPI document and contract.check: true)<br>M-001 (needs ZAP installed)<br>not automated yet: F-002, P-003, Q-002 | scope.yaml approved with `pandaward scope approve`; identities and authorization_checks in it, with each credential in the environment variable its value_env names or returned by the identity_provisioning command; ZAP installed (Java 17+) for M-001 and D-005. State-changing methods only for flow checks, with environment staging or local. Refused for environment: production. | yes, with environment: staging or local; loopback and private addresses need allow_private_addresses: true. Use this profile for permission checks against an app running on your machine |
 | `local-runtime` | Mobile apps only: what the Android or iOS test build stored on an emulator or simulator (credentials in shared preferences or the preferences plist; key names are recorded, never values). Sends no network traffic. | K-003 (needs runtime.android_package and a running Android emulator)<br>L-002 (needs runtime.ios_bundle_id and a booted iOS simulator on macOS) | runtime.android_package in .pandaward/config.yaml, adb and a running emulator with the debuggable test build; or runtime.ios_bundle_id, xcrun and a booted simulator on macOS. No scope manifest. Real devices are refused. | not a web target: it reads an emulator or simulator on this machine. For a web app on localhost use staging-active |
 | `manual-assisted` | Not a runtime profile in this release; `pandaward test` refuses it. Manual review runs through /pandaward:review. | nothing | nothing to run | not applicable |
 
@@ -320,6 +320,30 @@ identity_provisioning:
 ```
 
 Each command is an argument list, run without a shell from the project root, and only for an approved manifest. `provision` prints `{"credentials": {"PANDAWARD_ID_ALICE": "Bearer ...", ...}}` on stdout. The keys must be `value_env` names of the manifest's identities, and anything else stops the run. A key it leaves out is read from the environment as before. `cleanup` gets the same JSON on stdin and runs after the test, also when the test failed. The values stay in memory: they are never written to the ledger, evidence, reports or progress output, and a failing command's stderr is not repeated. The approval binds the commands and the content of every project file they name, so editing `scripts/pandaward-identities.mjs` after the approval invalidates it. `pandaward scope approve` lists the commands and the bound files before you type the approval line.
+
+`staging-active` also runs the manifest's `flow_checks` (B-003): ordered requests of a login, reset or MFA flow, where each step marked `expect: denied` is a negative case the server must refuse.
+
+```yaml
+allowed_methods: [GET, HEAD, POST]   # POST, PUT, PATCH and DELETE only with environment staging or local
+flow_checks:
+  - name: wrong password refused
+    control: B-003
+    steps:
+      - {method: POST, path: /api/auth/login, content_type: application/json, body_env: PANDAWARD_BODY_BAD_LOGIN, expect: denied}
+  - name: reset token works once
+    control: B-003
+    steps:
+      - {method: POST, path: /api/auth/reset, body_env: PANDAWARD_BODY_RESET, expect: allowed}
+      - {method: POST, path: /api/auth/reset, body_env: PANDAWARD_BODY_RESET, expect: denied}
+  - name: wrong one-time code refused
+    control: B-003
+    steps:
+      - {method: POST, path: /api/auth/mfa, as: alice, header_env: {X-OTP: PANDAWARD_OTP_WRONG}, expect: denied}
+```
+
+A step names its method, path (a query is allowed), optional `target`, the identity it is sent `as` (default anonymous), and where its body (`body_env`, sent as `content_type`, default `application/json`) and extra header values (`header_env`) come from. Those values are read from the environment, or from an `inputs` object next to `credentials` in the identity provisioning output, before the first request; a missing one stops the run. They never go in the manifest and are never written to evidence, findings or reports. A denied step that gets a 2xx is a `CONFIRMED` finding and B-003 is `FAIL`. A step expected to succeed that does not, a redirect on a denied step, an error, 429 or 5xx make the check `INCONCLUSIVE` and its later steps are not sent. Tokens that work once, such as a reset token, need a fresh value per run, which a provisioning command can hand out.
+
+State-changing methods are a separate permission. They must be listed in `allowed_methods`, the manifest is invalid with them when `environment` is `production`, and the scope guard sends them only for flow check requests: ZAP, its spider and the authorization checks stay read-only even when the manifest allows POST. `pandaward scope approve` lists every state-changing step before you type the approval line.
 
 With `contract: {check: true}` in the manifest, `staging-active` also compares the API with the authorization its OpenAPI contract declares (G-002). Every GET or HEAD operation that requires security (on the operation or globally) is sent once without credentials, under the path of the first `servers` entry or the Swagger `basePath`. Operations marked `security: []` or with an empty requirement `{}`, and operations that need a path parameter or a required query, header or shared parameter, are not sent, and the reason counts them. A 401, 403 or redirect passes. A 2xx is a finding: `CONFIRMED` when the answer has a media type the contract declares for 2xx, `STRONGLY_SUPPORTED` (the control is `SUSPECTED`) when it does not, since a framework fallback page also answers 200. Errors, 429, 5xx and statuses such as 400 or 404 make the control `INCONCLUSIVE`. Without an OpenAPI document G-002 is `BLOCKED`. Evidence keeps method, path, status, size and content type, never bodies.
 
@@ -385,7 +409,7 @@ The hook runs `pandaward scan --quiet --fail-on high` and blocks the commit when
 
 - That your application is secure. No tool can prove the absence of vulnerabilities.
 - Anything about controls it reports as `BLOCKED`, `UNSUPPORTED`, `SUSPECTED`, `INCONCLUSIVE`, `ERROR` or `STALE`.
-- Results from runtime tests that are not implemented yet: login, reset and MFA flows (B-003), idempotency and concurrency (F-002, Q-002) and prompt-injection tests against an LLM endpoint (P-003) are reported as `UNSUPPORTED` today.
+- Results from runtime tests that are not implemented yet: idempotency and concurrency (F-002, Q-002) and prompt-injection tests against an LLM endpoint (P-003) are reported as `UNSUPPORTED` today.
 
 A PandaWard report is an automated technical assessment. It is not a certification, an attestation, a legal opinion or an independently signed penetration test.
 
