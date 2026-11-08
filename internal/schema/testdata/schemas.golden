@@ -230,6 +230,7 @@ pandaward_scan_passive {"annotations":{"destructiveHint":false,"openWorldHint":f
 attest.max_age_days int
 hooks.auto_retest bool
 inventory.exclude[] string
+inventory.include_ignored bool
 inventory.max_file_bytes int64
 inventory.max_files int
 policy.ai_analysis string

@@ -1231,7 +1231,7 @@ func cmdScope(args []string, stdin io.Reader, w io.Writer) error {
 				return exitErr{3, p + " already exists; scope init never overwrites it (use --print to see a fresh draft)"}
 			}
 		}
-		inv, err := inventory.Walk(e.Root, inventory.Options{Exclude: e.Cfg.Inventory.Exclude, MaxFileBytes: e.Cfg.Inventory.MaxFileBytes, MaxFiles: e.Cfg.Inventory.MaxFiles})
+		inv, err := inventory.Walk(e.Root, inventory.Options{Exclude: e.Cfg.Inventory.Exclude, MaxFileBytes: e.Cfg.Inventory.MaxFileBytes, MaxFiles: e.Cfg.Inventory.MaxFiles, IncludeIgnored: e.Cfg.Inventory.IncludeIgnored})
 		if err != nil {
 			return err
 		}

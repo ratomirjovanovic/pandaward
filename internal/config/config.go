@@ -28,6 +28,9 @@ type Config struct {
 		Exclude      []string `yaml:"exclude"`
 		MaxFileBytes int64    `yaml:"max_file_bytes"`
 		MaxFiles     int      `yaml:"max_files"`
+		// IncludeIgnored also scans directories git ignores and does not
+		// track; by default they are skipped and named in the summary.
+		IncludeIgnored bool `yaml:"include_ignored"`
 	} `yaml:"inventory"`
 	Scan struct {
 		MaxDurationMinutes int  `yaml:"max_duration_minutes"`

@@ -383,3 +383,66 @@ func TestWalkReadsToolLocalSettings(t *testing.T) {
 		t.Errorf("tool-local settings must not be recorded as unread sensitive names: %v", inv.SensitiveNames)
 	}
 }
+
+func TestIgnoredDirsSkipped(t *testing.T) {
+	git, err := exec.LookPath("git")
+	if err != nil {
+		t.Skip("git not installed")
+	}
+	root := t.TempDir()
+	files := map[string]string{
+		".gitignore":          ".env.local\nscratch/\nnode_modules/\n",
+		".env.local":          "K=1\n",
+		"scratch/demo/app.py": "x = 1\n",
+		"node_modules/a.js":   "x\n",
+		"src/app.ts":          "x\n",
+	}
+	for rel, content := range files {
+		p := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, args := range [][]string{{"init", "-q"}, {"add", ".gitignore", "src/app.ts"}} {
+		cmd := exec.Command(git, append([]string{"-C", root}, args...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	opt := inventory.Options{Exclude: []string{"node_modules"}, MaxFileBytes: 1 << 20, MaxFiles: 1000}
+	inv, err := inventory.Walk(root, opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(inv.IgnoredDirs, ","); got != "scratch" {
+		t.Fatalf("IgnoredDirs = %q, want scratch (node_modules is already excluded)", got)
+	}
+	if inv.FileByPath("scratch/demo/app.py") != nil {
+		t.Error("a file in a git-ignored directory was walked")
+	}
+	if inv.FileByPath("src/app.ts") == nil {
+		t.Error("a tracked file was not walked")
+	}
+	if !inv.InIgnoredDir("scratch/demo/app.py") || inv.InIgnoredDir("src/app.ts") || inv.InIgnoredDir("scratchpad.go") {
+		t.Error("InIgnoredDir does not match the skipped directory exactly")
+	}
+	hashes, err := inventory.Hashes(context.Background(), root, opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := hashes["scratch/demo/app.py"]; ok {
+		t.Error("Hashes walked a git-ignored directory")
+	}
+
+	opt.IncludeIgnored = true
+	inv, err = inventory.Walk(root, opt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(inv.IgnoredDirs) != 0 || inv.FileByPath("scratch/demo/app.py") == nil {
+		t.Errorf("include_ignored did not walk the ignored directory (IgnoredDirs %v)", inv.IgnoredDirs)
+	}
+}
