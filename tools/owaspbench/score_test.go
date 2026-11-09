@@ -44,8 +44,8 @@ func TestCategoryOf(t *testing.T) {
 		{"code.java-deserialize", "CWE-502", ""},
 		{"x", "", ""},
 	} {
-		if got := CategoryOf(c.rule, c.cwe); got != c.want {
-			t.Errorf("CategoryOf(%q, %q) = %q, want %q", c.rule, c.cwe, got, c.want)
+		if got := Java.CategoryOf(c.rule, c.cwe); got != c.want {
+			t.Errorf("Java.CategoryOf(%q, %q) = %q, want %q", c.rule, c.cwe, got, c.want)
 		}
 	}
 }
@@ -57,8 +57,8 @@ func TestTestCaseOf(t *testing.T) {
 		"src/main/java/org/owasp/benchmark/testcode/BenchmarkTest00042.xml":  "",
 		"src/main/java/org/owasp/benchmark/helpers/Utils.java":               "",
 	} {
-		if got := TestCaseOf(in); got != want {
-			t.Errorf("TestCaseOf(%q) = %q, want %q", in, got, want)
+		if got := Java.TestCaseOf(in); got != want {
+			t.Errorf("Java.TestCaseOf(%q) = %q, want %q", in, got, want)
 		}
 	}
 }
@@ -78,12 +78,12 @@ func TestCompute(t *testing.T) {
 		{Rule: "code.sql-concat", CWE: "CWE-89", File: dir + "BenchmarkTest09999.java"},
 	}
 	covered := map[string][]string{"sqli": {"code.sql-concat"}, "hash": {"code.weak-hash-password"}}
-	s := Compute(expected, findings, covered)
+	s := Java.Compute(expected, findings, covered)
 	if s.TestCases != 7 || s.Findings != 6 || s.FindingsInTests != 4 || s.OffCategory != 1 || s.FindingsElsewhere != 1 || s.UnknownTestCases != 1 {
 		t.Fatalf("unexpected totals: %+v", s)
 	}
-	if len(s.Categories) != len(Categories) {
-		t.Fatalf("got %d categories, want %d", len(s.Categories), len(Categories))
+	if len(s.Categories) != len(Java.Categories) {
+		t.Fatalf("got %d categories, want %d", len(s.Categories), len(Java.Categories))
 	}
 	by := map[string]CategoryResult{}
 	for _, r := range s.Categories {
@@ -112,7 +112,7 @@ func TestCompute(t *testing.T) {
 	}
 
 	// A perfect sqli result gives a score of 1.
-	perfect := Compute(expected, []Finding{
+	perfect := Java.Compute(expected, []Finding{
 		{Rule: "code.sql-concat", File: dir + "BenchmarkTest00001.java"},
 		{Rule: "code.sql-concat", File: dir + "BenchmarkTest00002.java"},
 	}, covered)
@@ -133,16 +133,20 @@ func TestMappedRulesExist(t *testing.T) {
 	for _, id := range adapters.RuleIDs() {
 		known[id] = true
 	}
-	for id := range ruleCategory {
-		if !known[id] {
-			t.Errorf("ruleCategory names unknown rule %s", id)
+	for _, st := range Suites {
+		for id := range st.Rules {
+			if !known[id] {
+				t.Errorf("%s suite names unknown rule %s", st.Key, id)
+			}
 		}
 	}
 }
 
 func TestBenchmarkPathsAreNotTestPaths(t *testing.T) {
-	if adapters.IsTestPath("src/main/java/org/owasp/benchmark/testcode/BenchmarkTest00001.java") {
-		t.Fatal("Benchmark test cases would be skipped by the code heuristics")
+	for _, st := range Suites {
+		if p := st.TestCodeDir + "/BenchmarkTest00001" + st.Ext; adapters.IsTestPath(p) {
+			t.Fatalf("%s: Benchmark test cases would be skipped by the code heuristics (%s)", st.Key, p)
+		}
 	}
 }
 
@@ -151,15 +155,17 @@ func TestRunScriptUsesPinnedCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(b), "commit="+PinnedCommit+"\n") {
-		t.Fatal("run.sh and PinnedCommit disagree")
+	for _, st := range Suites {
+		if !strings.Contains(string(b), "commit="+st.PinnedCommit+" url="+st.URL+"\n") {
+			t.Errorf("run.sh and the %s suite's pinned commit or URL disagree", st.Key)
+		}
 	}
 }
 
 func TestCategoryOfCWEForms(t *testing.T) {
 	for cwe, want := range map[string]string{"CWE-89": "sqli", "89": "sqli", "CWE-89: Improper Neutralization": "sqli", "cwe-22": "pathtraver", "CWE-918": "", "": "", "x89": ""} {
-		if got := CategoryOf("semgrep.x", cwe); got != want {
-			t.Errorf("CategoryOf(%q) = %q, want %q", cwe, got, want)
+		if got := Java.CategoryOf("semgrep.x", cwe); got != want {
+			t.Errorf("Java.CategoryOf(%q) = %q, want %q", cwe, got, want)
 		}
 	}
 }
@@ -167,7 +173,7 @@ func TestCategoryOfCWEForms(t *testing.T) {
 // The bundled Java rules cover the categories their CWE names; rules for
 // other languages and CWEs outside the Benchmark are left out.
 func TestSemgrepCoverage(t *testing.T) {
-	got, err := SemgrepCoverage()
+	got, err := Java.SemgrepCoverage()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,10 +196,58 @@ func TestMergedEnginesCountOnce(t *testing.T) {
 	expected := []Expected{{Name: "BenchmarkTest00001", Category: "sqli", Real: true, CWE: 89}, {Name: "BenchmarkTest00002", Category: "sqli", Real: false, CWE: 89}}
 	f := "src/main/java/org/owasp/benchmark/testcode/BenchmarkTest00001.java"
 	findings := []Finding{{Rule: "code.sql-concat", File: f}, {Rule: "semgrep.pandaward-java-sql-string", CWE: "CWE-89: Improper", File: f}}
-	s := Compute(expected, findings, map[string][]string{"sqli": {"code.sql-concat"}})
+	s := Java.Compute(expected, findings, map[string][]string{"sqli": {"code.sql-concat"}})
 	for _, r := range s.Categories {
 		if r.Category == "sqli" && (r.TP != 1 || r.FP != 0 || r.TN != 1 || r.Score != 1) {
 			t.Fatalf("sqli = %+v", r)
+		}
+	}
+}
+
+// BenchmarkPython ships an HTML template per test case; only the .py file is
+// the test case.
+func TestPythonTestCaseOf(t *testing.T) {
+	for in, want := range map[string]string{
+		"testcode/BenchmarkTest00042.py":                      "BenchmarkTest00042",
+		"templates/web/pathtraver-00/BenchmarkTest00042.html": "",
+		"testcode/BenchmarkTest00042.java":                    "",
+		"helpers/utils.py":                                    "",
+	} {
+		if got := Python.TestCaseOf(in); got != want {
+			t.Errorf("Python.TestCaseOf(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// Python categories that Java lacks map by CWE, and Python rules map to
+// their categories only in the Python suite.
+func TestPythonCategories(t *testing.T) {
+	for _, c := range []struct{ rule, cwe, want string }{
+		{"code.py-eval", "", "codeinj"},
+		{"code.py-deserialize", "", "deserialization"},
+		{"semgrep.x", "CWE-601", "redirect"},
+		{"semgrep.x", "CWE-611", "xxe"},
+		{"semgrep.x", "CWE-95", "codeinj"},
+	} {
+		if got := Python.CategoryOf(c.rule, c.cwe); got != c.want {
+			t.Errorf("Python.CategoryOf(%q, %q) = %q, want %q", c.rule, c.cwe, got, c.want)
+		}
+	}
+	if got := Java.CoveredCategories([]string{"code.py-shell"}); len(got) != 0 {
+		t.Errorf("a Python rule covers Java categories: %v", got)
+	}
+	if got := Python.CoveredCategories([]string{"code.java-shell"}); len(got) != 0 {
+		t.Errorf("a Java rule covers Python categories: %v", got)
+	}
+	cov, err := Python.SemgrepCoverage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for c, rs := range cov {
+		for _, r := range rs {
+			if !strings.HasPrefix(r, "semgrep.pandaward-py") {
+				t.Errorf("%s covered by %s, not a bundled Python rule", c, r)
+			}
 		}
 	}
 }

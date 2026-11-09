@@ -1,5 +1,6 @@
 // Command owaspbench measures PandaWard on the OWASP Benchmark for Java
-// (https://github.com/OWASP-Benchmark/BenchmarkJava). It walks a local
+// (https://github.com/OWASP-Benchmark/BenchmarkJava) or for Python
+// (https://github.com/OWASP-Benchmark/BenchmarkPython). It walks a local
 // checkout with the same inventory settings as `pandaward scan`, runs the
 // selected engines in process (the built-in adapters, and the bundled Semgrep
 // rules on Semgrep or Opengrep through the same adapter a scan uses), maps
@@ -32,12 +33,6 @@ import (
 	"github.com/ratomirjovanovic/pandaward/rules"
 )
 
-// PinnedCommit is the BenchmarkJava commit the published numbers refer to.
-// run.sh checks out the same commit.
-const PinnedCommit = "f40c618c5a709afce350ef06ed2899c85cf586e9"
-
-const testCodeDir = "src/main/java/org/owasp/benchmark/testcode"
-
 // engineNames are the engines that can be measured. "all" in the output
 // merges the findings of every engine that ran, counting a test case once.
 var engineNames = []string{"builtin", "semgrep", "opengrep"}
@@ -69,27 +64,36 @@ type EngineResult struct {
 }
 
 func main() {
-	repo := flag.String("repo", "", "path to a BenchmarkJava checkout (required)")
-	expected := flag.String("expected", "expectedresults-1.2.csv", "expected results file, relative to --repo")
+	suiteKey := flag.String("suite", "java", "benchmark: java or python")
+	repo := flag.String("repo", "", "path to a checkout of the benchmark (required)")
+	expected := flag.String("expected", "", "expected results file, relative to --repo (default: the suite's)")
 	engines := flag.String("engine", "builtin", "comma-separated engines to measure: "+strings.Join(engineNames, ", "))
 	asJSON := flag.Bool("json", false, "print JSON instead of a table")
 	flag.Parse()
 	if *repo == "" {
-		fmt.Fprintln(os.Stderr, "usage: owaspbench --repo <BenchmarkJava checkout> [--engine builtin,semgrep,opengrep] [--json]")
+		fmt.Fprintln(os.Stderr, "usage: owaspbench [--suite java|python] --repo <checkout> [--engine builtin,semgrep,opengrep] [--json]")
 		os.Exit(2)
+	}
+	suite := Suites[*suiteKey]
+	if suite == nil {
+		fmt.Fprintf(os.Stderr, "owaspbench: unknown suite %q; choose java or python\n", *suiteKey)
+		os.Exit(2)
+	}
+	if *expected == "" {
+		*expected = suite.Expected
 	}
 	sel, err := parseEngines(*engines)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "owaspbench:", err)
 		os.Exit(2)
 	}
-	out, err := measure(context.Background(), *repo, *expected, sel)
+	out, err := measure(context.Background(), suite, *repo, *expected, sel)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "owaspbench:", err)
 		os.Exit(1)
 	}
-	if out.BenchmarkCommit != PinnedCommit {
-		fmt.Fprintf(os.Stderr, "warning: checkout is at %q, published numbers refer to %s\n", out.BenchmarkCommit, PinnedCommit)
+	if out.BenchmarkCommit != suite.PinnedCommit {
+		fmt.Fprintf(os.Stderr, "warning: checkout is at %q, published numbers refer to %s\n", out.BenchmarkCommit, suite.PinnedCommit)
 	}
 	if *asJSON {
 		enc := json.NewEncoder(os.Stdout)
@@ -127,7 +131,7 @@ func parseEngines(s string) ([]string, error) {
 	return out, nil
 }
 
-func measure(ctx context.Context, repo, expectedPath string, engines []string) (*Output, error) {
+func measure(ctx context.Context, suite *Suite, repo, expectedPath string, engines []string) (*Output, error) {
 	f, err := os.Open(filepath.Join(repo, expectedPath))
 	if err != nil {
 		return nil, err
@@ -140,7 +144,7 @@ func measure(ctx context.Context, repo, expectedPath string, engines []string) (
 	if len(expected) == 0 {
 		return nil, fmt.Errorf("%s has no test cases", expectedPath)
 	}
-	cfg := config.Default("BenchmarkJava")
+	cfg := config.Default("owasp-benchmark-" + suite.Key)
 	inv, err := inventory.Walk(repo, inventory.Options{Exclude: cfg.Inventory.Exclude, MaxFileBytes: cfg.Inventory.MaxFileBytes, MaxFiles: cfg.Inventory.MaxFiles, IncludeIgnored: cfg.Inventory.IncludeIgnored})
 	if err != nil {
 		return nil, err
@@ -149,9 +153,9 @@ func measure(ctx context.Context, repo, expectedPath string, engines []string) (
 	if err != nil {
 		return nil, err
 	}
-	out := &Output{Benchmark: "OWASP Benchmark for Java", BenchmarkCommit: inv.GitCommit, PinnedCommit: PinnedCommit, PandawardVersion: version.Version, SemgrepRulesHash: hash, ExpectedResults: expectedPath}
+	out := &Output{Benchmark: suite.Title, BenchmarkCommit: inv.GitCommit, PinnedCommit: suite.PinnedCommit, PandawardVersion: version.Version, SemgrepRulesHash: hash, ExpectedResults: expectedPath}
 	for _, file := range inv.Files {
-		if strings.HasPrefix(file.Path, testCodeDir+"/") && TestCaseOf(file.Path) != "" {
+		if strings.HasPrefix(file.Path, suite.TestCodeDir+"/") && suite.TestCaseOf(file.Path) != "" {
 			out.TestCaseFiles++
 			if adapters.IsTestPath(file.Path) {
 				out.TestPathExcluded++
@@ -159,9 +163,9 @@ func measure(ctx context.Context, repo, expectedPath string, engines []string) (
 		}
 	}
 	if out.TestCaseFiles == 0 {
-		return nil, fmt.Errorf("no test case files under %s; is %s a BenchmarkJava checkout?", testCodeDir, repo)
+		return nil, fmt.Errorf("no test case files under %s; is %s a checkout of the %s?", suite.TestCodeDir, repo, suite.Title)
 	}
-	semgrepCovered, err := SemgrepCoverage()
+	semgrepCovered, err := suite.SemgrepCoverage()
 	if err != nil {
 		return nil, err
 	}
@@ -174,7 +178,7 @@ func measure(ctx context.Context, repo, expectedPath string, engines []string) (
 		var covered map[string][]string
 		if eng == "builtin" {
 			findings, r, err = runBuiltin(ctx, inv, cfg)
-			covered = CoveredCategories(adapters.RuleIDs())
+			covered = suite.CoveredCategories(adapters.RuleIDs())
 		} else {
 			findings, r, err = runSemgrep(ctx, inv, eng)
 			covered = semgrepCovered
@@ -183,7 +187,7 @@ func measure(ctx context.Context, repo, expectedPath string, engines []string) (
 			return nil, err
 		}
 		if r.NotRun == "" {
-			r.Score = Compute(expected, findings, covered)
+			r.Score = suite.Compute(expected, findings, covered)
 			all = append(all, findings...)
 			for c, rs := range covered {
 				for _, r := range rs {
@@ -197,7 +201,7 @@ func measure(ctx context.Context, repo, expectedPath string, engines []string) (
 		out.Engines = append(out.Engines, r)
 	}
 	if ran > 1 {
-		out.Engines = append(out.Engines, EngineResult{Engine: "all", Score: Compute(expected, all, allCovered)})
+		out.Engines = append(out.Engines, EngineResult{Engine: "all", Score: suite.Compute(expected, all, allCovered)})
 	}
 	return out, nil
 }
@@ -237,7 +241,7 @@ func runSemgrep(ctx context.Context, inv *inventory.Inventory, engine string) ([
 	if tool == nil {
 		return nil, r, fmt.Errorf("semgrep adapter not registered")
 	}
-	cfg := config.Default("BenchmarkJava")
+	cfg := config.Default("owasp-benchmark")
 	cfg.Scan.SemgrepEngine = engine
 	work, err := os.MkdirTemp("", "owaspbench-")
 	if err != nil {

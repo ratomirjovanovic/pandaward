@@ -6,6 +6,7 @@ import (
 	"io"
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -19,42 +20,94 @@ type Category struct {
 	CWE  int
 }
 
-// Categories are the eleven categories of OWASP Benchmark 1.2, in the order
-// its scorecard lists them.
-var Categories = []Category{
-	{"cmdi", 78}, {"crypto", 327}, {"hash", 328}, {"ldapi", 90}, {"pathtraver", 22}, {"securecookie", 614},
-	{"sqli", 89}, {"trustbound", 501}, {"weakrand", 330}, {"xpathi", 643}, {"xss", 79},
+// Suite is one OWASP Benchmark: where to fetch it, how its test case files
+// are named, its categories and which built-in rules are meant for them.
+type Suite struct {
+	Key          string
+	Title        string
+	URL          string
+	PinnedCommit string
+	Expected     string
+	// TestCodeDir holds one file per test case, BenchmarkTest#####<Ext>.
+	TestCodeDir string
+	Ext         string
+	// Language is the Semgrep language of the bundled rules that apply.
+	Language string
+	// Categories are the suite's categories, in the order its scorecard
+	// lists them.
+	Categories []Category
+	// Rules maps built-in rules that apply to the suite's language to the
+	// category they are meant to detect. It takes precedence over the CWE
+	// mapping because a rule's CWE does not always match the Benchmark's
+	// choice (the weak password hash rule carries CWE-327, while the
+	// Benchmark files weak hashes under hash, CWE-328). A category with no
+	// rule here and no mapped finding is reported as not covered.
+	Rules map[string]string
 }
 
-// ruleCategory maps built-in rules that apply to Java files to the category
-// they are meant to detect. It takes precedence over the CWE mapping because
-// a rule's CWE does not always match the Benchmark's choice (the weak
-// password hash rule carries CWE-327, while the Benchmark files weak hashes
-// under hash, CWE-328). A category with no rule here and no mapped finding
-// is reported as not covered.
-var ruleCategory = map[string]string{
-	"code.java-shell":         "cmdi",
-	"code.sql-concat":         "sqli",
-	"code.sql-template":       "sqli",
-	"code.sql-unsafe-raw":     "sqli",
-	"code.html-sink":          "xss",
-	"code.weak-hash-password": "hash",
-	"code.insecure-random":    "weakrand",
-	"code.cookie-flags-off":   "securecookie",
+// Java is OWASP BenchmarkJava 1.2.
+var Java = &Suite{
+	Key: "java", Title: "OWASP Benchmark for Java", URL: "https://github.com/OWASP-Benchmark/BenchmarkJava",
+	PinnedCommit: "f40c618c5a709afce350ef06ed2899c85cf586e9", Expected: "expectedresults-1.2.csv",
+	TestCodeDir: "src/main/java/org/owasp/benchmark/testcode", Ext: ".java", Language: "java",
+	Categories: []Category{
+		{"cmdi", 78}, {"crypto", 327}, {"hash", 328}, {"ldapi", 90}, {"pathtraver", 22}, {"securecookie", 614},
+		{"sqli", 89}, {"trustbound", 501}, {"weakrand", 330}, {"xpathi", 643}, {"xss", 79},
+	},
+	Rules: map[string]string{
+		"code.java-shell":         "cmdi",
+		"code.sql-concat":         "sqli",
+		"code.sql-template":       "sqli",
+		"code.sql-unsafe-raw":     "sqli",
+		"code.html-sink":          "xss",
+		"code.weak-hash-password": "hash",
+		"code.insecure-random":    "weakrand",
+		"code.cookie-flags-off":   "securecookie",
+	},
 }
 
-// cweCategory maps CWE numbers to categories for rules not listed in
-// ruleCategory. CWE-338 is a child of CWE-330 and counts as weakrand.
+// Python is OWASP BenchmarkPython 0.1. It is GPL-3.0 and only fetched at run
+// time, never vendored.
+var Python = &Suite{
+	Key: "python", Title: "OWASP Benchmark for Python", URL: "https://github.com/OWASP-Benchmark/BenchmarkPython",
+	PinnedCommit: "f1291485808b66e20ddb6b01b10dc71b3df8c8ba", Expected: "expectedresults-0.1.csv",
+	TestCodeDir: "testcode", Ext: ".py", Language: "python",
+	Categories: []Category{
+		{"cmdi", 78}, {"codeinj", 94}, {"deserialization", 502}, {"hash", 328}, {"ldapi", 90}, {"pathtraver", 22},
+		{"redirect", 601}, {"securecookie", 614}, {"sqli", 89}, {"trustbound", 501}, {"weakrand", 330},
+		{"xpathi", 643}, {"xss", 79}, {"xxe", 611},
+	},
+	Rules: map[string]string{
+		"code.py-shell":           "cmdi",
+		"code.py-eval":            "codeinj",
+		"code.py-deserialize":     "deserialization",
+		"code.sql-concat":         "sqli",
+		"code.sql-template":       "sqli",
+		"code.sql-unsafe-raw":     "sqli",
+		"code.html-sink":          "xss",
+		"code.weak-hash-password": "hash",
+		"code.insecure-random":    "weakrand",
+		"code.cookie-flags-off":   "securecookie",
+	},
+}
+
+// Suites are the benchmarks the tool can measure, by key.
+var Suites = map[string]*Suite{"java": Java, "python": Python}
+
+// cweCategory maps CWE numbers to categories for rules not listed in a
+// suite's Rules. CWE-338 is a child of CWE-330 and counts as weakrand;
+// CWE-95 (eval injection) is a child of CWE-94.
 var cweCategory = map[int]string{
 	78: "cmdi", 327: "crypto", 328: "hash", 90: "ldapi", 22: "pathtraver", 614: "securecookie",
 	89: "sqli", 501: "trustbound", 330: "weakrand", 338: "weakrand", 643: "xpathi", 79: "xss",
+	94: "codeinj", 95: "codeinj", 502: "deserialization", 601: "redirect", 611: "xxe",
 }
 
 var cweNumRe = regexp.MustCompile(`^\s*(?i:CWE-)?(\d+)\b`)
 
 // CategoryOf returns the Benchmark category a finding counts for, or "".
-func CategoryOf(rule, cwe string) string {
-	if c, ok := ruleCategory[rule]; ok {
+func (st *Suite) CategoryOf(rule, cwe string) string {
+	if c, ok := st.Rules[rule]; ok {
 		return c
 	}
 	// A CWE comes as "CWE-89", "89" or with its title ("CWE-89: Improper ...").
@@ -66,15 +119,22 @@ func CategoryOf(rule, cwe string) string {
 	if err != nil {
 		return ""
 	}
-	return cweCategory[n]
+	// A CWE outside the suite's categories counts for none of them.
+	c := cweCategory[n]
+	for _, sc := range st.Categories {
+		if sc.Name == c {
+			return c
+		}
+	}
+	return ""
 }
 
 // CoveredCategories returns the categories at least one of the given rules
 // is mapped to.
-func CoveredCategories(rules []string) map[string][]string {
+func (st *Suite) CoveredCategories(rules []string) map[string][]string {
 	out := map[string][]string{}
 	for _, r := range rules {
-		if c := ruleCategory[r]; c != "" {
+		if c := st.Rules[r]; c != "" {
 			out[c] = append(out[c], r)
 		}
 	}
@@ -129,12 +189,14 @@ type Finding struct {
 	Line int
 }
 
-var testCaseRe = regexp.MustCompile(`^(BenchmarkTest\d{5})\.java$`)
+var testCaseRe = regexp.MustCompile(`^(BenchmarkTest\d{5})(\.\w+)$`)
 
-// TestCaseOf returns the test case a file belongs to, or "".
-func TestCaseOf(file string) string {
+// TestCaseOf returns the test case a file belongs to, or "". Only files with
+// the suite's extension count: BenchmarkPython also has an HTML template
+// per test case.
+func (st *Suite) TestCaseOf(file string) string {
 	m := testCaseRe.FindStringSubmatch(path.Base(strings.ReplaceAll(file, "\\", "/")))
-	if m == nil {
+	if m == nil || m[2] != st.Ext {
 		return ""
 	}
 	return m[1]
@@ -177,7 +239,7 @@ type Score struct {
 // as flagged when at least one finding in its file maps to the test case's
 // own category, as the OWASP scorecard does; findings of another category
 // in the same file are counted separately and do not affect the matrix.
-func Compute(expected []Expected, findings []Finding, covered map[string][]string) Score {
+func (st *Suite) Compute(expected []Expected, findings []Finding, covered map[string][]string) Score {
 	byName := map[string]Expected{}
 	for _, e := range expected {
 		byName[e.Name] = e
@@ -186,7 +248,7 @@ func Compute(expected []Expected, findings []Finding, covered map[string][]strin
 	flagged := map[string]bool{}
 	observed := map[string]bool{}
 	for _, f := range findings {
-		tc := TestCaseOf(f.File)
+		tc := st.TestCaseOf(f.File)
 		if tc == "" {
 			s.FindingsElsewhere++
 			continue
@@ -197,7 +259,7 @@ func Compute(expected []Expected, findings []Finding, covered map[string][]strin
 			continue
 		}
 		s.FindingsInTests++
-		cat := CategoryOf(f.Rule, f.CWE)
+		cat := st.CategoryOf(f.Rule, f.CWE)
 		if cat != "" {
 			observed[cat] = true
 		}
@@ -208,7 +270,7 @@ func Compute(expected []Expected, findings []Finding, covered map[string][]strin
 		flagged[tc] = true
 	}
 	results := map[string]*CategoryResult{}
-	for _, c := range Categories {
+	for _, c := range st.Categories {
 		_, cov := covered[c.Name]
 		results[c.Name] = &CategoryResult{Category: c.Name, CWE: c.CWE, Covered: cov || observed[c.Name], Rules: covered[c.Name]}
 	}
@@ -266,24 +328,21 @@ func Compute(expected []Expected, findings []Finding, covered map[string][]strin
 	return s
 }
 
-// SemgrepCoverage maps the bundled Java Semgrep rules to the categories
-// their CWE belongs to, under the rule id the semgrep adapter reports.
-func SemgrepCoverage() (map[string][]string, error) {
+// SemgrepCoverage maps the bundled Semgrep rules for the suite's language to
+// the categories their CWE belongs to, under the rule id the semgrep adapter
+// reports.
+func (st *Suite) SemgrepCoverage() (map[string][]string, error) {
 	rs, err := rules.SemgrepRules()
 	if err != nil {
 		return nil, err
 	}
 	out := map[string][]string{}
 	for _, r := range rs {
-		java := false
-		for _, l := range r.Languages {
-			java = java || l == "java"
-		}
-		if !java {
+		if !slices.Contains(r.Languages, st.Language) {
 			continue
 		}
 		id := "semgrep." + r.ID
-		if c := CategoryOf(id, r.Metadata.CWE); c != "" {
+		if c := st.CategoryOf(id, r.Metadata.CWE); c != "" {
 			out[c] = append(out[c], id)
 		}
 	}
