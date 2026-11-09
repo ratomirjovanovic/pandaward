@@ -11,6 +11,7 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"time"
 
@@ -41,6 +42,15 @@ type externalTool struct {
 	normalize func(c *Context, raw []byte) ([]model.Signal, error)
 	// note, set by normalize, is added to the run detail.
 	note string
+	// alts are other binaries that run the same rules and output format
+	// (opengrep for semgrep), tried after binary.
+	alts []string
+	// choose returns the one binary the project configured, or "" for
+	// binary and then alts. It is read at the start of a run.
+	choose func(c *Context) string
+	// prefer is the configured binary for this run; found is the binary
+	// Lookup resolved last.
+	prefer, found string
 }
 
 func (t *externalTool) Name() string       { return t.name }
@@ -48,8 +58,45 @@ func (t *externalTool) Controls() []string { return t.controls }
 func (t *externalTool) Maturity() string   { return MaturityUnvalidated }
 func (t *externalTool) Network() bool      { return t.network }
 
-// Lookup returns the absolute path of the tool binary or an error.
-func (t *externalTool) Lookup() (string, error) { return exec.LookPath(t.binary) }
+// Lookup returns the absolute path of the tool binary or an error. A tool
+// with alternative engines resolves the configured one, or the first
+// installed one.
+func (t *externalTool) Lookup() (string, error) {
+	names := append([]string{t.binary}, t.alts...)
+	if t.prefer != "" {
+		names = []string{t.prefer}
+	}
+	var first error
+	for _, n := range names {
+		p, err := exec.LookPath(n)
+		if err == nil {
+			t.found = n
+			return p, nil
+		}
+		if first == nil {
+			first = err
+		}
+	}
+	t.found = ""
+	return "", first
+}
+
+// engine names the binary that runs, for messages: the alternative engine
+// when one was resolved, else the tool name.
+func (t *externalTool) engine() string {
+	if t.found != "" && t.found != t.binary {
+		return t.found
+	}
+	return t.name
+}
+
+// binaries names what Lookup looks for, for messages.
+func (t *externalTool) binaries() string {
+	if t.prefer != "" {
+		return t.prefer
+	}
+	return strings.Join(append([]string{t.binary}, t.alts...), " or ")
+}
 
 // Version returns the tool version string, or "" when unavailable.
 func (t *externalTool) Version(ctx context.Context) string {
@@ -67,7 +114,13 @@ func (t *externalTool) Version(ctx context.Context) string {
 	if err != nil && len(out) == 0 {
 		return ""
 	}
-	return firstLine(string(out))
+	v := firstLine(string(out))
+	// An alternative engine has its own version numbers; name it so a
+	// version is never read as the main tool's.
+	if t.found != "" && t.found != t.binary && !strings.HasPrefix(v, t.found) {
+		v = t.found + " " + v
+	}
+	return v
 }
 
 // quietEnv turns off update checks, telemetry, progress bars and colors.
@@ -88,15 +141,27 @@ func toolEnv(c *Context, tmp string) []string {
 		out = append(out, kv)
 	}
 	out = append(out, "HOME="+c.ToolHome, "USERPROFILE="+c.ToolHome, "TEMP="+tmp, "TMP="+tmp, "TMPDIR="+tmp)
+	if runtime.GOOS == "windows" {
+		// Opengrep unpacks itself into LOCALAPPDATA and exits with a fail-fast
+		// crash (0xC0000409) when that directory does not exist. Both point
+		// into the tool home, like HOME, and are created here.
+		local, roaming := filepath.Join(c.ToolHome, "AppData", "Local"), filepath.Join(c.ToolHome, "AppData", "Roaming")
+		_ = os.MkdirAll(local, 0o700)
+		_ = os.MkdirAll(roaming, 0o700)
+		out = append(out, "LOCALAPPDATA="+local, "APPDATA="+roaming)
+	}
 	return append(out, quietEnv...)
 }
 
 func (t *externalTool) Run(ctx context.Context, c *Context) (Result, model.Run) {
 	res := Result{Decisions: map[string]Decision{}}
+	if t.choose != nil {
+		t.prefer = t.choose(c)
+	}
 	bin, err := t.Lookup()
 	if err != nil {
 		run := newRun(t.name, "")
-		return res, finish(run, model.ExitBlocked, t.binary+" is not installed (optional; run `pandaward doctor`)", 0)
+		return res, finish(run, model.ExitBlocked, t.binaries()+" is not installed (optional; run `pandaward doctor`)", 0)
 	}
 	run := newRun(t.name, t.Version(ctx))
 	if t.network && !c.Cfg.Scan.AllowToolNetwork {
@@ -125,7 +190,7 @@ func (t *externalTool) Run(ctx context.Context, c *Context) (Result, model.Run) 
 	cmd.Stderr = &limitedBuffer{b: &stderr, max: 1 << 20}
 	err = cmd.Run()
 	if errors.Is(cctx.Err(), context.DeadlineExceeded) {
-		return res, finish(run, model.ExitTimeout, fmt.Sprintf("%s exceeded %s", t.name, c.Timeout), 0)
+		return res, finish(run, model.ExitTimeout, fmt.Sprintf("%s exceeded %s", t.engine(), c.Timeout), 0)
 	}
 	code := 0
 	if err != nil {
@@ -143,9 +208,9 @@ func (t *externalTool) Run(ctx context.Context, c *Context) (Result, model.Run) 
 	if !t.okExit[code] {
 		why := firstLine(stderr.String())
 		if why == "" {
-			why = "no error output; run " + t.binary + " manually in the project to see the cause"
+			why = "no error output; run " + t.engine() + " manually in the project to see the cause"
 		}
-		return res, finish(run, model.ExitError, fmt.Sprintf("%s exited %d: %s", t.name, code, why), 0)
+		return res, finish(run, model.ExitError, fmt.Sprintf("%s exited %d: %s", t.engine(), code, why), 0)
 	}
 	raw, rerr := os.ReadFile(out)
 	if rerr != nil || len(bytes.TrimSpace(raw)) == 0 {
@@ -299,8 +364,14 @@ func semgrep() Adapter {
 	// normalize records a note on t, so t exists before its fields.
 	t := &externalTool{}
 	*t = externalTool{
-		name: "semgrep", binary: "semgrep", controls: []string{"D-006"}, verArgs: []string{"--version"},
+		name: "semgrep", binary: "semgrep", alts: []string{"opengrep"}, controls: []string{"D-006"}, verArgs: []string{"--version"},
 		okExit: map[int]bool{0: true, 1: true},
+		choose: func(c *Context) string {
+			if c.Cfg == nil {
+				return ""
+			}
+			return c.Cfg.Scan.SemgrepEngine
+		},
 		args: func(c *Context, out string) ([]string, error) {
 			// The bundled rules always run; they are local and need no network.
 			bundled, err := rules.WriteSemgrep(filepath.Join(c.ToolHome, "pandaward-semgrep-rules"))
@@ -325,7 +396,15 @@ func semgrep() Adapter {
 				}
 				args = append(args, "--config", cfg)
 			}
-			return append(args, "--json", "--output", out, "--metrics=off", "--disable-version-check", "--quiet", "--timeout", "30", c.Root), nil
+			args = append(args, "--json", "--output", out, "--disable-version-check", "--quiet", "--timeout", "30")
+			if t.found == "opengrep" {
+				// Opengrep sends no metrics and has no --metrics flag; it
+				// follows taint through functions in the same file.
+				args = append(args, "--taint-intrafile")
+			} else {
+				args = append(args, "--metrics=off")
+			}
+			return append(args, c.Root), nil
 		},
 		normalize: func(c *Context, raw []byte) ([]model.Signal, error) {
 			var doc struct {
@@ -603,7 +682,7 @@ type ToolInfo struct {
 func Tools(ctx context.Context) []ToolInfo {
 	var out []ToolInfo
 	for _, t := range ExternalTools() {
-		ti := ToolInfo{Name: t.name, Binary: t.binary, Network: t.network}
+		ti := ToolInfo{Name: t.name, Binary: t.binaries(), Network: t.network}
 		if p, err := t.Lookup(); err == nil {
 			ti.Path = p
 			ti.Version = t.Version(ctx)
