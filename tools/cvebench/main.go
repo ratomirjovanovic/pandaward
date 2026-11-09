@@ -320,10 +320,13 @@ func checkout(ctx context.Context, repo, commit, dir string) (string, error) {
 		{"checkout", "-q", "FETCH_HEAD"},
 	} {
 		if out, err := git(cctx, dir, args...); err != nil {
-			if args[0] == "fetch" {
-				return "", fmt.Errorf("%w: %s", errUnavailable, firstLine(out))
+			if args[0] == "init" {
+				return "", fmt.Errorf("git init: %v %s", err, firstLine(out))
 			}
-			return "", fmt.Errorf("git %s: %v %s", args[0], err, firstLine(out))
+			// A commit that cannot be fetched or checked out on this
+			// machine (gone, or a path the file system refuses) is
+			// unavailable, not a failed measurement.
+			return "", fmt.Errorf("%w: git %s: %s", errUnavailable, args[0], firstLine(out))
 		}
 	}
 	if got := gitHead(dir); got != commit {
@@ -333,7 +336,7 @@ func checkout(ctx context.Context, repo, commit, dir string) (string, error) {
 }
 
 func git(ctx context.Context, dir string, args ...string) (string, error) {
-	base := []string{"-C", dir, "-c", "core.hooksPath=" + os.DevNull, "-c", "core.autocrlf=false", "-c", "core.symlinks=false", "-c", "core.fsmonitor=false", "-c", "protocol.file.allow=never"}
+	base := []string{"-C", dir, "-c", "core.hooksPath=" + os.DevNull, "-c", "core.autocrlf=false", "-c", "core.symlinks=false", "-c", "core.longpaths=true", "-c", "core.fsmonitor=false", "-c", "protocol.file.allow=never"}
 	cmd := exec.CommandContext(ctx, "git", append(base, args...)...)
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0", "GIT_LFS_SKIP_SMUDGE=1", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull, "GIT_ASKPASS=", "SSH_ASKPASS=")
 	out, err := cmd.CombinedOutput()
