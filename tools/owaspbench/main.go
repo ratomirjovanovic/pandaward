@@ -23,19 +23,14 @@ import (
 	"slices"
 	"strings"
 	"text/tabwriter"
-	"time"
 
 	"github.com/ratomirjovanovic/pandaward/internal/adapters"
 	"github.com/ratomirjovanovic/pandaward/internal/config"
 	"github.com/ratomirjovanovic/pandaward/internal/inventory"
-	"github.com/ratomirjovanovic/pandaward/internal/model"
 	"github.com/ratomirjovanovic/pandaward/internal/version"
 	"github.com/ratomirjovanovic/pandaward/rules"
+	"github.com/ratomirjovanovic/pandaward/tools/internal/engines"
 )
-
-// engineNames are the engines that can be measured. "all" in the output
-// merges the findings of every engine that ran, counting a test case once.
-var engineNames = []string{"builtin", "semgrep", "opengrep"}
 
 // Output is the JSON document printed with --json.
 type Output struct {
@@ -67,7 +62,7 @@ func main() {
 	suiteKey := flag.String("suite", "java", "benchmark: java or python")
 	repo := flag.String("repo", "", "path to a checkout of the benchmark (required)")
 	expected := flag.String("expected", "", "expected results file, relative to --repo (default: the suite's)")
-	engines := flag.String("engine", "builtin", "comma-separated engines to measure: "+strings.Join(engineNames, ", "))
+	engineList := flag.String("engine", "builtin", "comma-separated engines to measure: "+strings.Join(engines.Names, ", "))
 	asJSON := flag.Bool("json", false, "print JSON instead of a table")
 	flag.Parse()
 	if *repo == "" {
@@ -82,7 +77,7 @@ func main() {
 	if *expected == "" {
 		*expected = suite.Expected
 	}
-	sel, err := parseEngines(*engines)
+	sel, err := engines.Parse(*engineList)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "owaspbench:", err)
 		os.Exit(2)
@@ -107,31 +102,7 @@ func main() {
 	printTable(out)
 }
 
-func parseEngines(s string) ([]string, error) {
-	var out []string
-	seen := map[string]bool{}
-	for _, e := range strings.Split(s, ",") {
-		e = strings.TrimSpace(e)
-		if e == "" || seen[e] {
-			continue
-		}
-		known := false
-		for _, n := range engineNames {
-			known = known || n == e
-		}
-		if !known {
-			return nil, fmt.Errorf("unknown engine %q; choose from %s", e, strings.Join(engineNames, ", "))
-		}
-		seen[e] = true
-		out = append(out, e)
-	}
-	if len(out) == 0 {
-		return nil, fmt.Errorf("no engine selected")
-	}
-	return out, nil
-}
-
-func measure(ctx context.Context, suite *Suite, repo, expectedPath string, engines []string) (*Output, error) {
+func measure(ctx context.Context, suite *Suite, repo, expectedPath string, selected []string) (*Output, error) {
 	f, err := os.Open(filepath.Join(repo, expectedPath))
 	if err != nil {
 		return nil, err
@@ -172,19 +143,20 @@ func measure(ctx context.Context, suite *Suite, repo, expectedPath string, engin
 	var all []Finding
 	allCovered := map[string][]string{}
 	ran := 0
-	for _, eng := range engines {
-		var findings []Finding
-		var r EngineResult
-		var covered map[string][]string
-		if eng == "builtin" {
-			findings, r, err = runBuiltin(ctx, inv, cfg)
-			covered = suite.CoveredCategories(adapters.RuleIDs())
-		} else {
-			findings, r, err = runSemgrep(ctx, inv, eng)
-			covered = semgrepCovered
-		}
+	for _, eng := range selected {
+		run, err := engines.Measure(ctx, inv, eng)
 		if err != nil {
 			return nil, err
+		}
+		r := EngineResult{Engine: run.Engine, Version: run.Version, NotRun: run.NotRun, RuleCounts: map[string]int{}}
+		var findings []Finding
+		for _, f := range run.Findings {
+			findings = append(findings, Finding{Rule: f.Rule, CWE: f.CWE, File: f.File, Line: f.Line})
+			r.RuleCounts[f.Rule]++
+		}
+		covered := semgrepCovered
+		if eng == "builtin" {
+			covered = suite.CoveredCategories(adapters.RuleIDs())
 		}
 		if r.NotRun == "" {
 			r.Score = suite.Compute(expected, findings, covered)
@@ -206,67 +178,6 @@ func measure(ctx context.Context, suite *Suite, repo, expectedPath string, engin
 	return out, nil
 }
 
-func runBuiltin(ctx context.Context, inv *inventory.Inventory, cfg *config.Config) ([]Finding, EngineResult, error) {
-	r := EngineResult{Engine: "builtin", Version: version.Version, RuleCounts: map[string]int{}}
-	var findings []Finding
-	actx := &adapters.Context{Root: inv.Root, Inv: inv, Cfg: cfg}
-	for _, a := range adapters.Registry() {
-		// Only the built-in adapters here; the Semgrep rules are their own
-		// engines.
-		if !strings.HasPrefix(a.Name(), "builtin-") {
-			continue
-		}
-		res, run := a.Run(ctx, actx)
-		if run.ExitClass != model.ExitOK {
-			return nil, r, fmt.Errorf("%s did not complete: %s %s", a.Name(), run.ExitClass, run.Detail)
-		}
-		for _, s := range res.Signals {
-			findings = append(findings, Finding{Rule: s.RuleID, CWE: s.CWE, File: s.File, Line: s.StartLine})
-			r.RuleCounts[s.RuleID]++
-		}
-	}
-	return findings, r, nil
-}
-
-// runSemgrep runs the bundled Semgrep rules on the given engine through the
-// same adapter `pandaward scan` uses, with no project rules and no network.
-func runSemgrep(ctx context.Context, inv *inventory.Inventory, engine string) ([]Finding, EngineResult, error) {
-	r := EngineResult{Engine: engine, RuleCounts: map[string]int{}}
-	var tool adapters.Adapter
-	for _, a := range adapters.Registry() {
-		if a.Name() == "semgrep" {
-			tool = a
-		}
-	}
-	if tool == nil {
-		return nil, r, fmt.Errorf("semgrep adapter not registered")
-	}
-	cfg := config.Default("owasp-benchmark")
-	cfg.Scan.SemgrepEngine = engine
-	work, err := os.MkdirTemp("", "owaspbench-")
-	if err != nil {
-		return nil, r, err
-	}
-	defer os.RemoveAll(work)
-	actx := &adapters.Context{Root: inv.Root, Inv: inv, Cfg: cfg, RunDir: work, ToolHome: filepath.Join(work, "home"), Timeout: 3 * time.Hour}
-	res, run := tool.Run(ctx, actx)
-	r.Version = run.ToolVersion
-	switch run.ExitClass {
-	case model.ExitOK:
-	case model.ExitBlocked, model.ExitUnsupported:
-		r.NotRun = run.Detail
-		return nil, r, nil
-	default:
-		return nil, r, fmt.Errorf("%s did not complete: %s %s", engine, run.ExitClass, run.Detail)
-	}
-	var findings []Finding
-	for _, s := range res.Signals {
-		findings = append(findings, Finding{Rule: s.RuleID, CWE: s.CWE, File: s.File, Line: s.StartLine})
-		r.RuleCounts[s.RuleID]++
-	}
-	return findings, r, nil
-}
-
 func printTable(o *Output) {
 	commit := o.BenchmarkCommit
 	if commit == "" {
@@ -282,8 +193,10 @@ func printTable(o *Output) {
 			continue
 		}
 		name := e.Engine
-		if e.Version != "" {
+		if e.Version != "" && !strings.HasPrefix(e.Version, e.Engine) {
 			name += " " + e.Version
+		} else if e.Version != "" {
+			name = e.Version
 		}
 		if e.Engine == "all" {
 			name = "all engines merged (a test case counts once)"

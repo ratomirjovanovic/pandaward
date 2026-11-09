@@ -4,6 +4,7 @@ PandaWard has two kinds of measurement:
 
 - `pandaward benchmark` runs every built-in rule against PandaWard's own small corpus of vulnerable and safe cases (see the README). It checks that each rule does what it was written to do.
 - The OWASP Benchmark measurements below run PandaWard against public, labelled evaluation projects that PandaWard's authors did not write, for Java and for Python: the built-in rules, and the bundled Semgrep rules on Semgrep and on Opengrep. They show how much of a known test suite each engine finds.
+- The OpenSSF CVE Benchmark measurement runs the same engines on real JavaScript and TypeScript projects at the commit before and after a published CVE was fixed.
 
 ## OWASP Benchmark for Java
 
@@ -124,3 +125,68 @@ Python is the first suite where an engine is measurably better than not running 
 - Hash, weak random, secure cookie, XSS and SQL injection need the risky call and its argument on one line or a framework source the rules do not model; they find nothing.
 
 Next, for Phase 2: taint rules with Flask sources (`request.args`, `request.form`, `request.cookies`, `request.headers`) for eval, exec, subprocess, SQL and file paths, so the sink rules stop firing on constant input; and Opengrep as the reference engine, since it is the one that improves the same rules.
+
+## OpenSSF CVE Benchmark (JavaScript and TypeScript)
+
+The [OpenSSF CVE Benchmark](https://github.com/ossf-cve-benchmark/ossf-cve-benchmark) (MIT) lists 223 real CVEs in JavaScript and TypeScript projects. Each entry names the project, the commit before the fix, the commit with the fix, the vulnerable lines and the CWEs. OWASP has no labelled suite for Node.js; this one is real code, not written to test tools.
+
+### How it is measured
+
+```sh
+sh tools/cvebench/run.sh --engine builtin,semgrep,opengrep          # table
+sh tools/cvebench/run.sh --engine opengrep --cve CVE-2018-3721       # one CVE
+sh tools/cvebench/run.sh --engine builtin --json                     # JSON
+```
+
+`run.sh` fetches the benchmark at a pinned commit and runs `go run ./tools/cvebench`. For every CVE the tool fetches the project at both commits (one commit each, depth 1) into a reusable work directory, with git hooks, LFS, symlinks and the user's git configuration off; nothing from a project is built, installed or run. It walks each checkout with the same inventory settings as `pandaward scan`, runs each engine and scores, following the benchmark's own reports:
+
+- **detected**: a finding covers a labelled vulnerable line in the commit before the fix;
+- **CWE match**: one of those findings carries one of the CVE's CWEs;
+- **fix recognized**: a detecting rule reports fewer findings in the vulnerable files after the fix. Otherwise the CVE is **still flagged after the fix**, the fixed-commit false positive;
+- **unavailable**: a commit could not be fetched or checked out (repository gone). Such CVEs are not scored.
+
+Each CVE's result is written to a journal in the work directory as soon as it is measured, so an interrupted run continues where it stopped.
+
+| | |
+|---|---|
+| Benchmark | ossf-cve-benchmark, commit `91c59fd54b2b768c0f310bb0027d2ac59cdf74d4` |
+| PandaWard | source build of `main` at `84ebd1d` plus #316 |
+| Engines | built-in rules; Semgrep 1.182.1 and Opengrep 1.33.1 with the bundled rule set `b24cf8d85498e933...` |
+| CVEs | 223 entries, 2 not scorable (not published or incomplete), 2 unavailable, 219 scored |
+| Date | 2026-11-09 |
+
+### Results
+
+| Engine | Detected | Detection rate | With CWE match | Fix recognized | Still flagged after fix |
+|---|---|---|---|---|---|
+| Built-in rules | 23 of 219 | 10.5% | 19 | 10 | 13 |
+| Semgrep 1.182.1, bundled rules | 13 of 219 | 5.9% | 10 | 6 | 7 |
+| Opengrep 1.33.1, bundled rules | 13 of 219 | 5.9% | 10 | 6 | 7 |
+
+By the CVE's first CWE, for the classes with four or more CVEs (detected by built-in / Semgrep / Opengrep):
+
+| CWE | CVEs | Built-in | Semgrep | Opengrep |
+|---|---|---|---|---|
+| CWE-78, OS command injection | 48 | 10 | 3 | 3 |
+| CWE-79, cross-site scripting | 48 | 9 | 7 | 7 |
+| CWE-22, path traversal | 29 | 0 | 0 | 0 |
+| CWE-730, regular expression denial of service | 29 | 0 | 0 | 0 |
+| CWE-94, code injection | 12 | 4 | 3 | 3 |
+| CWE-116, improper encoding or escaping | 9 | 0 | 0 | 0 |
+| CWE-20, improper input validation | 6 | 0 | 0 | 0 |
+| CWE-89, SQL injection | 4 | 0 | 0 | 0 |
+| CWE-601, open redirect | 4 | 0 | 0 | 0 |
+| CWE-770, allocation without limits | 4 | 0 | 0 | 0 |
+
+The detecting rules were `code.js-shell` (10), `code.html-sink` (9) and `code.js-eval` (4) for the built-in rules, and `pandaward-js-html-sink` (7), `pandaward-js-shell-exec` (3) and `pandaward-js-eval` (3) for both Semgrep engines.
+
+### Interpretation
+
+PandaWard finds about one real JavaScript CVE in ten with its built-in rules, and one in seventeen with its bundled Semgrep rules. Every detection is a sink rule (shell, HTML, eval) firing on the vulnerable line.
+
+- **The fix is recognized in less than half of the detections.** In 13 of 23 built-in detections and 7 of 13 Semgrep detections, the rule still fires as often after the fix: the fix sanitizes or validates the input, and a sink-only rule cannot see that. Taint rules with sanitizers are the remedy.
+- **Opengrep and Semgrep give identical results** on this suite. The JavaScript rules that detect anything are patterns, so `--taint-intrafile` has nothing to follow; unlike Python, no JavaScript taint rule fires on a vulnerable line.
+- **Whole classes are missed**: path traversal (29 CVEs) and regular expression denial of service (29) have no detection at all, nor do encoding, validation, SQL injection and open redirect. Path traversal in library code needs taint from function parameters, not only from HTTP requests; ReDoS needs a regular expression analysis no engine here does.
+- The built-in rules detect more than the bundled Semgrep rules (10 against 3 command injections) because the line rule `code.js-shell` accepts more call shapes than the structural Semgrep rule.
+
+Next, for Phase 2: JavaScript taint rules with library sources (exported function parameters) and sanitizers for command, HTML and path sinks, and a ReDoS check. The CVE benchmark is the measure for them, since it is real code and also counts the fixed commit.
