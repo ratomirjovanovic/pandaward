@@ -86,6 +86,21 @@ func TestSemgrepFixtures(t *testing.T) {
 	}
 }
 
+// TestOpengrepFixtures runs the same fixtures on Opengrep when it is
+// installed: the bundled rules must give the same results on both engines.
+func TestOpengrepFixtures(t *testing.T) {
+	bin, err := exec.LookPath("opengrep")
+	if err != nil {
+		t.Skip("opengrep not installed")
+	}
+	cmd := exec.Command(bin, "scan", "--test", "semgrep")
+	cmd.Env = append(os.Environ(), "PYTHONUTF8=1")
+	out, err := cmd.CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "All tests passed") {
+		t.Fatalf("opengrep --test failed: %v\n%s", err, out)
+	}
+}
+
 func TestWriteSemgrep(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "r")
 	os.MkdirAll(dir, 0o700)

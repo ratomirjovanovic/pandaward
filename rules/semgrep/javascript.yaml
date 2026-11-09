@@ -74,7 +74,9 @@ rules:
                   - pattern: $DB.$Q(`...${$X}...`, ...)
               - metavariable-regex:
                   metavariable: $X
-                  regex: (?s)^(?!(?:[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*|[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*\.map\(.*\)\.join\([^()]*\)|(Math\.(trunc|floor|ceil|round)|Number|parseInt|parseFloat)\([^()]*\)|\d+(\.\d+)?|[^'"\x60]*\?\s*(?:"[^"]*"|'[^']*')\s*:\s*(?:"[^"]*"|'[^']*'))$)
+                  # Semgrep binds a template interpolation without its ${...};
+                  # Opengrep binds it with them. Both forms are checked.
+                  regex: (?s)^(?:\$\{(?!(?:[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*|[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*\.map\(.*\)\.join\([^()]*\)|(Math\.(trunc|floor|ceil|round)|Number|parseInt|parseFloat)\([^()]*\)|\d+(\.\d+)?|[^'"\x60]*\?\s*(?:"[^"]*"|'[^']*')\s*:\s*(?:"[^"]*"|'[^']*'))\}$)|(?!\$\{)(?!(?:[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*|[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*\.map\(.*\)\.join\([^()]*\)|(Math\.(trunc|floor|ceil|round)|Number|parseInt|parseFloat)\([^()]*\)|\d+(\.\d+)?|[^'"\x60]*\?\s*(?:"[^"]*"|'[^']*')\s*:\s*(?:"[^"]*"|'[^']*'))$))
           - patterns:
               - pattern: $DB.$Q($A + $B, ...)
               - metavariable-regex:

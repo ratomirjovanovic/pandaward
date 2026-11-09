@@ -9,11 +9,13 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 - `tools/owaspbench --engine builtin,semgrep,opengrep` measures the bundled Semgrep rules on both engines next to the built-in rules, with engine versions and the rule set hash; `docs/BENCHMARKS.md` has the new baseline (#314).
 - `tools/owaspbench --suite python` measures PandaWard on OWASP BenchmarkPython (1,230 test cases, 14 categories), fetched at a pinned commit at run time; `docs/BENCHMARKS.md` has the first Python baseline (#315).
 - `tools/cvebench` measures PandaWard on the OpenSSF CVE Benchmark: real CVEs in JavaScript and TypeScript projects, scored on the commit before and after each fix (detected, fix recognized, still flagged after the fix); `docs/BENCHMARKS.md` has the first JavaScript baseline (#316).
+- Benchmark quality gates: the `benchmarks` workflow measures the OWASP Java and Python suites on every engine for pull requests that touch rules or engines, and the CVE benchmark weekly, and fails when a score drops below `tools/benchgate/baseline.json`. Rule fixtures run on Opengrep as well as Semgrep (#317).
 
 ### Changed
 - In a git repository, directories git ignores and does not track are no longer scanned: the inventory line names them, results external scanners report there are dropped, and secrets gitleaks finds there stay listed as info. `inventory.include_ignored: true` scans them again (#312).
 
 ### Fixed
+- The bundled JavaScript SQL rule no longer reports constants and numbers in template literals on Opengrep, which binds an interpolation with its `${...}` (#317).
 - In Go files, a rule match inside a string literal is data: inside a `regexp` pattern it is dropped, inside other strings it is listed as info. Go SQL built only from literals and constants is no longer reported (#306).
 - A-003 no longer compares routes from test and fixture files with the OpenAPI contract, so test servers do not raise `inventory.undeclared-route` findings or keep A-003 from passing (#310).
 

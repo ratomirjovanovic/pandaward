@@ -71,6 +71,8 @@ jobs:
       OSV_SCANNER_SHA256: 160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b
       TRIVY_VERSION: 0.76.1
       TRIVY_SHA256: c7cbe3137fb8a48a17574bede3dd6beb16742d1e9772929940fc90082c39d9c0
+      OPENGREP_VERSION: 1.33.1
+      OPENGREP_SHA256: 46e8133cc490f9f50518061590ce2f6be5a08afaeda034471c0ceda4b3899808
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -85,13 +87,17 @@ jobs:
           dl="$RUNNER_TEMP/tools/dl"
           mkdir -p "$bin" "$dl"
           cd "$dl"
-          curl -fsSLo gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
-          curl -fsSLo osv-scanner "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"
-          curl -fsSLo trivy.tar.gz "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
-          printf '%s  %s\n' "$GITLEAKS_SHA256" gitleaks.tar.gz "$OSV_SCANNER_SHA256" osv-scanner "$TRIVY_SHA256" trivy.tar.gz | sha256sum -c -
+          # Release downloads sometimes answer 504; retry before failing.
+          get() { curl -fsSL --retry 5 --retry-all-errors --retry-delay 10 -o "$1" "$2"; }
+          get gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          get osv-scanner "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64"
+          get trivy.tar.gz "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          get opengrep "https://github.com/opengrep/opengrep/releases/download/v${OPENGREP_VERSION}/opengrep_manylinux_x86"
+          printf '%s  %s\n' "$GITLEAKS_SHA256" gitleaks.tar.gz "$OSV_SCANNER_SHA256" osv-scanner "$TRIVY_SHA256" trivy.tar.gz "$OPENGREP_SHA256" opengrep | sha256sum -c -
           tar -xzf gitleaks.tar.gz -C "$bin" gitleaks
           tar -xzf trivy.tar.gz -C "$bin" trivy
           install -m 0755 osv-scanner "$bin/osv-scanner"
+          install -m 0755 opengrep "$bin/opengrep"
           pipx install "semgrep==${SEMGREP_VERSION}"
           echo "$bin" >> "$GITHUB_PATH"
       - name: Tool versions
@@ -100,6 +106,7 @@ jobs:
           SEMGREP_ENABLE_VERSION_CHECK=0 semgrep --version
           osv-scanner --version
           trivy --version
+          opengrep --version
       - name: Scan the demo fixture with the pandaward CLI
         run: |
           set -eu
@@ -122,12 +129,15 @@ jobs:
         env:
           PANDAWARD_REAL_TOOLS: "1"
         run: go test -count=1 -v -run '^TestRealTools$' ./internal/adapters/
-      # The ruleid and ok annotations in rules/semgrep only hold if semgrep
-      # checks them; the test job has no semgrep, so they run here.
-      - name: Bundled Semgrep rule fixtures
+      # The ruleid and ok annotations in rules/semgrep only hold if an engine
+      # checks them; the test job has no engine, so they run here, on Semgrep
+      # and on Opengrep, which must agree.
+      - name: Bundled Semgrep rule fixtures on Semgrep and Opengrep
         run: |
-          go test -count=1 -v -run '^TestSemgrepFixtures$' ./rules/ | tee fixtures.log
-          ! grep -q -- '--- SKIP: TestSemgrepFixtures' fixtures.log
+          go test -count=1 -v -run '^(TestSemgrepFixtures|TestOpengrepFixtures)$' ./rules/ | tee fixtures.log
+          ! grep -q -- '--- SKIP' fixtures.log
+          grep -q -- '--- PASS: TestSemgrepFixtures' fixtures.log
+          grep -q -- '--- PASS: TestOpengrepFixtures' fixtures.log
 
   # Runs the MobSF adapter against a pinned MobSF image and an APK that ships
   # inside that image, so no binary fixture lives in this repository. Keep

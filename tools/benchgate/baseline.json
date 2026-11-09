@@ -1,0 +1,106 @@
+{
+  "note": "Scores that must not drop. Raise them with `go run ./tools/benchgate --update` and commit; see docs/BENCHMARKS.md.",
+  "scores": {
+    "cve/builtin": {
+      "detected": 23,
+      "fix_recognized": 10
+    },
+    "cve/opengrep": {
+      "detected": 13,
+      "fix_recognized": 6
+    },
+    "cve/semgrep": {
+      "detected": 13,
+      "fix_recognized": 6
+    },
+    "owasp/java/all": {
+      "average_score_covered": -0.0002377028397566039,
+      "categories": {
+        "cmdi": 0,
+        "crypto": 0,
+        "hash": 0,
+        "pathtraver": 0,
+        "securecookie": 0,
+        "sqli": -0.0019016227180528311,
+        "weakrand": 0,
+        "xss": 0
+      }
+    },
+    "owasp/java/builtin": {
+      "average_score_covered": -0.00031693711967547183,
+      "categories": {
+        "cmdi": 0,
+        "hash": 0,
+        "securecookie": 0,
+        "sqli": -0.0019016227180528311,
+        "weakrand": 0,
+        "xss": 0
+      }
+    },
+    "owasp/java/opengrep": {
+      "average_score_covered": 0,
+      "categories": {
+        "cmdi": 0,
+        "crypto": 0,
+        "pathtraver": 0,
+        "sqli": 0
+      }
+    },
+    "owasp/java/semgrep": {
+      "average_score_covered": 0,
+      "categories": {
+        "cmdi": 0,
+        "crypto": 0,
+        "pathtraver": 0,
+        "sqli": 0
+      }
+    },
+    "owasp/python/all": {
+      "average_score_covered": 0.028650457776671374,
+      "categories": {
+        "cmdi": -0.46153846153846156,
+        "codeinj": 0,
+        "deserialization": 0.6666666666666667,
+        "hash": 0,
+        "pathtraver": 0.0527259148618372,
+        "securecookie": 0,
+        "sqli": 0,
+        "weakrand": 0,
+        "xss": 0
+      }
+    },
+    "owasp/python/builtin": {
+      "average_score_covered": 0.025641025641025647,
+      "categories": {
+        "cmdi": -0.46153846153846156,
+        "codeinj": 0,
+        "deserialization": 0.6666666666666667,
+        "hash": 0,
+        "securecookie": 0,
+        "sqli": 0,
+        "weakrand": 0,
+        "xss": 0
+      }
+    },
+    "owasp/python/opengrep": {
+      "average_score_covered": 0.05933781428927061,
+      "categories": {
+        "cmdi": -0.46153846153846156,
+        "codeinj": 0,
+        "deserialization": 0.6666666666666667,
+        "pathtraver": 0.09156086631814789,
+        "sqli": 0
+      }
+    },
+    "owasp/python/semgrep": {
+      "average_score_covered": 0.039263131690316165,
+      "categories": {
+        "cmdi": -0.46153846153846156,
+        "codeinj": 0,
+        "deserialization": 0.6666666666666667,
+        "pathtraver": -0.008812546676624344,
+        "sqli": 0
+      }
+    }
+  }
+}

@@ -6,6 +6,20 @@ PandaWard has two kinds of measurement:
 - The OWASP Benchmark measurements below run PandaWard against public, labelled evaluation projects that PandaWard's authors did not write, for Java and for Python: the built-in rules, and the bundled Semgrep rules on Semgrep and on Opengrep. They show how much of a known test suite each engine finds.
 - The OpenSSF CVE Benchmark measurement runs the same engines on real JavaScript and TypeScript projects at the commit before and after a published CVE was fixed.
 
+## Quality gates
+
+The numbers below are guarded so they cannot drop unnoticed:
+
+| Gate | Runs on | Fails when |
+|---|---|---|
+| Own corpus (`pandaward benchmark --strict`) | every pull request | any built-in rule misses a vulnerable case or fires on a safe one |
+| Rule fixtures (`ruleid:` and `ok:` per bundled Semgrep rule) | every pull request | a rule lacks either kind of fixture |
+| Fixtures on Semgrep and Opengrep (`real-tools` job) | every pull request | either engine disagrees with a fixture annotation |
+| OWASP Java and Python on all engines (`benchmarks` workflow) | pull requests that touch rules, adapters, inventory or the benchmark tools; weekly | any average or per-category score drops below `tools/benchgate/baseline.json` |
+| OpenSSF CVE Benchmark on all engines (`benchmarks` workflow) | weekly and on demand (it takes hours) | fewer CVEs detected or fewer fixes recognized than the baseline |
+
+The baseline is committed. A change that improves a score raises it in the same pull request with `go run ./tools/benchgate --update --owasp owasp-java.json --owasp owasp-python.json` (and `--cve cve.json`), using the JSON from the workflow's artifacts. A score may only go down through the same explicit change, with the reason in the pull request.
+
 ## OWASP Benchmark for Java
 
 The [OWASP Benchmark](https://github.com/OWASP-Benchmark/BenchmarkJava) is a Java web application with 2,740 test cases in 11 categories. Each test case is one file, `BenchmarkTest#####.java`, and `expectedresults-1.2.csv` labels it as a real vulnerability or not, with its category and CWE. About half of the test cases in each category are deliberately not exploitable, so a tool that flags everything scores no better than one that flags nothing.
