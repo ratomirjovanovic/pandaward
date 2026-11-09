@@ -14,16 +14,19 @@
       "fix_recognized": 6
     },
     "owasp/java/all": {
-      "average_score_covered": -0.0002377028397566039,
+      "average_score_covered": 0.4626184579882949,
       "categories": {
-        "cmdi": 0,
-        "crypto": 0,
-        "hash": 0,
-        "pathtraver": 0,
-        "securecookie": 0,
-        "sqli": -0.0019016227180528311,
-        "weakrand": 0,
-        "xss": 0
+        "cmdi": 0.3286984126984127,
+        "crypto": 0.7461538461538462,
+        "hash": 0.689922480620155,
+        "ldapi": 0.32638888888888884,
+        "pathtraver": 0.18351434140907819,
+        "securecookie": 1,
+        "sqli": 0.026495943204868144,
+        "trustbound": 0.16979546091342113,
+        "weakrand": 1,
+        "xpathi": 0.2833333333333333,
+        "xss": 0.33450033064923945
       }
     },
     "owasp/java/builtin": {
@@ -38,21 +41,35 @@
       }
     },
     "owasp/java/opengrep": {
-      "average_score_covered": 0,
+      "average_score_covered": 0.7232309331734178,
       "categories": {
-        "cmdi": 0,
-        "crypto": 0,
-        "pathtraver": 0,
-        "sqli": 0
+        "cmdi": 0.6726984126984127,
+        "crypto": 0.7461538461538462,
+        "hash": 0.689922480620155,
+        "ldapi": 0.6701388888888888,
+        "pathtraver": 0.561292119186856,
+        "securecookie": 1,
+        "sqli": 0.6788793103448276,
+        "trustbound": 0.40235360044830487,
+        "weakrand": 1,
+        "xpathi": 0.7833333333333333,
+        "xss": 0.7507682732329716
       }
     },
     "owasp/java/semgrep": {
-      "average_score_covered": 0,
+      "average_score_covered": 0.4672112211576838,
       "categories": {
-        "cmdi": 0,
-        "crypto": 0,
-        "pathtraver": 0,
-        "sqli": 0
+        "cmdi": 0.20247619047619048,
+        "crypto": 0.7461538461538462,
+        "hash": 0.689922480620155,
+        "ldapi": 0.28935185185185186,
+        "pathtraver": 0.15310498468393208,
+        "securecookie": 1,
+        "sqli": 0.24391480730223125,
+        "trustbound": 0.22667413841412165,
+        "weakrand": 1,
+        "xpathi": 0.2833333333333333,
+        "xss": 0.3043917998988602
       }
     },
     "owasp/python/all": {
