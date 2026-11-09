@@ -10,6 +10,7 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 - `tools/owaspbench --suite python` measures PandaWard on OWASP BenchmarkPython (1,230 test cases, 14 categories), fetched at a pinned commit at run time; `docs/BENCHMARKS.md` has the first Python baseline (#315).
 - `tools/cvebench` measures PandaWard on the OpenSSF CVE Benchmark: real CVEs in JavaScript and TypeScript projects, scored on the commit before and after each fix (detected, fix recognized, still flagged after the fix); `docs/BENCHMARKS.md` has the first JavaScript baseline (#316).
 - Benchmark quality gates: the `benchmarks` workflow measures the OWASP Java and Python suites on every engine for pull requests that touch rules or engines, and the CVE benchmark weekly, and fails when a score drops below `tools/benchgate/baseline.json`. Rule fixtures run on Opengrep as well as Semgrep (#317).
+- A benchmark page on pandaward.dev shows the latest results and the history per release, with links to the raw results and the commands to reproduce them. Each release gets `owasp-java.json`, `owasp-python.json` and `cve.json` attached (#318).
 
 ### Changed
 - In a git repository, directories git ignores and does not track are no longer scanned: the inventory line names them, results external scanners report there are dropped, and secrets gitleaks finds there stay listed as info. `inventory.include_ignored: true` scans them again (#312).

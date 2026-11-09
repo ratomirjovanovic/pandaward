@@ -160,3 +160,57 @@ jobs:
           publish plugin
           publish plugin-windows
           publish plugin-directory
+
+  # Attaches the release's benchmark results (OWASP Java and Python measured
+  # here, the CVE benchmark from the latest weekly run on main) and rebuilds
+  # pandaward.dev, whose benchmark page reads them. A separate job, so a
+  # failed measurement never blocks the release itself.
+  benchmarks:
+    needs: release
+    if: ${{ !contains(github.ref_name, '-') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      actions: write
+    env:
+      SEMGREP_VERSION: 1.182.0
+      OPENGREP_VERSION: 1.33.1
+      OPENGREP_SHA256: 46e8133cc490f9f50518061590ce2f6be5a08afaeda034471c0ceda4b3899808
+      GOTOOLCHAIN: local
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+      - name: Install Semgrep and Opengrep
+        run: |
+          set -eu
+          bin="$RUNNER_TEMP/tools/bin"
+          mkdir -p "$bin"
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 10 -o "$RUNNER_TEMP/opengrep" "https://github.com/opengrep/opengrep/releases/download/v${OPENGREP_VERSION}/opengrep_manylinux_x86"
+          echo "$OPENGREP_SHA256  $RUNNER_TEMP/opengrep" | sha256sum -c -
+          install -m 0755 "$RUNNER_TEMP/opengrep" "$bin/opengrep"
+          pipx install "semgrep==${SEMGREP_VERSION}"
+          echo "$bin" >> "$GITHUB_PATH"
+      - name: Measure the OWASP Benchmarks
+        run: |
+          set -eu
+          mkdir -p bench
+          sh tools/owaspbench/run.sh --suite java --engine builtin,semgrep,opengrep --json > bench/owasp-java.json
+          sh tools/owaspbench/run.sh --suite python --engine builtin,semgrep,opengrep --json > bench/owasp-python.json
+      - name: Latest weekly CVE benchmark
+        continue-on-error: true
+        run: |
+          set -eu
+          run=$(gh run list -R "$GITHUB_REPOSITORY" --workflow benchmarks.yml --branch main --status success --json databaseId,event \
+            --jq '[.[] | select(.event == "schedule" or .event == "workflow_dispatch")][0].databaseId')
+          [ -n "$run" ] && [ "$run" != null ] || { echo "no successful weekly run yet"; exit 1; }
+          gh run download "$run" -R "$GITHUB_REPOSITORY" -n cve-benchmark -D bench
+      - name: Attach to the release
+        run: gh release upload "$GITHUB_REF_NAME" bench/*.json -R "$GITHUB_REPOSITORY" --clobber
+      - name: Rebuild pandaward.dev
+        run: gh workflow run pages.yml -R "$GITHUB_REPOSITORY" --ref main
