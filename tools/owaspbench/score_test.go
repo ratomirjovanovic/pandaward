@@ -155,3 +155,45 @@ func TestRunScriptUsesPinnedCommit(t *testing.T) {
 		t.Fatal("run.sh and PinnedCommit disagree")
 	}
 }
+
+func TestCategoryOfCWEForms(t *testing.T) {
+	for cwe, want := range map[string]string{"CWE-89": "sqli", "89": "sqli", "CWE-89: Improper Neutralization": "sqli", "cwe-22": "pathtraver", "CWE-918": "", "": "", "x89": ""} {
+		if got := CategoryOf("semgrep.x", cwe); got != want {
+			t.Errorf("CategoryOf(%q) = %q, want %q", cwe, got, want)
+		}
+	}
+}
+
+// The bundled Java rules cover the categories their CWE names; rules for
+// other languages and CWEs outside the Benchmark are left out.
+func TestSemgrepCoverage(t *testing.T) {
+	got, err := SemgrepCoverage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range []string{"sqli", "cmdi", "pathtraver", "crypto"} {
+		if len(got[c]) == 0 {
+			t.Errorf("no bundled Java rule covers %s: %v", c, got)
+		}
+	}
+	for c, rs := range got {
+		for _, r := range rs {
+			if !strings.HasPrefix(r, "semgrep.pandaward-java-") {
+				t.Errorf("%s covered by %s, not a bundled Java rule", c, r)
+			}
+		}
+	}
+}
+
+// Merged engines count a test case once, however many engines flag it.
+func TestMergedEnginesCountOnce(t *testing.T) {
+	expected := []Expected{{Name: "BenchmarkTest00001", Category: "sqli", Real: true, CWE: 89}, {Name: "BenchmarkTest00002", Category: "sqli", Real: false, CWE: 89}}
+	f := "src/main/java/org/owasp/benchmark/testcode/BenchmarkTest00001.java"
+	findings := []Finding{{Rule: "code.sql-concat", File: f}, {Rule: "semgrep.pandaward-java-sql-string", CWE: "CWE-89: Improper", File: f}}
+	s := Compute(expected, findings, map[string][]string{"sqli": {"code.sql-concat"}})
+	for _, r := range s.Categories {
+		if r.Category == "sqli" && (r.TP != 1 || r.FP != 0 || r.TN != 1 || r.Score != 1) {
+			t.Fatalf("sqli = %+v", r)
+		}
+	}
+}

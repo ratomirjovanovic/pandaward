@@ -40,6 +40,10 @@ type Config struct {
 		// databases or rule packs. It never allows requests to targets.
 		AllowToolNetwork bool   `yaml:"allow_tool_network"`
 		SemgrepConfig    string `yaml:"semgrep_config"`
+		// SemgrepEngine picks the engine that runs the Semgrep rules:
+		// "semgrep", "opengrep", or empty for semgrep and, when it is not
+		// installed, opengrep.
+		SemgrepEngine string `yaml:"semgrep_engine"`
 		// SemgrepIncludeTests keeps results of non-bundled semgrep rules in
 		// test and fixture code, which are skipped by default.
 		SemgrepIncludeTests bool     `yaml:"semgrep_include_tests"`
@@ -155,6 +159,11 @@ func (c *Config) Validate() error {
 	}
 	if c.Scan.AdapterTimeoutSec <= 0 || c.Scan.AdapterTimeoutSec > 7200 {
 		return fmt.Errorf("scan.adapter_timeout_seconds must be between 1 and 7200")
+	}
+	switch c.Scan.SemgrepEngine {
+	case "", "semgrep", "opengrep":
+	default:
+		return fmt.Errorf("scan.semgrep_engine must be semgrep, opengrep or empty")
 	}
 	if c.Policy.AIAnalysis != "opt_in" && c.Policy.AIAnalysis != "off" && c.Policy.AIAnalysis != "on" {
 		return fmt.Errorf("policy.ai_analysis must be opt_in, on or off")

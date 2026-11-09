@@ -9,6 +9,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/ratomirjovanovic/pandaward/rules"
 )
 
 // Category is one OWASP Benchmark vulnerability category.
@@ -48,12 +50,19 @@ var cweCategory = map[int]string{
 	89: "sqli", 501: "trustbound", 330: "weakrand", 338: "weakrand", 643: "xpathi", 79: "xss",
 }
 
+var cweNumRe = regexp.MustCompile(`^\s*(?i:CWE-)?(\d+)\b`)
+
 // CategoryOf returns the Benchmark category a finding counts for, or "".
 func CategoryOf(rule, cwe string) string {
 	if c, ok := ruleCategory[rule]; ok {
 		return c
 	}
-	n, err := strconv.Atoi(strings.TrimPrefix(strings.ToUpper(strings.TrimSpace(cwe)), "CWE-"))
+	// A CWE comes as "CWE-89", "89" or with its title ("CWE-89: Improper ...").
+	m := cweNumRe.FindStringSubmatch(cwe)
+	if m == nil {
+		return ""
+	}
+	n, err := strconv.Atoi(m[1])
 	if err != nil {
 		return ""
 	}
@@ -255,4 +264,28 @@ func Compute(expected []Expected, findings []Finding, covered map[string][]strin
 		s.AverageAll /= float64(len(names))
 	}
 	return s
+}
+
+// SemgrepCoverage maps the bundled Java Semgrep rules to the categories
+// their CWE belongs to, under the rule id the semgrep adapter reports.
+func SemgrepCoverage() (map[string][]string, error) {
+	rs, err := rules.SemgrepRules()
+	if err != nil {
+		return nil, err
+	}
+	out := map[string][]string{}
+	for _, r := range rs {
+		java := false
+		for _, l := range r.Languages {
+			java = java || l == "java"
+		}
+		if !java {
+			continue
+		}
+		id := "semgrep." + r.ID
+		if c := CategoryOf(id, r.Metadata.CWE); c != "" {
+			out[c] = append(out[c], id)
+		}
+	}
+	return out, nil
 }
