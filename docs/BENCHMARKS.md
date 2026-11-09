@@ -1,5 +1,7 @@
 # Benchmarks
 
+Current and past results per release are on [pandaward.dev/benchmarks](https://pandaward.dev/benchmarks/), with links to the raw JSON of each measurement. This page explains the method.
+
 PandaWard has two kinds of measurement:
 
 - `pandaward benchmark` runs every built-in rule against PandaWard's own small corpus of vulnerable and safe cases (see the README). It checks that each rule does what it was written to do.

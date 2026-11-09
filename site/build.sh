@@ -118,5 +118,38 @@ for p in d.glob("*"):
         t = p.read_text(encoding="utf-8").replace(work + "/acme-shop", "~/acme-shop").replace(work, "/tmp/demo")
         p.write_text(t, encoding="utf-8")
 PY
+# Benchmark page: committed snapshots of main plus the results attached to
+# each release (owasp-java.json, owasp-python.json, cve.json). Releases are
+# read from the public GitHub API; without network the page shows the
+# committed snapshots only.
+snaps="$work/release-snapshots"
+mkdir -p "$snaps"
+python3 - "$snaps" <<'PY' || echo "release benchmark results not fetched; using committed snapshots only" >&2
+import json, os, pathlib, sys, urllib.request
+dest = pathlib.Path(sys.argv[1])
+headers = {"Accept": "application/vnd.github+json", "User-Agent": "pandaward-site-build"}
+if os.environ.get("GH_TOKEN"):
+    headers["Authorization"] = "Bearer " + os.environ["GH_TOKEN"]
+def get(url):
+    with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=30) as r:
+        return r.read()
+releases = json.loads(get("https://api.github.com/repos/ratomirjovanovic/pandaward/releases?per_page=100"))
+wanted = ("owasp-java.json", "owasp-python.json", "cve.json")
+for rel in releases:
+    if rel.get("draft") or rel.get("prerelease"):
+        continue
+    assets = {a["name"]: a["browser_download_url"] for a in rel.get("assets", []) if a["name"] in wanted}
+    if not assets:
+        continue
+    d = dest / rel["tag_name"]
+    d.mkdir(parents=True, exist_ok=True)
+    for name, url in assets.items():
+        (d / name).write_bytes(get(url))
+    meta = {"label": rel["tag_name"].lstrip("v"), "date": rel["published_at"][:10], "url": rel["html_url"], "assets": assets}
+    (d / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
+PY
+mkdir -p "$out/benchmarks"
+(cd "$repo" && go run ./tools/benchsite --snapshots "$here/benchmarks/snapshots" --snapshots "$snaps" --out "$out/benchmarks/index.html")
+
 touch "$out/.nojekyll"
 echo "site built in $out"

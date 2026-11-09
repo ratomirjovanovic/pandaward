@@ -1,0 +1,962 @@
+{
+ "benchmark": "OWASP Benchmark for Python",
+ "benchmark_commit": "f1291485808b66e20ddb6b01b10dc71b3df8c8ba",
+ "pinned_commit": "f1291485808b66e20ddb6b01b10dc71b3df8c8ba",
+ "pandaward_version": "dev",
+ "semgrep_rules_sha256": "b24cf8d85498e933e63db46080351b9c043fb458ec46e7db31f7bdd3e4190a39",
+ "expected_results": "expectedresults-0.1.csv",
+ "test_case_files": 1230,
+ "test_case_files_excluded_as_test_paths": 0,
+ "engines": [
+  {
+   "engine": "builtin",
+   "version": "dev",
+   "findings_by_rule": {
+    "code.html-sink": 1,
+    "code.py-deserialize": 30,
+    "code.py-eval": 53,
+    "code.py-shell": 14,
+    "inventory.undeclared-route": 3,
+    "supply.missing-lockfile": 1
+   },
+   "categories": [
+    {
+     "category": "cmdi",
+     "cwe": 78,
+     "covered": true,
+     "rules": [
+      "code.py-shell"
+     ],
+     "real_vulnerabilities": 13,
+     "false_positive_tests": 7,
+     "tp": 7,
+     "fp": 7,
+     "fn": 6,
+     "tn": 0,
+     "tpr": 0.5384615384615384,
+     "fpr": 1,
+     "score": -0.46153846153846156
+    },
+    {
+     "category": "codeinj",
+     "cwe": 94,
+     "covered": true,
+     "rules": [
+      "code.py-eval"
+     ],
+     "real_vulnerabilities": 20,
+     "false_positive_tests": 33,
+     "tp": 20,
+     "fp": 33,
+     "fn": 0,
+     "tn": 0,
+     "tpr": 1,
+     "fpr": 1,
+     "score": 0
+    },
+    {
+     "category": "deserialization",
+     "cwe": 502,
+     "covered": true,
+     "rules": [
+      "code.py-deserialize"
+     ],
+     "real_vulnerabilities": 18,
+     "false_positive_tests": 36,
+     "tp": 18,
+     "fp": 12,
+     "fn": 0,
+     "tn": 24,
+     "tpr": 1,
+     "fpr": 0.3333333333333333,
+     "score": 0.6666666666666667
+    },
+    {
+     "category": "hash",
+     "cwe": 328,
+     "covered": true,
+     "rules": [
+      "code.weak-hash-password"
+     ],
+     "real_vulnerabilities": 71,
+     "false_positive_tests": 80,
+     "tp": 0,
+     "fp": 0,
+     "fn": 71,
+     "tn": 80,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "ldapi",
+     "cwe": 90,
+     "covered": false,
+     "real_vulnerabilities": 16,
+     "false_positive_tests": 13,
+     "tp": 0,
+     "fp": 0,
+     "fn": 16,
+     "tn": 13,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "pathtraver",
+     "cwe": 22,
+     "covered": false,
+     "real_vulnerabilities": 65,
+     "false_positive_tests": 103,
+     "tp": 0,
+     "fp": 0,
+     "fn": 65,
+     "tn": 103,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "redirect",
+     "cwe": 601,
+     "covered": false,
+     "real_vulnerabilities": 13,
+     "false_positive_tests": 21,
+     "tp": 0,
+     "fp": 0,
+     "fn": 13,
+     "tn": 21,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "securecookie",
+     "cwe": 614,
+     "covered": true,
+     "rules": [
+      "code.cookie-flags-off"
+     ],
+     "real_vulnerabilities": 24,
+     "false_positive_tests": 15,
+     "tp": 0,
+     "fp": 0,
+     "fn": 24,
+     "tn": 15,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "sqli",
+     "cwe": 89,
+     "covered": true,
+     "rules": [
+      "code.sql-concat",
+      "code.sql-template",
+      "code.sql-unsafe-raw"
+     ],
+     "real_vulnerabilities": 5,
+     "false_positive_tests": 11,
+     "tp": 0,
+     "fp": 0,
+     "fn": 5,
+     "tn": 11,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "trustbound",
+     "cwe": 501,
+     "covered": false,
+     "real_vulnerabilities": 18,
+     "false_positive_tests": 19,
+     "tp": 0,
+     "fp": 0,
+     "fn": 18,
+     "tn": 19,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "weakrand",
+     "cwe": 330,
+     "covered": true,
+     "rules": [
+      "code.insecure-random"
+     ],
+     "real_vulnerabilities": 99,
+     "false_positive_tests": 227,
+     "tp": 0,
+     "fp": 0,
+     "fn": 99,
+     "tn": 227,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "xpathi",
+     "cwe": 643,
+     "covered": false,
+     "real_vulnerabilities": 51,
+     "false_positive_tests": 135,
+     "tp": 0,
+     "fp": 0,
+     "fn": 51,
+     "tn": 135,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "xss",
+     "cwe": 79,
+     "covered": true,
+     "rules": [
+      "code.html-sink"
+     ],
+     "real_vulnerabilities": 31,
+     "false_positive_tests": 58,
+     "tp": 0,
+     "fp": 0,
+     "fn": 31,
+     "tn": 58,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "xxe",
+     "cwe": 611,
+     "covered": false,
+     "real_vulnerabilities": 8,
+     "false_positive_tests": 20,
+     "tp": 0,
+     "fp": 0,
+     "fn": 8,
+     "tn": 20,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    }
+   ],
+   "average_score_covered": 0.025641025641025647,
+   "average_score_all": 0.014652014652014655,
+   "test_cases": 1230,
+   "findings": 102,
+   "findings_in_test_cases": 97,
+   "findings_other_category": 0,
+   "findings_unlabelled_test_cases": 0,
+   "findings_outside_test_cases": 5
+  },
+  {
+   "engine": "semgrep",
+   "version": "1.182.1",
+   "findings_by_rule": {
+    "semgrep.pandaward-js-html-sink": 1,
+    "semgrep.pandaward-py-eval": 53,
+    "semgrep.pandaward-py-path-traversal": 19,
+    "semgrep.pandaward-py-shell": 14,
+    "semgrep.pandaward-py-unsafe-deserialization": 30
+   },
+   "categories": [
+    {
+     "category": "cmdi",
+     "cwe": 78,
+     "covered": true,
+     "rules": [
+      "semgrep.pandaward-py-shell"
+     ],
+     "real_vulnerabilities": 13,
+     "false_positive_tests": 7,
+     "tp": 7,
+     "fp": 7,
+     "fn": 6,
+     "tn": 0,
+     "tpr": 0.5384615384615384,
+     "fpr": 1,
+     "score": -0.46153846153846156
+    },
+    {
+     "category": "codeinj",
+     "cwe": 94,
+     "covered": true,
+     "rules": [
+      "semgrep.pandaward-py-eval"
+     ],
+     "real_vulnerabilities": 20,
+     "false_positive_tests": 33,
+     "tp": 20,
+     "fp": 33,
+     "fn": 0,
+     "tn": 0,
+     "tpr": 1,
+     "fpr": 1,
+     "score": 0
+    },
+    {
+     "category": "deserialization",
+     "cwe": 502,
+     "covered": true,
+     "rules": [
+      "semgrep.pandaward-py-unsafe-deserialization"
+     ],
+     "real_vulnerabilities": 18,
+     "false_positive_tests": 36,
+     "tp": 18,
+     "fp": 12,
+     "fn": 0,
+     "tn": 24,
+     "tpr": 1,
+     "fpr": 0.3333333333333333,
+     "score": 0.6666666666666667
+    },
+    {
+     "category": "hash",
+     "cwe": 328,
+     "covered": false,
+     "real_vulnerabilities": 71,
+     "false_positive_tests": 80,
+     "tp": 0,
+     "fp": 0,
+     "fn": 71,
+     "tn": 80,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "ldapi",
+     "cwe": 90,
+     "covered": false,
+     "real_vulnerabilities": 16,
+     "false_positive_tests": 13,
+     "tp": 0,
+     "fp": 0,
+     "fn": 16,
+     "tn": 13,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "pathtraver",
+     "cwe": 22,
+     "covered": true,
+     "rules": [
+      "semgrep.pandaward-py-path-traversal"
+     ],
+     "real_vulnerabilities": 65,
+     "false_positive_tests": 103,
+     "tp": 7,
+     "fp": 12,
+     "fn": 58,
+     "tn": 91,
+     "tpr": 0.1076923076923077,
+     "fpr": 0.11650485436893204,
+     "score": -0.008812546676624344
+    },
+    {
+     "category": "redirect",
+     "cwe": 601,
+     "covered": false,
+     "real_vulnerabilities": 13,
+     "false_positive_tests": 21,
+     "tp": 0,
+     "fp": 0,
+     "fn": 13,
+     "tn": 21,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "securecookie",
+     "cwe": 614,
+     "covered": false,
+     "real_vulnerabilities": 24,
+     "false_positive_tests": 15,
+     "tp": 0,
+     "fp": 0,
+     "fn": 24,
+     "tn": 15,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "sqli",
+     "cwe": 89,
+     "covered": true,
+     "rules": [
+      "semgrep.pandaward-py-sql-string"
+     ],
+     "real_vulnerabilities": 5,
+     "false_positive_tests": 11,
+     "tp": 0,
+     "fp": 0,
+     "fn": 5,
+     "tn": 11,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "trustbound",
+     "cwe": 501,
+     "covered": false,
+     "real_vulnerabilities": 18,
+     "false_positive_tests": 19,
+     "tp": 0,
+     "fp": 0,
+     "fn": 18,
+     "tn": 19,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "weakrand",
+     "cwe": 330,
+     "covered": false,
+     "real_vulnerabilities": 99,
+     "false_positive_tests": 227,
+     "tp": 0,
+     "fp": 0,
+     "fn": 99,
+     "tn": 227,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "xpathi",
+     "cwe": 643,
+     "covered": false,
+     "real_vulnerabilities": 51,
+     "false_positive_tests": 135,
+     "tp": 0,
+     "fp": 0,
+     "fn": 51,
+     "tn": 135,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "xss",
+     "cwe": 79,
+     "covered": false,
+     "real_vulnerabilities": 31,
+     "false_positive_tests": 58,
+     "tp": 0,
+     "fp": 0,
+     "fn": 31,
+     "tn": 58,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "xxe",
+     "cwe": 611,
+     "covered": false,
+     "real_vulnerabilities": 8,
+     "false_positive_tests": 20,
+     "tp": 0,
+     "fp": 0,
+     "fn": 8,
+     "tn": 20,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    }
+   ],
+   "average_score_covered": 0.039263131690316165,
+   "average_score_all": 0.014022547032255774,
+   "test_cases": 1230,
+   "findings": 117,
+   "findings_in_test_cases": 116,
+   "findings_other_category": 0,
+   "findings_unlabelled_test_cases": 0,
+   "findings_outside_test_cases": 1
+  },
+  {
+   "engine": "opengrep",
+   "version": "opengrep 1.33.1",
+   "findings_by_rule": {
+    "semgrep.pandaward-js-html-sink": 1,
+    "semgrep.pandaward-py-eval": 53,
+    "semgrep.pandaward-py-path-traversal": 19,
+    "semgrep.pandaward-py-shell": 14,
+    "semgrep.pandaward-py-unsafe-deserialization": 30
+   },
+   "categories": [
+    {
+     "category": "cmdi",
+     "cwe": 78,
+     "covered": true,
+     "rules": [
+      "semgrep.pandaward-py-shell"
+     ],
+     "real_vulnerabilities": 13,
+     "false_positive_tests": 7,
+     "tp": 7,
+     "fp": 7,
+     "fn": 6,
+     "tn": 0,
+     "tpr": 0.5384615384615384,
+     "fpr": 1,
+     "score": -0.46153846153846156
+    },
+    {
+     "category": "codeinj",
+     "cwe": 94,
+     "covered": true,
+     "rules": [
+      "semgrep.pandaward-py-eval"
+     ],
+     "real_vulnerabilities": 20,
+     "false_positive_tests": 33,
+     "tp": 20,
+     "fp": 33,
+     "fn": 0,
+     "tn": 0,
+     "tpr": 1,
+     "fpr": 1,
+     "score": 0
+    },
+    {
+     "category": "deserialization",
+     "cwe": 502,
+     "covered": true,
+     "rules": [
+      "semgrep.pandaward-py-unsafe-deserialization"
+     ],
+     "real_vulnerabilities": 18,
+     "false_positive_tests": 36,
+     "tp": 18,
+     "fp": 12,
+     "fn": 0,
+     "tn": 24,
+     "tpr": 1,
+     "fpr": 0.3333333333333333,
+     "score": 0.6666666666666667
+    },
+    {
+     "category": "hash",
+     "cwe": 328,
+     "covered": false,
+     "real_vulnerabilities": 71,
+     "false_positive_tests": 80,
+     "tp": 0,
+     "fp": 0,
+     "fn": 71,
+     "tn": 80,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "ldapi",
+     "cwe": 90,
+     "covered": false,
+     "real_vulnerabilities": 16,
+     "false_positive_tests": 13,
+     "tp": 0,
+     "fp": 0,
+     "fn": 16,
+     "tn": 13,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "pathtraver",
+     "cwe": 22,
+     "covered": true,
+     "rules": [
+      "semgrep.pandaward-py-path-traversal"
+     ],
+     "real_vulnerabilities": 65,
+     "false_positive_tests": 103,
+     "tp": 11,
+     "fp": 8,
+     "fn": 54,
+     "tn": 95,
+     "tpr": 0.16923076923076924,
+     "fpr": 0.07766990291262135,
+     "score": 0.09156086631814789
+    },
+    {
+     "category": "redirect",
+     "cwe": 601,
+     "covered": false,
+     "real_vulnerabilities": 13,
+     "false_positive_tests": 21,
+     "tp": 0,
+     "fp": 0,
+     "fn": 13,
+     "tn": 21,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "securecookie",
+     "cwe": 614,
+     "covered": false,
+     "real_vulnerabilities": 24,
+     "false_positive_tests": 15,
+     "tp": 0,
+     "fp": 0,
+     "fn": 24,
+     "tn": 15,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "sqli",
+     "cwe": 89,
+     "covered": true,
+     "rules": [
+      "semgrep.pandaward-py-sql-string"
+     ],
+     "real_vulnerabilities": 5,
+     "false_positive_tests": 11,
+     "tp": 0,
+     "fp": 0,
+     "fn": 5,
+     "tn": 11,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "trustbound",
+     "cwe": 501,
+     "covered": false,
+     "real_vulnerabilities": 18,
+     "false_positive_tests": 19,
+     "tp": 0,
+     "fp": 0,
+     "fn": 18,
+     "tn": 19,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "weakrand",
+     "cwe": 330,
+     "covered": false,
+     "real_vulnerabilities": 99,
+     "false_positive_tests": 227,
+     "tp": 0,
+     "fp": 0,
+     "fn": 99,
+     "tn": 227,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "xpathi",
+     "cwe": 643,
+     "covered": false,
+     "real_vulnerabilities": 51,
+     "false_positive_tests": 135,
+     "tp": 0,
+     "fp": 0,
+     "fn": 51,
+     "tn": 135,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "xss",
+     "cwe": 79,
+     "covered": false,
+     "real_vulnerabilities": 31,
+     "false_positive_tests": 58,
+     "tp": 0,
+     "fp": 0,
+     "fn": 31,
+     "tn": 58,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "xxe",
+     "cwe": 611,
+     "covered": false,
+     "real_vulnerabilities": 8,
+     "false_positive_tests": 20,
+     "tp": 0,
+     "fp": 0,
+     "fn": 8,
+     "tn": 20,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    }
+   ],
+   "average_score_covered": 0.05933781428927061,
+   "average_score_all": 0.021192076531882358,
+   "test_cases": 1230,
+   "findings": 117,
+   "findings_in_test_cases": 116,
+   "findings_other_category": 0,
+   "findings_unlabelled_test_cases": 0,
+   "findings_outside_test_cases": 1
+  },
+  {
+   "engine": "all",
+   "categories": [
+    {
+     "category": "cmdi",
+     "cwe": 78,
+     "covered": true,
+     "rules": [
+      "code.py-shell",
+      "semgrep.pandaward-py-shell"
+     ],
+     "real_vulnerabilities": 13,
+     "false_positive_tests": 7,
+     "tp": 7,
+     "fp": 7,
+     "fn": 6,
+     "tn": 0,
+     "tpr": 0.5384615384615384,
+     "fpr": 1,
+     "score": -0.46153846153846156
+    },
+    {
+     "category": "codeinj",
+     "cwe": 94,
+     "covered": true,
+     "rules": [
+      "code.py-eval",
+      "semgrep.pandaward-py-eval"
+     ],
+     "real_vulnerabilities": 20,
+     "false_positive_tests": 33,
+     "tp": 20,
+     "fp": 33,
+     "fn": 0,
+     "tn": 0,
+     "tpr": 1,
+     "fpr": 1,
+     "score": 0
+    },
+    {
+     "category": "deserialization",
+     "cwe": 502,
+     "covered": true,
+     "rules": [
+      "code.py-deserialize",
+      "semgrep.pandaward-py-unsafe-deserialization"
+     ],
+     "real_vulnerabilities": 18,
+     "false_positive_tests": 36,
+     "tp": 18,
+     "fp": 12,
+     "fn": 0,
+     "tn": 24,
+     "tpr": 1,
+     "fpr": 0.3333333333333333,
+     "score": 0.6666666666666667
+    },
+    {
+     "category": "hash",
+     "cwe": 328,
+     "covered": true,
+     "rules": [
+      "code.weak-hash-password"
+     ],
+     "real_vulnerabilities": 71,
+     "false_positive_tests": 80,
+     "tp": 0,
+     "fp": 0,
+     "fn": 71,
+     "tn": 80,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "ldapi",
+     "cwe": 90,
+     "covered": false,
+     "real_vulnerabilities": 16,
+     "false_positive_tests": 13,
+     "tp": 0,
+     "fp": 0,
+     "fn": 16,
+     "tn": 13,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "pathtraver",
+     "cwe": 22,
+     "covered": true,
+     "rules": [
+      "semgrep.pandaward-py-path-traversal"
+     ],
+     "real_vulnerabilities": 65,
+     "false_positive_tests": 103,
+     "tp": 11,
+     "fp": 12,
+     "fn": 54,
+     "tn": 91,
+     "tpr": 0.16923076923076924,
+     "fpr": 0.11650485436893204,
+     "score": 0.0527259148618372
+    },
+    {
+     "category": "redirect",
+     "cwe": 601,
+     "covered": false,
+     "real_vulnerabilities": 13,
+     "false_positive_tests": 21,
+     "tp": 0,
+     "fp": 0,
+     "fn": 13,
+     "tn": 21,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "securecookie",
+     "cwe": 614,
+     "covered": true,
+     "rules": [
+      "code.cookie-flags-off"
+     ],
+     "real_vulnerabilities": 24,
+     "false_positive_tests": 15,
+     "tp": 0,
+     "fp": 0,
+     "fn": 24,
+     "tn": 15,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "sqli",
+     "cwe": 89,
+     "covered": true,
+     "rules": [
+      "code.sql-concat",
+      "code.sql-template",
+      "code.sql-unsafe-raw",
+      "semgrep.pandaward-py-sql-string"
+     ],
+     "real_vulnerabilities": 5,
+     "false_positive_tests": 11,
+     "tp": 0,
+     "fp": 0,
+     "fn": 5,
+     "tn": 11,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "trustbound",
+     "cwe": 501,
+     "covered": false,
+     "real_vulnerabilities": 18,
+     "false_positive_tests": 19,
+     "tp": 0,
+     "fp": 0,
+     "fn": 18,
+     "tn": 19,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "weakrand",
+     "cwe": 330,
+     "covered": true,
+     "rules": [
+      "code.insecure-random"
+     ],
+     "real_vulnerabilities": 99,
+     "false_positive_tests": 227,
+     "tp": 0,
+     "fp": 0,
+     "fn": 99,
+     "tn": 227,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "xpathi",
+     "cwe": 643,
+     "covered": false,
+     "real_vulnerabilities": 51,
+     "false_positive_tests": 135,
+     "tp": 0,
+     "fp": 0,
+     "fn": 51,
+     "tn": 135,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "xss",
+     "cwe": 79,
+     "covered": true,
+     "rules": [
+      "code.html-sink"
+     ],
+     "real_vulnerabilities": 31,
+     "false_positive_tests": 58,
+     "tp": 0,
+     "fp": 0,
+     "fn": 31,
+     "tn": 58,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    },
+    {
+     "category": "xxe",
+     "cwe": 611,
+     "covered": false,
+     "real_vulnerabilities": 8,
+     "false_positive_tests": 20,
+     "tp": 0,
+     "fp": 0,
+     "fn": 8,
+     "tn": 20,
+     "tpr": 0,
+     "fpr": 0,
+     "score": 0
+    }
+   ],
+   "average_score_covered": 0.028650457776671374,
+   "average_score_all": 0.018418151427860168,
+   "test_cases": 1230,
+   "findings": 336,
+   "findings_in_test_cases": 329,
+   "findings_other_category": 0,
+   "findings_unlabelled_test_cases": 0,
+   "findings_outside_test_cases": 7
+  }
+ ]
+}

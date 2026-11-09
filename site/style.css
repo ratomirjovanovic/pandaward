@@ -56,6 +56,10 @@ header.top b { font-size: 17px; }
 header.top nav { margin-left: auto; display: flex; gap: 18px; font-size: 15px; }
 header.top nav a { color: var(--fg); text-decoration: none; }
 header.top nav a:hover { color: var(--accent); }
+header.top a.home { display: flex; align-items: center; gap: 12px; color: var(--fg); text-decoration: none; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+td small { color: var(--muted); }
+td.name { white-space: nowrap; }
 
 .hero { padding: 72px 0 48px; display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 48px; align-items: center; }
 .hero h1 { font-size: clamp(32px, 5vw, 52px); line-height: 1.08; margin: 0 0 18px; letter-spacing: -0.02em; }
