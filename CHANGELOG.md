@@ -8,6 +8,7 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 - Opengrep can run the Semgrep rules: `scan.semgrep_engine` picks `semgrep` or `opengrep`; without it Semgrep is used and Opengrep is the fallback. Opengrep runs with intra-file taint. On Windows the tool home gets its own `LOCALAPPDATA`, without which Opengrep crashes (#314).
 - `tools/owaspbench --engine builtin,semgrep,opengrep` measures the bundled Semgrep rules on both engines next to the built-in rules, with engine versions and the rule set hash; `docs/BENCHMARKS.md` has the new baseline (#314).
 - `tools/owaspbench --suite python` measures PandaWard on OWASP BenchmarkPython (1,230 test cases, 14 categories), fetched at a pinned commit at run time; `docs/BENCHMARKS.md` has the first Python baseline (#315).
+- `tools/cvebench` measures PandaWard on the OpenSSF CVE Benchmark: real CVEs in JavaScript and TypeScript projects, scored on the commit before and after each fix (detected, fix recognized, still flagged after the fix); `docs/BENCHMARKS.md` has the first JavaScript baseline (#316).
 
 ### Changed
 - In a git repository, directories git ignores and does not track are no longer scanned: the inventory line names them, results external scanners report there are dropped, and secrets gitleaks finds there stay listed as info. `inventory.include_ignored: true` scans them again (#312).
