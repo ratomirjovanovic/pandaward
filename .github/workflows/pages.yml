@@ -38,6 +38,8 @@ jobs:
       - name: Build site, demo and benchmark page
         env:
           GH_TOKEN: ${{ github.token }}
+          # The benchmarks run that triggered this build, if any (#353).
+          BENCH_RUN_ID: ${{ github.event.workflow_run.id }}
         run: bash site/build.sh
       - name: Check demo for leaked fixture secrets
         run: |
