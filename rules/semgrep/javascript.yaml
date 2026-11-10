@@ -10,10 +10,12 @@ rules:
       - pattern-either:
           - pattern: eval($X)
           - pattern: new Function(..., $X)
+          - pattern: Function(..., $X)
           - pattern: setTimeout($X, ...)
           - pattern: setInterval($X, ...)
       - pattern-not: eval("...")
       - pattern-not: new Function(..., "...")
+      - pattern-not: Function(..., "...")
       - pattern-not: setTimeout(function (...) {...}, ...)
       - pattern-not: setTimeout((...) => {...}, ...)
       - pattern-not: setTimeout((...) => $E, ...)
@@ -84,6 +86,49 @@ rules:
                       import * as $SH from 'shelljs';
                       ...
               - pattern: $SH.exec($CMD, ...)
+          # exec wrapped by util.promisify, and execa's shell helpers.
+          - patterns:
+              - pattern-either:
+                  - pattern-inside: |
+                      $P = promisify(exec);
+                      ...
+                  - pattern-inside: |
+                      $P = $U.promisify(exec);
+                      ...
+                  - pattern-inside: |
+                      $P = promisify($CP.exec);
+                      ...
+                  - pattern-inside: |
+                      $P = $U.promisify($CP.exec);
+                      ...
+                  - pattern-inside: |
+                      $P = promisify(require('child_process').exec);
+                      ...
+              - pattern: $P($CMD, ...)
+          - patterns:
+              - pattern-either:
+                  - pattern-inside: |
+                      $FN = require('execa').$M;
+                      ...
+                  - pattern-inside: |
+                      const {..., $M: $FN, ...} = require('execa');
+                      ...
+              - pattern: $FN($CMD, ...)
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(shell|shellSync|command|commandSync)$
+          - patterns:
+              - pattern-either:
+                  - pattern-inside: |
+                      $X = require('execa');
+                      ...
+                  - pattern-inside: |
+                      import $X from 'execa';
+                      ...
+              - pattern: $X.$M($CMD, ...)
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(shell|shellSync|command|commandSync)$
           - pattern: |
               $CP.spawn($CMD, $ARGS, {..., shell: true, ...})
           - pattern: |
@@ -441,3 +486,131 @@ rules:
               regex: (?i)^(.*\.)?\w*(escape|encode|sanitize|purify)\w*$
       - pattern: JSON.stringify(...)
       - pattern: encodeURIComponent(...)
+
+  - id: pandaward-js-error-to-html
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "An error is sent as the response body. Express sends a string as HTML, and error messages often repeat request input; send a fixed message or JSON."
+    metadata:
+      pandaward-control: H-001
+      cwe: "CWE-209: Generation of Error Message Containing Sensitive Information"
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              function ($ERR, ...) { ... }
+          - pattern-inside: |
+              ($ERR, ...) => { ... }
+          - pattern-inside: |
+              try { ... } catch ($ERR) { ... }
+      - metavariable-regex:
+          metavariable: $ERR
+          regex: ^(err|error|e|ex|exc)$
+      - pattern-either:
+          - pattern: $RES.send($ERR)
+          - pattern: $RES.status($C).send($ERR)
+          - pattern: $RES.end($ERR)
+          - pattern: $RES.send($ERR.message)
+          - pattern: $RES.status($C).send($ERR.message)
+          - pattern: $RES.end($ERR.message)
+          - pattern: "$RES.send($A ? $ERR : $B)"
+          - pattern: "$RES.status($C).send($A ? $ERR : $B)"
+      - metavariable-regex:
+          metavariable: $RES
+          regex: (?i)^(res|response|resp)$
+
+  - id: pandaward-js-incomplete-sanitization
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "This replace() escapes or removes only the first match, or removes a sequence a single pass can rebuild. Use a regular expression with the g flag, or a proper encoder."
+    metadata:
+      pandaward-control: D-006
+      cwe: "CWE-116: Improper Encoding or Escaping of Output"
+    pattern-either:
+      # A string pattern replaces only its first occurrence.
+      - patterns:
+          - pattern: $S.replace("$LIT", $R)
+          - metavariable-regex:
+              metavariable: $LIT
+              regex: ^(['"<>&`\\]|\\\\|/?\.\./?|/\.\./)$
+      # A regular expression of escape characters without the g flag.
+      - patterns:
+          - pattern: $S.replace($RE, $R)
+          - metavariable-regex:
+              metavariable: $RE
+              regex: ^/(\[[^\]\w\s]+\]|\(?\\?[^\w\s()|]\\?[^\w\s()|]?(\|\\?[^\w\s()|]\\?[^\w\s()|]?)+\)?|\\\\)/[imsuy]*$
+      # Removing a markup or traversal sequence in one pass: removing the
+      # inner match can join the remainder into a new one.
+      - patterns:
+          - pattern: $S.replace($RE, "")
+          - metavariable-regex:
+              metavariable: $RE
+              regex: ^/.*(<!--|<script|\\\.\\\.[\\/]).*/[a-z]*$
+
+  - id: pandaward-js-incomplete-url-scheme-check
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "The check rejects javascript: URLs but not data: or vbscript:, which also run script. Allow only http, https and mailto instead."
+    metadata:
+      pandaward-control: H-001
+      cwe: "CWE-184: Incomplete List of Disallowed Inputs"
+    patterns:
+      - pattern-either:
+          - pattern: $X.indexOf("$JS")
+          - pattern: $X.startsWith("$JS")
+          - pattern: $X.includes("$JS")
+      - metavariable-regex:
+          metavariable: $JS
+          regex: (?i)^javascript:?$
+      - pattern-not-inside: |
+          if (<... "data:" ...>) $S
+      - pattern-not-inside: |
+          return <... "data:" ...>;
+
+  - id: pandaward-js-open-redirect
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "The redirect target comes from the request, so a link to this site can send users anywhere (a URL starting with // or a scheme). Redirect only to relative paths you check, or to an allowlist."
+    metadata:
+      pandaward-control: D-006
+      cwe: "CWE-601: URL Redirection to Untrusted Site ('Open Redirect')"
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$F
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: (?i)^(req|request|ctx|ctx\.request|this\.request)$
+          - metavariable-regex:
+              metavariable: $F
+              regex: ^(query|body|params|url|originalUrl|path|headers)$
+          - pattern-not-inside: $REQ.$F(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.redirect($X)
+              - pattern: $RES.redirect($CODE, $X)
+              - pattern: $RES.location($X)
+          - metavariable-regex:
+              metavariable: $RES
+              regex: (?i)^(res|response|resp|ctx|this|ctx\.response|this\.response)$
+          - focus-metavariable: $X
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.setHeader("$H", $X)
+              - pattern: $RES.set("$H", $X)
+              - pattern: $RES.header("$H", $X)
+              - pattern: "$RES.writeHead($CODE, {..., $H: $X, ...})"
+          - metavariable-regex:
+              metavariable: $H
+              regex: (?i)^["']?location["']?$
+          - metavariable-regex:
+              metavariable: $RES
+              regex: (?i)^(res|response|resp|ctx|this|ctx\.response|this\.response)$
+          - focus-metavariable: $X
+    pattern-sanitizers:
+      - pattern: encodeURIComponent(...)
+      - patterns:
+          - pattern: $F(...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: (?i)^(.*\.)?\w*(allow|safe|valid|whitelist|sanitize)\w*$

@@ -18,7 +18,7 @@ The numbers below are guarded so they cannot drop unnoticed:
 | Rule fixtures (`ruleid:` and `ok:` per bundled Semgrep rule) | every pull request | a rule lacks either kind of fixture |
 | Fixtures on Semgrep and Opengrep (`real-tools` job) | every pull request | either engine disagrees with a fixture annotation |
 | OWASP Java and Python on all engines (`benchmarks` workflow) | pull requests that touch rules, adapters, inventory or the benchmark tools; weekly | any average or per-category score drops below `tools/benchgate/baseline.json` |
-| OpenSSF CVE Benchmark on all engines (`benchmarks` workflow) | weekly and on demand (about 75 minutes on GitHub Actions) | fewer CVEs detected or fewer fixes recognized than the baseline |
+| OpenSSF CVE Benchmark on all engines (`benchmarks` workflow) | weekly and on demand (about 20 minutes on GitHub Actions, in eight parallel shards merged by `tools/cvebench merge`) | fewer CVEs detected or fewer fixes recognized than the baseline |
 
 The baseline is committed. A change that improves a score raises it in the same pull request with `go run ./tools/benchgate --update --owasp owasp-java.json --owasp owasp-python.json` (and `--cve cve.json`), using the JSON from the workflow's artifacts. A score may only go down through the same explicit change, with the reason in the pull request.
 
@@ -230,6 +230,25 @@ Measured with a full `benchmarks` run on the branch ([run 42848842483](https://g
 | Semgrep and Opengrep, with these rules | 69 | 32 | 37 |
 
 The nine new detections are CVE-2017-16043, CVE-2018-14040, CVE-2018-14042, CVE-2018-20676, CVE-2018-20677, CVE-2019-14862, CVE-2019-15482, CVE-2020-4051 and CVE-2020-7656; no CVE detected before was lost and the OWASP scores did not change. Four of the nine are still flagged after their fix: the fix escapes the value (`escapedName`) or guards the call (`options.target === DEFAULTS.target`), which a pattern rule cannot tell apart. On seven real application repositories the rules report nothing; they do not use jQuery, so this says little about precision on jQuery code.
+
+### More call shapes
+
+The eval rule also reports `Function(..., body)` without `new`; the shell rule reports `exec` wrapped by `util.promisify` and execa's `shell` and `command` helpers; `pandaward-js-error-to-html` reports an error parameter or caught error (or its `message`) sent as the response body, which Express sends as HTML.
+
+Measured with a full `benchmarks` run on the branch ([run 42870636199](https://github.com/ratomirjovanovic/pandaward/actions/runs/42870636199)) against main at `597264a`: Semgrep and Opengrep detect 66 CVEs instead of 60 (CVE-2017-16226, CVE-2019-10759, CVE-2019-10776, CVE-2019-15478, CVE-2019-15479, CVE-2019-5414) and recognize 28 fixes instead of 27, with no CVE lost and the OWASP scores unchanged. Five of the six are still flagged after the fix. On seven real application repositories the rules report two `Function()` calls, both in one test file.
+
+### Escaping, URL scheme and redirect rules
+
+`pandaward-js-incomplete-sanitization` reports a `replace()` that escapes only the first match (a string pattern of one escape character, or a regular expression of escape characters without the g flag) or removes `<!--`, `<script` or `../` in a single pass. `pandaward-js-incomplete-url-scheme-check` reports a `javascript:` check with no `data:` check in the same condition. `pandaward-js-open-redirect` follows request data to `res.redirect`, `ctx.redirect`, `res.location` and a `Location` header.
+
+Measured with a full `benchmarks` run on the branch ([run 42866055034](https://github.com/ratomirjovanovic/pandaward/actions/runs/42866055034)) against main at `597264a`, before the jQuery rules:
+
+| Engine | Detected | Fix recognized | Still flagged after fix |
+|---|---|---|---|
+| Semgrep and Opengrep, before | 60 | 27 | 33 |
+| Semgrep and Opengrep, with these rules | 69 | 32 | 37 |
+
+The nine new detections are CVE-2017-1000427, CVE-2017-16082, CVE-2018-11615, CVE-2018-3743, CVE-2019-10775, CVE-2019-10785, CVE-2019-16763, CVE-2019-5423 and CVE-2019-9844; no CVE detected before was lost and the OWASP scores did not change. On seven real application repositories the rules report two lines, both real instances of the pattern: a single-character `replace("<", "&lt;")` in a test and a one-pass `<script>` removal.
 
 ### Built-in ReDoS check
 

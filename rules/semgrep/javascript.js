@@ -296,3 +296,72 @@ function copy(target, source) {
   }
   return target;
 }
+
+const { promisify } = require('util');
+const execPromise = promisify(exec);
+const execaShell = require('execa').shell;
+
+async function more(command, port, src) {
+  // ruleid: pandaward-js-shell-exec
+  await execPromise(command);
+  // ok: pandaward-js-shell-exec
+  await execPromise('git status');
+  // ruleid: pandaward-js-shell-exec
+  await execaShell(`lsof -i tcp:${port}`);
+  // ruleid: pandaward-js-eval
+  const f = Function('ctx', src);
+  // ok: pandaward-js-eval
+  const g = Function('return this')();
+  return [f, g];
+}
+
+app.get('/dashboard/:name', (req, res) => {
+  load(req.params.name, (err, body) => {
+    // ruleid: pandaward-js-error-to-html
+    if (err) return res.status(400).send(err);
+    // ok: pandaward-js-error-to-html
+    res.json({ body });
+  });
+});
+
+function escapeXml(str, pattern, text) {
+  // ruleid: pandaward-js-incomplete-sanitization
+  str = str.replace("&", "&amp;");
+  // ruleid: pandaward-js-incomplete-sanitization
+  const q = str.replace("'", "\'");
+  // ruleid: pandaward-js-incomplete-sanitization
+  const re = pattern.replace(/(#|\+)/, ".+");
+  // ruleid: pandaward-js-incomplete-sanitization
+  const clean = text.replace(/<!--|-->/g, "");
+  // ok: pandaward-js-incomplete-sanitization
+  str = str.replace(/&/g, "&amp;");
+  // ok: pandaward-js-incomplete-sanitization
+  const name = pattern.replace("{name}", text);
+  // ok: pandaward-js-incomplete-sanitization
+  const trimmed = text.replace(/^\s+/, "");
+  return [str, q, re, clean, name, trimmed];
+}
+
+function safeUrl(url) {
+  // ruleid: pandaward-js-incomplete-url-scheme-check
+  if (url.trim().toLowerCase().indexOf('javascript:') === 0) {
+    return '#';
+  }
+  const prot = url.toLowerCase();
+  // ok: pandaward-js-incomplete-url-scheme-check
+  if (prot.indexOf('javascript:') === 0 || prot.indexOf('vbscript:') === 0 || prot.indexOf('data:') === 0) {
+    return '#';
+  }
+  return url;
+}
+
+app.get('/dir', (req, res) => {
+  // ruleid: pandaward-js-open-redirect
+  res.redirect(req.url + '/');
+  // ruleid: pandaward-js-open-redirect
+  res.setHeader('Location', req.query.next);
+  // ok: pandaward-js-open-redirect
+  res.redirect('/login');
+  // ok: pandaward-js-open-redirect
+  res.redirect('/search?q=' + encodeURIComponent(req.query.q));
+});
