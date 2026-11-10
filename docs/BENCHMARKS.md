@@ -168,6 +168,7 @@ sh tools/cvebench/run.sh --engine builtin --json                     # JSON
 - **CWE match**: one of those findings carries one of the CVE's CWEs;
 - **fix recognized**: a detecting rule reports fewer findings in the vulnerable files after the fix. Otherwise the CVE is **still flagged after the fix**, the fixed-commit false positive;
 - **unavailable**: a commit could not be fetched or checked out (repository gone). Such CVEs are not scored.
+- **PandaWard**: when the built-in engine and Semgrep or Opengrep are measured together, the built-in findings and the Semgrep findings (Opengrep's when Semgrep was not measured) are scored as one engine, `pandaward`, as a scan runs both. A CVE counts once when either finds it; the fix is recognized when one of the detecting rules reports fewer findings after it.
 
 Each CVE's result is written to a journal in the work directory as soon as it is measured, so an interrupted run continues where it stopped.
 

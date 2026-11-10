@@ -81,3 +81,35 @@ func TestEngineVersion(t *testing.T) {
 		}
 	}
 }
+
+// The combined PandaWard row comes first in the CVE table and in the
+// history; an older snapshot without it shows "-" in that column.
+func TestRenderCombinedCVE(t *testing.T) {
+	cve, err := parseCVE([]byte(`{"benchmark_commit":"91c59fd5","engines":[` +
+		`{"engine":"pandaward","version":"built-in + semgrep","scored":219,"detected":88,"fix_recognized":45,"detection_rate":0.4},` +
+		`{"engine":"builtin","version":"dev","scored":219,"detected":45,"fix_recognized":28,"detection_rate":0.2}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	old, err := parseCVE([]byte(`{"engines":[{"engine":"builtin","scored":219,"detected":23}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	snaps := []Snapshot{
+		{Meta: Meta{Label: "main", Date: "2026-11-10", URL: "https://example.invalid/new"}, CVE: cve},
+		{Meta: Meta{Label: "main", Date: "2026-11-09", URL: "https://example.invalid/old"}, CVE: old},
+	}
+	var b bytes.Buffer
+	if err := Render(&b, snaps); err != nil {
+		t.Fatal(err)
+	}
+	html := b.String()
+	for _, want := range []string{"PandaWard <small>built-in &#43; semgrep</small>", "<b>88</b> of 219", ">88/219<", ">-<", ">23/219<"} {
+		if !strings.Contains(html, want) {
+			t.Errorf("page lacks %q", want)
+		}
+	}
+	if strings.Index(html, "PandaWard <small>") > strings.Index(html, "Built-in rules") {
+		t.Error("PandaWard row is not first")
+	}
+}

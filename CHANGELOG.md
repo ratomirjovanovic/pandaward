@@ -13,6 +13,7 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 - Benchmark quality gates: the `benchmarks` workflow measures the OWASP Java and Python suites on every engine for pull requests that touch rules or engines, and the CVE benchmark weekly, and fails when a score drops below `tools/benchgate/baseline.json`. Rule fixtures run on Opengrep as well as Semgrep (#317).
 - A benchmark page on pandaward.dev shows the latest results and the history per release, with links to the raw results and the commands to reproduce them. Each release gets `owasp-java.json`, `owasp-python.json` and `cve.json` attached (#318).
 - pandaward.dev/benchmarks also shows the latest successful weekly or manual benchmark run of main, and is rebuilt when such a run finishes, so rule improvements appear before the next release (#335).
+- `tools/cvebench` scores PandaWard as a whole, `pandaward`: the built-in rules plus Semgrep, as a scan runs them. pandaward.dev shows it first in the CVE table and the history (#341).
 
 ### Changed
 - The CVE benchmark baseline is raised to the measurement of main after #330 and #332: built-in rules 45 CVEs detected and 28 fixes recognized, Semgrep and Opengrep 60 and 27, up from 23 and 10, and 13 and 6 (#339).
