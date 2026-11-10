@@ -218,6 +218,19 @@ PandaWard finds about one real JavaScript CVE in five with its built-in rules, a
 
 Next: count a CVE once for PandaWard as a whole (built-in rules plus Semgrep, as a scan runs them), sanitizers for the path, shell and HTML rules so fixes are recognized, and rules for incomplete escaping, URL scheme checks and open redirects.
 
+### jQuery cross-site scripting rules
+
+`pandaward-js-jquery-html` reports a non-constant value passed to jQuery's `.html()`, markup built by concatenation and passed to `$()`, `.append()` and the other insertion methods, `document.execCommand('insertHTML', ...)` and `document.createElement` with concatenation. An element built from a bare tag name (`$('<' + tag + '/>')`) holds no text and is not reported. `pandaward-js-jquery-plugin-option` reports a plugin option (`this.options.x`, `this._config.x`) passed to `$()` or to an insertion method, where jQuery parses a string that starts with `<` as HTML; the `template` option is markup by design and is not reported.
+
+Measured with a full `benchmarks` run on the branch ([run 42848842483](https://github.com/ratomirjovanovic/pandaward/actions/runs/42848842483)) against main at `597264a` ([run 42848766043](https://github.com/ratomirjovanovic/pandaward/actions/runs/42848766043)):
+
+| Engine | Detected | Fix recognized | Still flagged after fix |
+|---|---|---|---|
+| Semgrep and Opengrep, before | 60 | 27 | 33 |
+| Semgrep and Opengrep, with these rules | 69 | 32 | 37 |
+
+The nine new detections are CVE-2017-16043, CVE-2018-14040, CVE-2018-14042, CVE-2018-20676, CVE-2018-20677, CVE-2019-14862, CVE-2019-15482, CVE-2020-4051 and CVE-2020-7656; no CVE detected before was lost and the OWASP scores did not change. Four of the nine are still flagged after their fix: the fix escapes the value (`escapedName`) or guards the call (`options.target === DEFAULTS.target`), which a pattern rule cannot tell apart. On seven real application repositories the rules report nothing; they do not use jQuery, so this says little about precision on jQuery code.
+
 ### Built-in ReDoS check
 
 Control D-007 analyses every regex literal and every string passed to `RegExp(...)` in JavaScript and TypeScript files. The pattern becomes its position automaton; for each character the check looks for a repetition that can match a run of it in two ways (exponential, as in `^(a+)+$`) or for two repetitions over it in sequence, counting the implicit leading loop of an unanchored search (polynomial, as in `\s+$`), followed by a way for the match to fail. Exponential cases are suspected findings (`code.js-redos`). Polynomial cases are listed as info (`code.js-redos-polynomial`) and do not fail the control: they matter only when long input from outside reaches the pattern, which the check does not follow.

@@ -6,12 +6,12 @@
       "fix_recognized": 28
     },
     "cve/opengrep": {
-      "detected": 60,
-      "fix_recognized": 27
+      "detected": 69,
+      "fix_recognized": 32
     },
     "cve/semgrep": {
-      "detected": 60,
-      "fix_recognized": 27
+      "detected": 69,
+      "fix_recognized": 32
     },
     "owasp/java/all": {
       "average_score_covered": 0.4858758800793883,
