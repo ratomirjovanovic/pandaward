@@ -1,5 +1,6 @@
 # Taint rules share one set of sources: the data of an incoming Flask or
-# Django request. request.path is not a source: inside a view it can only
+# Django request, and the text a language model returns, which follows
+# whatever instructions reached the model. request.path is not a source: inside a view it can only
 # hold what the route pattern lets through, and its variable parts arrive
 # as view arguments.
 rules:
@@ -27,6 +28,11 @@ rules:
               - pattern: $REQ.COOKIES
               - pattern: $REQ.META
               - pattern: $REQ.body
+      - pattern-either:
+          - pattern: $COMPLETION.choices[$I].message.content
+          - pattern: $COMPLETION.choices[$I].text
+          - pattern: $RESPONSE.output_text
+          - pattern: $MESSAGE.content[$I].text
     pattern-propagators: &propagate
       # Taint moves into a list, set, dict or config object through these calls.
       - pattern: $TO.append($FROM)

@@ -102,7 +102,7 @@ The [OWASP Benchmark for Python](https://github.com/OWASP-Benchmark/BenchmarkPyt
 |---|---|
 | Benchmark | OWASP BenchmarkPython, commit `f1291485808b66e20ddb6b01b10dc71b3df8c8ba`, expected results 0.1 |
 | PandaWard | source build of the branch of #326 |
-| Engines | built-in rules; Semgrep 1.182.1 and Opengrep 1.33.1 with the bundled rule set `deb166b2074f9c1a...` |
+| Engines | built-in rules; Semgrep 1.182.1 and Opengrep 1.33.1 with the bundled rule set `80c6c9438d2ad9f8...` |
 | Date | 2026-11-10 |
 
 ### Results

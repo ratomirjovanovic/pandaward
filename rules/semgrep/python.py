@@ -33,6 +33,15 @@ def evaluate():
     return "done"
 
 
+def run_tool_call(client):
+    completion = client.chat.completions.create(model="m", messages=[])
+    # ruleid: pandaward-py-eval
+    eval(completion.choices[0].message.content)
+    message = client.messages.create(model="m", max_tokens=100, messages=[])
+    # ruleid: pandaward-py-shell
+    subprocess.run(message.content[0].text, shell=True)
+
+
 @app.route("/shell")
 def shell():
     name = request.args.get("name")
