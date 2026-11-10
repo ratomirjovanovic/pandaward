@@ -1,6 +1,6 @@
 # Benchmarks
 
-Current and past results per release are on [pandaward.dev/benchmarks](https://pandaward.dev/benchmarks/), with links to the raw JSON of each measurement. This page explains the method.
+Current and past results are on [pandaward.dev/benchmarks](https://pandaward.dev/benchmarks/), with links to the raw JSON of each measurement: the results attached to each release, and the latest successful weekly or manual `benchmarks` run on main, which rebuilds the page when it finishes. This page explains the method.
 
 PandaWard has two kinds of measurement:
 
