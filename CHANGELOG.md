@@ -26,6 +26,7 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 - In a git repository, directories git ignores and does not track are no longer scanned: the inventory line names them, results external scanners report there are dropped, and secrets gitleaks finds there stay listed as info. `inventory.include_ignored: true` scans them again (#312).
 
 ### Fixed
+- pandaward.dev/benchmarks published an older run of main right after a new one succeeded: the rebuild now takes the run that triggered it, and otherwise the newest successful run from the unfiltered listing (#353).
 - The bundled JavaScript SQL rule no longer reports constants and numbers in template literals on Opengrep, which binds an interpolation with its `${...}` (#317).
 - In Go files, a rule match inside a string literal is data: inside a `regexp` pattern it is dropped, inside other strings it is listed as info. Go SQL built only from literals and constants is no longer reported (#306).
 - A-003 no longer compares routes from test and fixture files with the OpenAPI contract, so test servers do not raise `inventory.undeclared-route` findings or keep A-003 from passing (#310).
