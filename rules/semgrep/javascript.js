@@ -98,6 +98,49 @@ function render(el, msg) {
   el.insertAdjacentHTML("beforeend", LOGO_SVG + msg);
 }
 
+function topic($el, data, tag) {
+  // ruleid: pandaward-js-jquery-html
+  $el.find(".topic").html(data.topic);
+  // ok: pandaward-js-jquery-html
+  $el.html("<b>static</b>");
+  // ok: pandaward-js-jquery-html
+  $el.text(data.topic);
+  // ruleid: pandaward-js-jquery-html
+  const $msg = $("<div>" + data.msg + "</div>");
+  // ruleid: pandaward-js-jquery-html
+  $el.append('<p class="note">' + data.note + '</p>');
+  // An element built from a tag name holds no text.
+  // ok: pandaward-js-jquery-html
+  const $list = $('<' + tag + '/>');
+  // ok: pandaward-js-jquery-html
+  $("<div></div>").text(data.msg);
+  // ruleid: pandaward-js-jquery-html
+  document.execCommand("insertHTML", false, data.paste);
+  // ok: pandaward-js-jquery-html
+  document.execCommand("bold", false, null);
+  // ruleid: pandaward-js-jquery-html
+  document.createElement("<input name='" + data.name + "'/>");
+  // ok: pandaward-js-jquery-html
+  document.createElement("input");
+}
+
+function Tooltip(element, options) {
+  this.options = options;
+  // ruleid: pandaward-js-jquery-plugin-option
+  this.$target = $(this.options.target);
+  // ruleid: pandaward-js-jquery-plugin-option
+  this.$viewport = $(typeof this.options.viewport === 'function' ? this.options.viewport.call(this) : this.options.viewport);
+  // ruleid: pandaward-js-jquery-plugin-option
+  this.$tip.appendTo(this.options.container);
+  // ok: pandaward-js-jquery-plugin-option
+  this.$tip.appendTo($(document).find(this.options.container));
+  // ok: pandaward-js-jquery-plugin-option
+  this.$parent = $(document).find(this.options.parent);
+  // The template option is markup by design.
+  // ok: pandaward-js-jquery-plugin-option
+  this.$tip = $(this.options.template);
+}
+
 function auth(token, key) {
   // ruleid: pandaward-js-jwt-none-alg
   jwt.verify(token, key, { algorithms: ['HS256', 'none'] });

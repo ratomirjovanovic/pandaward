@@ -144,3 +144,28 @@ func TestJournal(t *testing.T) {
 		t.Fatal(safeName("0.2.15-dev+abc/x"))
 	}
 }
+
+func TestCombined(t *testing.T) {
+	for sel, want := range map[string]string{
+		"builtin,semgrep,opengrep": "semgrep",
+		"builtin,opengrep":         "opengrep",
+		"semgrep,opengrep":         "",
+		"builtin":                  "",
+	} {
+		if got := combinedSemgrep(strings.Split(sel, ",")); got != want {
+			t.Errorf("%s = %q, want %q", sel, got, want)
+		}
+	}
+	// The built-in rules find the CVE and Semgrep does not: PandaWard does.
+	c := cve(t)
+	builtin := []engines.Finding{{Rule: "code.html-sink", File: "lib/render.js", Line: 42, EndLine: 42}}
+	other := []engines.Finding{{Rule: "semgrep.pandaward-js-eval", File: "lib/render.js", Line: 7, EndLine: 7}}
+	in := merge(builtin, other)
+	if len(in) != 2 || len(builtin) != 1 {
+		t.Fatalf("merge = %+v", in)
+	}
+	o := Score(c, Combined, in, merge(nil, other))
+	if !o.Detected || !o.FixRecognized || o.Engine != Combined || strings.Join(o.Rules, ",") != "code.html-sink" {
+		t.Fatalf("combined %+v", o)
+	}
+}

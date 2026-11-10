@@ -185,6 +185,71 @@ rules:
           metavariable: $X
           regex: ^(?![A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*$)
 
+  - id: pandaward-js-jquery-html
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: A non-constant value is passed to a jQuery method that parses HTML. Escape it, or use .text() or $('<tag>').text(value).
+    metadata:
+      pandaward-control: H-001
+      cwe: "CWE-79: Improper Neutralization of Input During Web Page Generation"
+    patterns:
+      - pattern-either:
+          - patterns:
+              - pattern: $EL.html($X)
+              - pattern-not: $EL.html("...")
+              - pattern-not: $EL.html($A.html())
+              - pattern-not: $EL.html($A.text())
+              - metavariable-regex:
+                  metavariable: $X
+                  regex: ^(?![A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*$)(?!\$\w*$)(?!\$\()
+          - patterns:
+              - pattern-either:
+                  - pattern: $($A + $B)
+                  - pattern: jQuery($A + $B)
+                  - pattern: $EL.append($A + $B)
+                  - pattern: $EL.prepend($A + $B)
+                  - pattern: $EL.after($A + $B)
+                  - pattern: $EL.before($A + $B)
+                  - pattern: $EL.replaceWith($A + $B)
+              - metavariable-regex:
+                  metavariable: $A
+                  # A bare '<' + tagName builds an element from a tag name,
+                  # not markup with text in it.
+                  regex: ^["'`]\s*<(?!["'`]\s*\+)
+          - patterns:
+              - pattern-either:
+                  - pattern: $DOC.execCommand("$CMD", $B, $X)
+              - metavariable-regex:
+                  metavariable: $CMD
+                  regex: (?i)^inserthtml$
+              - pattern-not: $DOC.execCommand("$CMD", $B, "...")
+          - patterns:
+              - pattern: $DOC.createElement($A + $B)
+
+  - id: pandaward-js-jquery-plugin-option
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: A plugin option is passed to jQuery, which parses a string that starts with '<' as HTML. Look it up with $(document).find(option) instead.
+    metadata:
+      pandaward-control: H-001
+      cwe: "CWE-79: Improper Neutralization of Input During Web Page Generation"
+    patterns:
+      - pattern-either:
+          - pattern: $(<... this.$OPTS.$P ...>)
+          - pattern: jQuery(<... this.$OPTS.$P ...>)
+          - patterns:
+              - pattern: $EL.$M(this.$OPTS.$P)
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(appendTo|prependTo|insertAfter|insertBefore|replaceAll|wrap|wrapAll|wrapInner|append|prepend|after|before|html|replaceWith)$
+      - metavariable-regex:
+          metavariable: $OPTS
+          regex: ^_?(options|opts|config|settings)$
+      # The template option is markup by design.
+      - metavariable-regex:
+          metavariable: $P
+          regex: ^(?!template$)
+
   - id: pandaward-js-jwt-none-alg
     languages: [javascript, typescript]
     severity: ERROR

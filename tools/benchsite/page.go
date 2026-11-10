@@ -45,7 +45,7 @@ const page = `<!doctype html>
   {{with .Latest.CVE}}
   <section>
     <h2>OpenSSF CVE Benchmark (JavaScript and TypeScript)</h2>
-    <p class="sub">{{.Scored}} real CVEs, each checked at the commit before and after its fix{{if .Unavailable}}; {{.Unavailable}} unavailable (repository gone){{end}}. Detected: a finding on a labelled vulnerable line. Fix recognized: that rule reports fewer findings in the file after the fix. Benchmark commit <code>{{short .Commit}}</code>{{if .Asset}}, <a href="{{.Asset}}">raw results</a>{{end}}.</p>
+    <p class="sub">{{.Scored}} real CVEs, each checked at the commit before and after its fix{{if .Unavailable}}; {{.Unavailable}} unavailable (repository gone){{end}}. Detected: a finding on a labelled vulnerable line. Fix recognized: that rule reports fewer findings in the file after the fix. PandaWard counts a CVE once when the built-in rules or the Semgrep rules find it, as a scan runs both. Benchmark commit <code>{{short .Commit}}</code>{{if .Asset}}, <a href="{{.Asset}}">raw results</a>{{end}}.</p>
     <div class="tablewrap"><table>
       <tr><th>Engine</th><th class="num">Detected</th><th class="num">Rate</th><th class="num">CWE match</th><th class="num">Fix recognized</th><th class="num">Still flagged after fix</th></tr>
       {{range .Engines}}
@@ -60,13 +60,13 @@ const page = `<!doctype html>
     <h2>History</h2>
     <p class="sub">Average score over covered categories for the OWASP suites, CVEs detected for the CVE benchmark. Each row links to the release or commit it was measured on. A pull request that lowers any of these numbers fails CI.</p>
     <div class="tablewrap"><table>
-      <tr><th rowspan="2">Measured on</th><th colspan="3">Java</th><th colspan="3">Python</th><th colspan="3">JS/TS CVEs</th></tr>
-      <tr>{{range engines}}<th class="num">{{.}}</th>{{end}}{{range engines}}<th class="num">{{.}}</th>{{end}}{{range engines}}<th class="num">{{.}}</th>{{end}}</tr>
+      <tr><th rowspan="2">Measured on</th><th colspan="3">Java</th><th colspan="3">Python</th><th colspan="4">JS/TS CVEs</th></tr>
+      <tr>{{range engines}}<th class="num">{{.}}</th>{{end}}{{range engines}}<th class="num">{{.}}</th>{{end}}{{range cveengines}}<th class="num">{{.}}</th>{{end}}</tr>
       {{range .History}}{{$h := .}}
       <tr><td><a href="{{.URL}}">{{.Label}}</a><br><small>{{.Date}}</small></td>
         {{$j := suite $h "java"}}{{range engines}}<td class="num">{{with eng $j .}}{{score .AverageCovered}}{{else}}-{{end}}</td>{{end}}
         {{$p := suite $h "python"}}{{range engines}}<td class="num">{{with eng $p .}}{{score .AverageCovered}}{{else}}-{{end}}</td>{{end}}
-        {{range engines}}<td class="num">{{with cveeng $h.CVE .}}{{.Detected}}/{{.Scored}}{{else}}-{{end}}</td>{{end}}
+        {{range cveengines}}<td class="num">{{with cveeng $h.CVE .}}{{.Detected}}/{{.Scored}}{{else}}-{{end}}</td>{{end}}
       </tr>
       {{end}}
     </table></div>
