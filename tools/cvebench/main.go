@@ -132,6 +132,10 @@ func measure(ctx context.Context, bench, work string, selected []string, only st
 	defer jf.Close()
 	out := &Output{Benchmark: "OpenSSF CVE Benchmark", BenchmarkCommit: gitHead(bench), PandawardVersion: version.Version, SemgrepRulesHash: hash, CVEs: len(cves), SkippedEntries: skipped}
 	sums := map[string]*Summary{}
+	if sg := combinedSemgrep(selected); sg != "" {
+		sums[Combined] = &Summary{Engine: Combined, Version: "built-in + " + sg}
+		out.Engines = append(out.Engines, sums[Combined])
+	}
 	for _, e := range selected {
 		sums[e] = &Summary{Engine: e}
 		out.Engines = append(out.Engines, sums[e])
@@ -141,15 +145,21 @@ func measure(ctx context.Context, bench, work string, selected []string, only st
 	}
 	var mu sync.Mutex
 	var firstErr error
+	prog := newProgress(len(cves))
 	sem := make(chan struct{}, jobs)
 	var wg sync.WaitGroup
-	for i, c := range cves {
+	for _, c := range cves {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(i int, c CVE) {
+		go func(c CVE) {
 			defer wg.Done()
 			defer func() { <-sem }()
 			rec, ok := done[c.ID]
+			// A journal entry written before the combined score existed is
+			// measured again rather than counted without it.
+			if ok && !rec.Unavailable && combinedSemgrep(selected) != "" && !hasEngine(rec.Outcomes, Combined) && rec.NotRun[Combined] == "" {
+				ok = false
+			}
 			var err error
 			if !ok {
 				rec = record{CVE: c.ID}
@@ -160,7 +170,7 @@ func measure(ctx context.Context, bench, work string, selected []string, only st
 			}
 			mu.Lock()
 			defer mu.Unlock()
-			fmt.Fprintf(os.Stderr, "[%d/%d] %s", i+1, len(cves), c.ID)
+			fmt.Fprintf(os.Stderr, "%s %s", prog.next(!ok), c.ID)
 			if err != nil {
 				if firstErr == nil {
 					firstErr = fmt.Errorf("%s: %w", c.ID, err)
@@ -192,7 +202,7 @@ func measure(ctx context.Context, bench, work string, selected []string, only st
 			for _, o := range rec.Outcomes {
 				sums[o.Engine].Add(o)
 			}
-		}(i, c)
+		}(c)
 	}
 	wg.Wait()
 	if firstErr != nil {
@@ -280,6 +290,7 @@ func measureCVE(ctx context.Context, c CVE, work string, selected []string) ([]O
 	}
 	var outcomes []Outcome
 	notRun, versions := map[string]string{}, map[string]string{}
+	pre1, post1 := map[string][]engines.Finding{}, map[string][]engines.Finding{}
 	for _, e := range selected {
 		rp, err := engines.Measure(ctx, invPre, e)
 		if err != nil {
@@ -294,9 +305,59 @@ func measureCVE(ctx context.Context, c CVE, work string, selected []string) ([]O
 		if err != nil {
 			return nil, nil, nil, err
 		}
+		pre1[e], post1[e] = rp.Findings, ra.Findings
 		outcomes = append(outcomes, Score(c, e, rp.Findings, ra.Findings))
 	}
+	if sg := combinedSemgrep(selected); sg != "" {
+		_, okB := pre1["builtin"]
+		_, okS := pre1[sg]
+		if okB && okS {
+			outcomes = append(outcomes, Score(c, Combined, merge(pre1["builtin"], pre1[sg]), merge(post1["builtin"], post1[sg])))
+		} else {
+			notRun[Combined] = "needs the built-in engine and " + sg
+		}
+	}
 	return outcomes, notRun, versions, nil
+}
+
+// Combined is the engine name of PandaWard as a whole: the built-in rules
+// plus the Semgrep rules, as a scan runs them. JavaScript findings of the
+// built-in rules are not superseded by Semgrep, so both count.
+const Combined = "pandaward"
+
+// merge returns the findings of two engines as one list. Rule ids of the
+// built-in rules (code.*) and of Semgrep (semgrep.*) never collide, so a
+// fix is still judged per rule.
+func merge(a, b []engines.Finding) []engines.Finding {
+	return append(append(make([]engines.Finding, 0, len(a)+len(b)), a...), b...)
+}
+
+func hasEngine(outs []Outcome, engine string) bool {
+	for _, o := range outs {
+		if o.Engine == engine {
+			return true
+		}
+	}
+	return false
+}
+
+// combinedSemgrep returns the Semgrep engine the combined score uses:
+// semgrep, the scan's default, or opengrep when only that was selected; ""
+// when the built-in engine or both Semgrep engines are missing.
+func combinedSemgrep(selected []string) string {
+	has := map[string]bool{}
+	for _, e := range selected {
+		has[e] = true
+	}
+	switch {
+	case !has["builtin"]:
+		return ""
+	case has["semgrep"]:
+		return "semgrep"
+	case has["opengrep"]:
+		return "opengrep"
+	}
+	return ""
 }
 
 // checkout fetches one commit of a repository into dir, or reuses dir when

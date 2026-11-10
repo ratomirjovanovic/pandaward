@@ -148,6 +148,48 @@ for rel in releases:
     meta = {"label": rel["tag_name"].lstrip("v"), "date": rel["published_at"][:10], "url": rel["html_url"], "assets": assets}
     (d / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
 PY
+# The latest successful benchmarks run on main, started by the weekly schedule
+# or by hand, so improvements show before the next release. Run artifacts
+# need a token with actions: read; without one this step is skipped.
+python3 - "$snaps" <<'PY' || echo "benchmark results of main not fetched; using committed snapshots and releases only" >&2
+import io, json, os, pathlib, sys, urllib.request, zipfile
+if not os.environ.get("GH_TOKEN"):
+    sys.exit("no GH_TOKEN")
+dest = pathlib.Path(sys.argv[1])
+api = "https://api.github.com/repos/ratomirjovanovic/pandaward"
+headers = {"Accept": "application/vnd.github+json", "User-Agent": "pandaward-site-build"}
+def get(url):
+    req = urllib.request.Request(url, headers=headers)
+    # Artifact downloads redirect to blob storage, which rejects the token.
+    req.add_unredirected_header("Authorization", "Bearer " + os.environ["GH_TOKEN"])
+    with urllib.request.urlopen(req, timeout=60) as r:
+        return r.read()
+runs = json.loads(get(api + "/actions/workflows/benchmarks.yml/runs?branch=main&status=success&per_page=20"))["workflow_runs"]
+runs = [r for r in runs if r["event"] in ("schedule", "workflow_dispatch")]
+if not runs:
+    sys.exit("no successful run of main")
+run = runs[0]
+arts = json.loads(get(api + "/actions/runs/%d/artifacts" % run["id"]))["artifacts"]
+wanted = ("owasp-java.json", "owasp-python.json", "cve.json")
+found = {}
+for a in arts:
+    if a["expired"] or a["name"] not in ("owasp-benchmarks", "cve-benchmark"):
+        continue
+    with zipfile.ZipFile(io.BytesIO(get(a["archive_download_url"]))) as z:
+        for name in z.namelist():
+            if name in wanted:
+                found[name] = z.read(name)
+if not found:
+    sys.exit("run %d has no benchmark results" % run["id"])
+d = dest / ("main-run-%d" % run["id"])
+d.mkdir(parents=True, exist_ok=True)
+for name, data in found.items():
+    (d / name).write_bytes(data)
+meta = {"label": "main", "date": run["created_at"][:10],
+        "url": "https://github.com/ratomirjovanovic/pandaward/commit/" + run["head_sha"][:7]}
+(d / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
+print("main snapshot from run %d: %s" % (run["id"], ", ".join(sorted(found))))
+PY
 mkdir -p "$out/benchmarks"
 (cd "$repo" && go run ./tools/benchsite --snapshots "$here/benchmarks/snapshots" --snapshots "$snaps" --out "$out/benchmarks/index.html")
 

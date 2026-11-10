@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
     paths: [site/**, internal/**, cmd/**, tools/**, .github/workflows/pages.yml]
+  # A finished benchmarks run on main brings new numbers for the benchmark
+  # page; site/build.sh reads only successful scheduled or manual runs.
+  workflow_run:
+    workflows: [benchmarks]
+    types: [completed]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -16,7 +22,12 @@ concurrency:
 
 jobs:
   build:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Downloads the artifacts of the latest benchmarks run on main.
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
