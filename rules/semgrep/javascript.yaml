@@ -10,10 +10,12 @@ rules:
       - pattern-either:
           - pattern: eval($X)
           - pattern: new Function(..., $X)
+          - pattern: Function(..., $X)
           - pattern: setTimeout($X, ...)
           - pattern: setInterval($X, ...)
       - pattern-not: eval("...")
       - pattern-not: new Function(..., "...")
+      - pattern-not: Function(..., "...")
       - pattern-not: setTimeout(function (...) {...}, ...)
       - pattern-not: setTimeout((...) => {...}, ...)
       - pattern-not: setTimeout((...) => $E, ...)
@@ -84,6 +86,49 @@ rules:
                       import * as $SH from 'shelljs';
                       ...
               - pattern: $SH.exec($CMD, ...)
+          # exec wrapped by util.promisify, and execa's shell helpers.
+          - patterns:
+              - pattern-either:
+                  - pattern-inside: |
+                      $P = promisify(exec);
+                      ...
+                  - pattern-inside: |
+                      $P = $U.promisify(exec);
+                      ...
+                  - pattern-inside: |
+                      $P = promisify($CP.exec);
+                      ...
+                  - pattern-inside: |
+                      $P = $U.promisify($CP.exec);
+                      ...
+                  - pattern-inside: |
+                      $P = promisify(require('child_process').exec);
+                      ...
+              - pattern: $P($CMD, ...)
+          - patterns:
+              - pattern-either:
+                  - pattern-inside: |
+                      $FN = require('execa').$M;
+                      ...
+                  - pattern-inside: |
+                      const {..., $M: $FN, ...} = require('execa');
+                      ...
+              - pattern: $FN($CMD, ...)
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(shell|shellSync|command|commandSync)$
+          - patterns:
+              - pattern-either:
+                  - pattern-inside: |
+                      $X = require('execa');
+                      ...
+                  - pattern-inside: |
+                      import $X from 'execa';
+                      ...
+              - pattern: $X.$M($CMD, ...)
+              - metavariable-regex:
+                  metavariable: $M
+                  regex: ^(shell|shellSync|command|commandSync)$
           - pattern: |
               $CP.spawn($CMD, $ARGS, {..., shell: true, ...})
           - pattern: |
@@ -441,6 +486,37 @@ rules:
               regex: (?i)^(.*\.)?\w*(escape|encode|sanitize|purify)\w*$
       - pattern: JSON.stringify(...)
       - pattern: encodeURIComponent(...)
+
+  - id: pandaward-js-error-to-html
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "An error is sent as the response body. Express sends a string as HTML, and error messages often repeat request input; send a fixed message or JSON."
+    metadata:
+      pandaward-control: H-001
+      cwe: "CWE-209: Generation of Error Message Containing Sensitive Information"
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              function ($ERR, ...) { ... }
+          - pattern-inside: |
+              ($ERR, ...) => { ... }
+          - pattern-inside: |
+              try { ... } catch ($ERR) { ... }
+      - metavariable-regex:
+          metavariable: $ERR
+          regex: ^(err|error|e|ex|exc)$
+      - pattern-either:
+          - pattern: $RES.send($ERR)
+          - pattern: $RES.status($C).send($ERR)
+          - pattern: $RES.end($ERR)
+          - pattern: $RES.send($ERR.message)
+          - pattern: $RES.status($C).send($ERR.message)
+          - pattern: $RES.end($ERR.message)
+          - pattern: "$RES.send($A ? $ERR : $B)"
+          - pattern: "$RES.status($C).send($A ? $ERR : $B)"
+      - metavariable-regex:
+          metavariable: $RES
+          regex: (?i)^(res|response|resp)$
 
   - id: pandaward-js-incomplete-sanitization
     languages: [javascript, typescript]

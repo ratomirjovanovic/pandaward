@@ -231,6 +231,12 @@ Measured with a full `benchmarks` run on the branch ([run 42848842483](https://g
 
 The nine new detections are CVE-2017-16043, CVE-2018-14040, CVE-2018-14042, CVE-2018-20676, CVE-2018-20677, CVE-2019-14862, CVE-2019-15482, CVE-2020-4051 and CVE-2020-7656; no CVE detected before was lost and the OWASP scores did not change. Four of the nine are still flagged after their fix: the fix escapes the value (`escapedName`) or guards the call (`options.target === DEFAULTS.target`), which a pattern rule cannot tell apart. On seven real application repositories the rules report nothing; they do not use jQuery, so this says little about precision on jQuery code.
 
+### More call shapes
+
+The eval rule also reports `Function(..., body)` without `new`; the shell rule reports `exec` wrapped by `util.promisify` and execa's `shell` and `command` helpers; `pandaward-js-error-to-html` reports an error parameter or caught error (or its `message`) sent as the response body, which Express sends as HTML.
+
+Measured with a full `benchmarks` run on the branch ([run 42870636199](https://github.com/ratomirjovanovic/pandaward/actions/runs/42870636199)) against main at `597264a`: Semgrep and Opengrep detect 66 CVEs instead of 60 (CVE-2017-16226, CVE-2019-10759, CVE-2019-10776, CVE-2019-15478, CVE-2019-15479, CVE-2019-5414) and recognize 28 fixes instead of 27, with no CVE lost and the OWASP scores unchanged. Five of the six are still flagged after the fix. On seven real application repositories the rules report two `Function()` calls, both in one test file.
+
 ### Escaping, URL scheme and redirect rules
 
 `pandaward-js-incomplete-sanitization` reports a `replace()` that escapes only the first match (a string pattern of one escape character, or a regular expression of escape characters without the g flag) or removes `<!--`, `<script` or `../` in a single pass. `pandaward-js-incomplete-url-scheme-check` reports a `javascript:` check with no `data:` check in the same condition. `pandaward-js-open-redirect` follows request data to `res.redirect`, `ctx.redirect`, `res.location` and a `Location` header.
