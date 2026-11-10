@@ -5,6 +5,7 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 ## [Unreleased]
 
 ### Added
+- Control D-007 finds regular expressions with catastrophic backtracking (ReDoS) in JavaScript and TypeScript: regex literals and `RegExp(...)` strings are analysed as automata. Exponential patterns are suspected findings; polynomial ones are listed as info, since they matter only for long input from outside. On the OpenSSF CVE Benchmark the built-in rules now detect 21 of 24 ReDoS CVEs, up from none, and recognize 17 fixes (#332).
 - Opengrep can run the Semgrep rules: `scan.semgrep_engine` picks `semgrep` or `opengrep`; without it Semgrep is used and Opengrep is the fallback. Opengrep runs with intra-file taint. On Windows the tool home gets its own `LOCALAPPDATA`, without which Opengrep crashes (#314).
 - `tools/owaspbench --engine builtin,semgrep,opengrep` measures the bundled Semgrep rules on both engines next to the built-in rules, with engine versions and the rule set hash; `docs/BENCHMARKS.md` has the new baseline (#314).
 - `tools/owaspbench --suite python` measures PandaWard on OWASP BenchmarkPython (1,230 test cases, 14 categories), fetched at a pinned commit at run time; `docs/BENCHMARKS.md` has the first Python baseline (#315).

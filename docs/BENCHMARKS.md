@@ -214,3 +214,20 @@ PandaWard finds about one real JavaScript CVE in ten with its built-in rules, an
 - The built-in rules detect more than the bundled Semgrep rules (10 against 3 command injections) because the line rule `code.js-shell` accepts more call shapes than the structural Semgrep rule.
 
 Next, for Phase 2: JavaScript taint rules with library sources (exported function parameters) and sanitizers for command, HTML and path sinks, and a ReDoS check. The CVE benchmark is the measure for them, since it is real code and also counts the fixed commit.
+
+### Built-in ReDoS check
+
+Control D-007 analyses every regex literal and every string passed to `RegExp(...)` in JavaScript and TypeScript files. The pattern becomes its position automaton; for each character the check looks for a repetition that can match a run of it in two ways (exponential, as in `^(a+)+$`) or for two repetitions over it in sequence, counting the implicit leading loop of an unanchored search (polynomial, as in `\s+$`), followed by a way for the match to fail. Exponential cases are suspected findings (`code.js-redos`). Polynomial cases are listed as info (`code.js-redos-polynomial`) and do not fail the control: they matter only when long input from outside reaches the pattern, which the check does not follow.
+
+On the 24 CVEs of the benchmark whose first weakness is a regular expression, measured with `--engine builtin --cve <those ids>`:
+
+| | CVEs |
+|---|---|
+| Scored | 24 |
+| Detected | 21 (4 exponential, 17 polynomial) |
+| Fix recognized | 17 |
+| Still flagged after the fix | 4 |
+
+The three misses report the regex where it is used, not where it is written (`CHARSET_RE.exec(...)`, `regexps[i].toString()`), or are in a YAML file. The CVEs list CWE-730, so the CWE match column stays 0; the check reports CWE-1333.
+
+On seven real application repositories (about 5,000 JavaScript and TypeScript files) the check lists about 110 polynomial patterns, such as `/\/+$/` and the common `^[^\s@]+@[^\s@]+\.[^\s@]+$` email check, and one exponential pattern, in a test file that the built-in rules skip.

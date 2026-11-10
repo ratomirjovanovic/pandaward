@@ -49,3 +49,15 @@ func FuzzMobSFScorecard(f *testing.F) {
 		_ = mobsfSignals(card, "app.apk", "K-006", "mobsf")
 	})
 }
+
+// FuzzAnalyzeRegex feeds arbitrary patterns, as found in scanned source, to
+// the ReDoS analysis and the literal scanner. Neither may panic.
+func FuzzAnalyzeRegex(f *testing.F) {
+	for _, s := range []string{`^(a+)+$`, `[^\]]*\u{1F600}\x4`, `(?<n>a)\k<n>`, `[\d-z]{2,}`, `\p{L}+$`, `(?=a)|b*?c{3}`, `[z-a]`, `\cJ`} {
+		f.Add(s, "giu")
+	}
+	f.Fuzz(func(t *testing.T, pattern, flags string) {
+		analyzeRegex(pattern, flags)
+		jsRegexLiterals("x = /" + pattern + "/" + flags + "; new RegExp('" + pattern + "')")
+	})
+}
