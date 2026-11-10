@@ -92,6 +92,20 @@ rules:
               $CP.spawn("sh", ["-c", ...], ...)
       - pattern-not: $F("...", ...)
       - pattern-not: $CP.$F("...", ...)
+      # An input check before the command that stops on bad input, such as
+      # if (!/^[\w.-]+$/.test(name)) process.exit(1).
+      - pattern-not-inside: |
+          if (<... $RE.test(...) ...>) { ... return; }
+          ...
+      - pattern-not-inside: |
+          if (<... $RE.test(...) ...>) { ... return $V; }
+          ...
+      - pattern-not-inside: |
+          if (<... $RE.test(...) ...>) { ... process.exit(...); }
+          ...
+      - pattern-not-inside: |
+          if (<... $RE.test(...) ...>) { ... throw $E; }
+          ...
 
   - id: pandaward-js-sql-string
     languages: [javascript, typescript]
@@ -149,6 +163,22 @@ rules:
       - pattern-not: $EL.outerHTML = "..."
       - pattern-not: $EL.insertAdjacentHTML($POS, "...")
       - pattern-not: document.write("...")
+      # Sanitized or escaped values, such as DOMPurify.sanitize(html).
+      - pattern-not: $EL.innerHTML = <... $S.sanitize(...) ...>
+      - pattern-not: $EL.outerHTML = <... $S.sanitize(...) ...>
+      - pattern-not: $EL.insertAdjacentHTML($POS, <... $S.sanitize(...) ...>)
+      - pattern-not: $EL.innerHTML = <... escapeHtml(...) ...>
+      - pattern-not: $EL.outerHTML = <... escapeHtml(...) ...>
+      - pattern-not: $EL.insertAdjacentHTML($POS, <... escapeHtml(...) ...>)
+      - pattern-not: $EL.innerHTML = <... $O.escapeHtml(...) ...>
+      - pattern-not: $EL.outerHTML = <... $O.escapeHtml(...) ...>
+      - pattern-not: $EL.insertAdjacentHTML($POS, <... $O.escapeHtml(...) ...>)
+      - pattern-not: $EL.innerHTML = <... escape(...) ...>
+      - pattern-not: $EL.outerHTML = <... escape(...) ...>
+      - pattern-not: $EL.insertAdjacentHTML($POS, <... escape(...) ...>)
+      - pattern-not: $EL.innerHTML = <... $O.escape(...) ...>
+      - pattern-not: $EL.outerHTML = <... $O.escape(...) ...>
+      - pattern-not: $EL.insertAdjacentHTML($POS, <... $O.escape(...) ...>)
       # A bare UPPER_CASE module constant (or a property of one) is fixed
       # markup, such as an inline SVG icon (#220).
       - metavariable-regex:
@@ -268,8 +298,160 @@ rules:
               - pattern: "$W.Writer({..., path: $P, ...})"
               - pattern: "Writer({..., path: $P, ...})"
           - focus-metavariable: $P
+          # A containment or traversal check that stops the request before
+          # the sink: the path compared with a root, tested for "..", or
+          # passed to a check such as isPathInside().
+          - pattern-not-inside: |
+              if (<... $A.indexOf($B) ...>) { ... return; }
+              ...
+          - pattern-not-inside: |
+              if (<... $A.indexOf($B) ...>) { ... return $V; }
+              ...
+          - pattern-not-inside: |
+              if (<... $A.indexOf($B) ...>) return;
+              ...
+          - pattern-not-inside: |
+              if (<... $A.indexOf($B) ...>) return $V;
+              ...
+          - pattern-not-inside: |
+              if (<... $A.startsWith($B) ...>) { ... return; }
+              ...
+          - pattern-not-inside: |
+              if (<... $A.startsWith($B) ...>) { ... return $V; }
+              ...
+          - pattern-not-inside: |
+              if (<... $A.startsWith($B) ...>) return;
+              ...
+          - pattern-not-inside: |
+              if (<... $A.startsWith($B) ...>) return $V;
+              ...
+          - pattern-not-inside: |
+              if (<... $A.search($B) ...>) { ... return; }
+              ...
+          - pattern-not-inside: |
+              if (<... $A.search($B) ...>) { ... return $V; }
+              ...
+          - pattern-not-inside: |
+              if (<... $A.search($B) ...>) return;
+              ...
+          - pattern-not-inside: |
+              if (<... $A.search($B) ...>) return $V;
+              ...
+          - pattern-not-inside: |
+              if (<... $A.includes("..") ...>) { ... return; }
+              ...
+          - pattern-not-inside: |
+              if (<... $A.includes("..") ...>) { ... return $V; }
+              ...
+          - pattern-not-inside: |
+              if (<... $A.includes("..") ...>) return;
+              ...
+          - pattern-not-inside: |
+              if (<... $A.includes("..") ...>) return $V;
+              ...
+          - pattern-not-inside: |
+              if (<... $RE.test($A) ...>) { ... return; }
+              ...
+          - pattern-not-inside: |
+              if (<... $RE.test($A) ...>) { ... return $V; }
+              ...
+          - pattern-not-inside: |
+              if (<... $RE.test($A) ...>) return;
+              ...
+          - pattern-not-inside: |
+              if (<... $RE.test($A) ...>) return $V;
+              ...
+          - pattern-not-inside: |
+              if (<... isPathInside(...) ...>) { ... return; }
+              ...
+          - pattern-not-inside: |
+              if (<... isPathInside(...) ...>) { ... return $V; }
+              ...
+          - pattern-not-inside: |
+              if (<... isPathInside(...) ...>) return;
+              ...
+          - pattern-not-inside: |
+              if (<... isPathInside(...) ...>) return $V;
+              ...
+          - pattern-not-inside: |
+              if (<... pathIsInside(...) ...>) { ... return; }
+              ...
+          - pattern-not-inside: |
+              if (<... pathIsInside(...) ...>) { ... return $V; }
+              ...
+          - pattern-not-inside: |
+              if (<... pathIsInside(...) ...>) return;
+              ...
+          - pattern-not-inside: |
+              if (<... pathIsInside(...) ...>) return $V;
+              ...
+          - pattern-not-inside: |
+              if (<... $O.isPathInside(...) ...>) { ... return; }
+              ...
+          - pattern-not-inside: |
+              if (<... $O.isPathInside(...) ...>) { ... return $V; }
+              ...
+          - pattern-not-inside: |
+              if (<... $O.isPathInside(...) ...>) return;
+              ...
+          - pattern-not-inside: |
+              if (<... $O.isPathInside(...) ...>) return $V;
+              ...
+          - pattern-not-inside: |
+              if (<... $O.allowPath(...) ...>) { ... return; }
+              ...
+          - pattern-not-inside: |
+              if (<... $O.allowPath(...) ...>) { ... return $V; }
+              ...
+          - pattern-not-inside: |
+              if (<... $O.allowPath(...) ...>) return;
+              ...
+          - pattern-not-inside: |
+              if (<... $O.allowPath(...) ...>) return $V;
+              ...
+          - pattern-not-inside: |
+              if (<... $O.isSafePath(...) ...>) { ... return; }
+              ...
+          - pattern-not-inside: |
+              if (<... $O.isSafePath(...) ...>) { ... return $V; }
+              ...
+          - pattern-not-inside: |
+              if (<... $O.isSafePath(...) ...>) return;
+              ...
+          - pattern-not-inside: |
+              if (<... $O.isSafePath(...) ...>) return $V;
+              ...
+          - pattern-not-inside: |
+              if (<... isPathInside(...) ...>) { ... } else { ... }
+              ...
+          - pattern-not-inside: |
+              if (<... pathIsInside(...) ...>) { ... } else { ... }
+              ...
+          - pattern-not-inside: |
+              if (<... $O.isPathInside(...) ...>) { ... } else { ... }
+              ...
+          - pattern-not-inside: |
+              if (<... $O.allowPath(...) ...>) { ... } else { ... }
+              ...
+          - pattern-not-inside: |
+              if (<... $O.isSafePath(...) ...>) { ... } else { ... }
+              ...
     pattern-sanitizers:
       - pattern: path.basename(...)
+      # Joining onto "/" first resolves every ".." against the root.
+      - pattern: path.join("/", ...)
+      - pattern: path.resolve("/", ...)
+      # Removing leading or all ".." segments with a regular expression.
+      - patterns:
+          - pattern: $X.replace($RE, "")
+          - metavariable-regex:
+              metavariable: $RE
+              regex: ^/.*\\\.\\\..*/[a-z]*$
+      # Removing ".." in a loop until none is left.
+      - patterns:
+          - pattern-inside: |
+              while (<... $X.indexOf($D) ...>) { ... }
+          - pattern: $X.replace($D, "")
 
   - id: pandaward-js-prototype-pollution
     languages: [javascript, typescript]
