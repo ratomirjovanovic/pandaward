@@ -71,7 +71,7 @@ func Build(root string, logf func(string, ...any)) error {
 		`def run(data, completion):`,
 		`    obj = pickle.loads(data)`,
 		`    requests.get("https://example.org", verify=False)`,
-		`    subprocess.run("ls " + data, shell=True)`,
+		`    subprocess.run("ls " + completion.choices[0].message.content, shell=True)`,
 		`    eval(completion.choices[0].message.content)`,
 		`TOKEN = "` + FakeGitHub + `"`,
 	}, "\n"))
