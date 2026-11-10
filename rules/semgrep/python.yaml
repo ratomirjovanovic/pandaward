@@ -11,6 +11,7 @@ rules:
     metadata:
       pandaward-control: D-001
       cwe: "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
+      pandaward-supersedes: [code.py-eval]
     mode: taint
     pattern-sources: &request
       - patterns:
@@ -68,6 +69,7 @@ rules:
     metadata:
       pandaward-control: D-002
       cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
+      pandaward-supersedes: [code.py-shell]
     mode: taint
     pattern-sources: *request
     pattern-propagators: *propagate
@@ -96,6 +98,7 @@ rules:
     metadata:
       pandaward-control: D-003
       cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
+      pandaward-supersedes: [code.sql-concat, code.sql-template, code.sql-unsafe-raw]
     mode: taint
     pattern-sources: *request
     pattern-propagators: *propagate
@@ -119,6 +122,7 @@ rules:
     metadata:
       pandaward-control: D-004
       cwe: "CWE-502: Deserialization of Untrusted Data"
+      pandaward-supersedes: [code.py-deserialize]
     pattern-either:
       - pattern: pickle.loads(...)
       - pattern: pickle.load(...)
@@ -371,6 +375,7 @@ rules:
     metadata:
       pandaward-control: E-004
       cwe: "CWE-328: Use of Weak Hash"
+      pandaward-supersedes: [code.weak-hash-password]
     patterns:
       - pattern-either:
           - pattern: hashlib.md5(...)
@@ -390,6 +395,7 @@ rules:
     metadata:
       pandaward-control: E-004
       cwe: "CWE-330: Use of Insufficiently Random Values"
+      pandaward-supersedes: [code.insecure-random]
     patterns:
       - pattern: random.$F(...)
       - metavariable-regex:

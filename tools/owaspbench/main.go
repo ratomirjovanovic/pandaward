@@ -27,6 +27,7 @@ import (
 	"github.com/ratomirjovanovic/pandaward/internal/adapters"
 	"github.com/ratomirjovanovic/pandaward/internal/config"
 	"github.com/ratomirjovanovic/pandaward/internal/inventory"
+	"github.com/ratomirjovanovic/pandaward/internal/model"
 	"github.com/ratomirjovanovic/pandaward/internal/version"
 	"github.com/ratomirjovanovic/pandaward/rules"
 	"github.com/ratomirjovanovic/pandaward/tools/internal/engines"
@@ -140,9 +141,9 @@ func measure(ctx context.Context, suite *Suite, repo, expectedPath string, selec
 	if err != nil {
 		return nil, err
 	}
-	var all []Finding
+	var all, builtinFindings []Finding
 	allCovered := map[string][]string{}
-	ran := 0
+	ran, semgrepRan := 0, false
 	for _, eng := range selected {
 		run, err := engines.Measure(ctx, inv, eng)
 		if err != nil {
@@ -160,7 +161,12 @@ func measure(ctx context.Context, suite *Suite, repo, expectedPath string, selec
 		}
 		if r.NotRun == "" {
 			r.Score = suite.Compute(expected, findings, covered)
-			all = append(all, findings...)
+			if eng == "builtin" {
+				builtinFindings = findings
+			} else {
+				semgrepRan = true
+				all = append(all, findings...)
+			}
 			for c, rs := range covered {
 				for _, r := range rs {
 					if !slices.Contains(allCovered[c], r) {
@@ -173,6 +179,15 @@ func measure(ctx context.Context, suite *Suite, repo, expectedPath string, selec
 		out.Engines = append(out.Engines, r)
 	}
 	if ran > 1 {
+		// As in a scan: built-in heuristics a bundled rule replaces do not
+		// count once a semgrep engine has run.
+		if semgrepRan {
+			builtinFindings, err = withoutSuperseded(builtinFindings, inv)
+			if err != nil {
+				return nil, err
+			}
+		}
+		all = append(all, builtinFindings...)
 		out.Engines = append(out.Engines, EngineResult{Engine: "all", Score: suite.Compute(expected, all, allCovered)})
 	}
 	return out, nil
@@ -216,4 +231,22 @@ func printTable(o *Output) {
 		fmt.Printf("\naverage score over covered categories: %+.3f\n", e.AverageCovered)
 		fmt.Printf("average score over all %d categories (not covered = 0, as the OWASP scorecard averages): %+.3f\n", len(e.Categories), e.AverageAll)
 	}
+}
+
+// withoutSuperseded drops built-in findings that a bundled Semgrep rule
+// replaces in the finding's file language (adapters.Supersessions).
+func withoutSuperseded(fs []Finding, inv *inventory.Inventory) ([]Finding, error) {
+	sup, err := adapters.LoadSupersessions()
+	if err != nil {
+		return nil, err
+	}
+	var kept []Finding
+	for _, f := range fs {
+		file := inv.FileByPath(f.File)
+		if file != nil && sup.By(model.Signal{RuleID: f.Rule, Collector: "builtin-code"}, file.Lang) != "" {
+			continue
+		}
+		kept = append(kept, f)
+	}
+	return kept, nil
 }

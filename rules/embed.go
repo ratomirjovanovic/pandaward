@@ -56,6 +56,9 @@ type SemgrepRule struct {
 	Metadata  struct {
 		CWE     string `yaml:"cwe"`
 		Control string `yaml:"pandaward-control"`
+		// Supersedes names built-in rules this rule replaces in files of
+		// its languages when the semgrep adapter completes.
+		Supersedes []string `yaml:"pandaward-supersedes"`
 	} `yaml:"metadata"`
 }
 

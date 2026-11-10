@@ -22,6 +22,10 @@ The numbers below are guarded so they cannot drop unnoticed:
 
 The baseline is committed. A change that improves a score raises it in the same pull request with `go run ./tools/benchgate --update --owasp owasp-java.json --owasp owasp-python.json` (and `--cve cve.json`), using the JSON from the workflow's artifacts. A score may only go down through the same explicit change, with the reason in the pull request.
 
+## Built-in heuristics and bundled rules
+
+A scan with Semgrep or Opengrep installed runs both the built-in rules and the bundled Semgrep rules. For Java and Python, a bundled rule lists in its `pandaward-supersedes` metadata the built-in heuristics it replaces in files of its languages, for example `pandaward-java-sql-injection` replaces `code.sql-concat`. When the semgrep adapter completes, signals of those heuristics in those files are dropped: they do not decide a control, the control's reason says how many were replaced, and a finding only they raised is closed with a note naming the rule that replaced it. When Semgrep and Opengrep are missing or fail, the built-in rules report as before. JavaScript keeps its built-in rules, which find more real CVEs than the bundled ones (see the CVE benchmark below).
+
 ## OWASP Benchmark for Java
 
 The [OWASP Benchmark](https://github.com/OWASP-Benchmark/BenchmarkJava) is a Java web application with 2,740 test cases in 11 categories. Each test case is one file, `BenchmarkTest#####.java`, and `expectedresults-1.2.csv` labels it as a real vulnerability or not, with its category and CWE. About half of the test cases in each category are deliberately not exploitable, so a tool that flags everything scores no better than one that flags nothing.
@@ -62,7 +66,7 @@ Average score over covered categories, and over all 11 categories with not cover
 | Built-in rules | 6 | -0.000 | -0.000 |
 | Semgrep 1.182.1, bundled rules | 11 | 0.467 | 0.467 |
 | Opengrep 1.33.1, bundled rules | 11 | 0.723 | 0.723 |
-| All merged | 11 | 0.463 | 0.463 |
+| All merged | 11 | 0.486 | 0.486 |
 
 Per category (TPR / FPR / score):
 
@@ -80,7 +84,7 @@ Per category (TPR / FPR / score):
 | xpathi | 643 | 15 | 20 | not covered | 0.933 / 0.650 / 0.283 | 0.933 / 0.150 / 0.783 | `pandaward-java-xpath-injection` |
 | xss | 79 | 246 | 209 | 0.000 / 0.000 / 0.000 | 0.821 / 0.517 / 0.304 | 0.894 / 0.144 / 0.751 | `pandaward-java-xss` |
 
-"All merged" counts a test case as flagged when any engine flags it, so the built-in SQL rule, which flags safe and vulnerable cases alike, and Semgrep's extra findings pull it below Opengrep alone. It is not a configuration anyone runs.
+"All merged" counts a test case as flagged when any engine flags it, after dropping the built-in heuristics a bundled rule replaces (as a scan does when Semgrep or Opengrep completes, #328). Semgrep's extra findings still pull it below Opengrep alone; a scan runs one of the two, so this row is a lower bound, not a configuration anyone runs.
 
 ### Interpretation
 
@@ -112,7 +116,7 @@ The [OWASP Benchmark for Python](https://github.com/OWASP-Benchmark/BenchmarkPyt
 | Built-in rules | 8 | +0.026 | +0.015 |
 | Semgrep 1.182.1, bundled rules | 14 | +0.433 | +0.433 |
 | Opengrep 1.33.1, bundled rules | 14 | +0.530 | +0.530 |
-| All merged | 14 | +0.437 | +0.437 |
+| All merged | 14 | +0.494 | +0.494 |
 
 Per category (TPR / FPR / score):
 

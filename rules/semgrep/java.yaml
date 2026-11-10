@@ -9,6 +9,7 @@ rules:
     metadata:
       pandaward-control: D-003
       cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
+      pandaward-supersedes: [code.sql-concat, code.sql-template, code.sql-unsafe-raw]
     mode: taint
     pattern-sources: &request
       - patterns:
@@ -48,6 +49,7 @@ rules:
     metadata:
       pandaward-control: D-002
       cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
+      pandaward-supersedes: [code.java-shell]
     mode: taint
     pattern-sources: *request
     pattern-sinks:
@@ -230,6 +232,7 @@ rules:
     metadata:
       pandaward-control: E-004
       cwe: "CWE-328: Use of Weak Hash"
+      pandaward-supersedes: [code.weak-hash-password]
     pattern-either:
       - patterns:
           - pattern: java.security.MessageDigest.getInstance("$ALG", ...)
@@ -250,6 +253,7 @@ rules:
     metadata:
       pandaward-control: E-004
       cwe: "CWE-330: Use of Insufficiently Random Values"
+      pandaward-supersedes: [code.insecure-random]
     pattern-either:
       - pattern: new java.util.Random(...)
       - pattern: java.lang.Math.random()
