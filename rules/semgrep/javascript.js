@@ -162,3 +162,94 @@ app.get('/files/:name', (req, res) => {
   // ok: pandaward-js-path-traversal
   fs.readFile(path.join('/srv/files', path.basename(req.params.name)), (e, d) => res.send(d));
 });
+
+// A library function that builds a shell command from its argument.
+const cp = require('child_process');
+const shell = require('shelljs');
+const run = require('child_process').execSync;
+function whereis(name, cb) {
+  // ruleid: pandaward-js-shell-exec
+  cp.exec('which ' + name, cb);
+  // ruleid: pandaward-js-shell-exec
+  run('ls ' + name);
+  // ruleid: pandaward-js-shell-exec
+  shell.exec(`git log ${name}`, { silent: true });
+  // ok: pandaward-js-shell-exec
+  cp.exec('which git', cb);
+  // ok: pandaward-js-shell-exec
+  cp.execFile('which', [name], cb);
+}
+
+// A static file server on the http module.
+require('http').createServer((req, res) => {
+  const file = path.join(__dirname, require('url').parse(req.url).pathname);
+  // ruleid: pandaward-js-path-traversal
+  fs.createReadStream(file).pipe(res);
+  // ok: pandaward-js-path-traversal
+  fs.createReadStream(path.join(__dirname, 'index.html')).pipe(res);
+  // ruleid: pandaward-js-reflected-xss
+  res.end('<p>Not found: ' + req.url + '</p>');
+  // ok: pandaward-js-reflected-xss
+  res.end('<p>Not found: ' + escapeHtml(req.url) + '</p>');
+  // ok: pandaward-js-reflected-xss
+  res.end(JSON.stringify({ path: req.url }));
+});
+
+// Extracting an archive writes each entry where its name points (Zip Slip).
+function extract(zip, dest) {
+  zip.on('entry', (entry) => {
+    // ruleid: pandaward-js-path-traversal
+    entry.pipe(fs.createWriteStream(path.join(dest, entry.path)));
+    // ok: pandaward-js-path-traversal
+    entry.pipe(fs.createWriteStream(path.join(dest, path.basename(entry.path))));
+  });
+}
+
+// A recursive merge copies every key of its input into the target.
+function merge(target, source) {
+  for (const key in source) {
+    if (isObject(source[key])) {
+      // ruleid: pandaward-js-prototype-pollution
+      target[key] = merge(target[key] || {}, source[key]);
+    } else {
+      // ruleid: pandaward-js-prototype-pollution
+      target[key] = source[key];
+    }
+  }
+  return target;
+}
+
+function safeMerge(target, source) {
+  for (const key in source) {
+    if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+      continue;
+    }
+    if (isObject(source[key])) {
+      // ok: pandaward-js-prototype-pollution
+      target[key] = safeMerge(target[key] || {}, source[key]);
+    } else {
+      // ok: pandaward-js-prototype-pollution
+      target[key] = source[key];
+    }
+  }
+  return target;
+}
+
+// A recursive copy into a fresh object cannot reach Object.prototype.
+function redact(value) {
+  const out = {};
+  for (const [k, v] of Object.entries(value)) {
+    // ok: pandaward-js-prototype-pollution
+    out[k] = typeof v === 'object' ? redact(v) : v;
+  }
+  return out;
+}
+
+// A shallow copy does not recurse, so it cannot reach Object.prototype.
+function copy(target, source) {
+  for (const key in source) {
+    // ok: pandaward-js-prototype-pollution
+    target[key] = source[key];
+  }
+  return target;
+}
