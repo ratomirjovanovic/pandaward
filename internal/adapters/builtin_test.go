@@ -83,7 +83,16 @@ func TestCodeRuleFalsePositiveGuards(t *testing.T) {
 		{"code.html-sink", "a.hbs", "<div>{{{body}}}</div>\n", true},
 		{"code.html-sink", "a.ejs", "<div><%- body %></div>\n", true},
 		{"code.html-sink", "a.jsx", "<script dangerouslySetInnerHTML={{ __html: JSON.stringify(d).replace(/</g, \"\\\\u003c\") }} />\n", false},
-		{"code.html-sink", "a.jsx", "<script dangerouslySetInnerHTML={{ __html: JSON.stringify(d) }} />\n", true},
+		{"code.json-in-script-unescaped", "a.jsx", "<script dangerouslySetInnerHTML={{ __html: JSON.stringify(d) }} />\n", true},
+		// Unescaped JSON in a script has its own rule, not the generic sink (#352).
+		{"code.html-sink", "a.jsx", "<script dangerouslySetInnerHTML={{ __html: JSON.stringify(d) }} />\n", false},
+		{"code.json-in-script-unescaped", "a.jsx", "const ld = JSON.stringify({ name: listing.pitch });\n<script dangerouslySetInnerHTML={{ __html: ld }} />\n", true},
+		{"code.json-in-script-unescaped", "a.jsx", "<div dangerouslySetInnerHTML={{ __html: body }} />\n", false},
+		// The const is read in a condition around the sink (#352).
+		{"code.html-sink", "a.tsx", "function toJsonLd(v) { return JSON.stringify(v).replace(/</g, \"\\\\u003c\"); }\nexport function P({ faq }) {\n  const ld = faq ? toJsonLd({ faq }) : null;\n  return ld ? <script dangerouslySetInnerHTML={{ __html: ld }} /> : null;\n}\n", false},
+		{"code.html-sink", "a.tsx", "export function P({ items }) {\n  const ld = items[0];\n  return items.map((ld) => <div dangerouslySetInnerHTML={{ __html: ld }} />);\n}\n", true},
+		// A ternary picks a helper that escapes "<", or nothing (#352).
+		{"code.html-sink", "a.tsx", "function toJsonLd(v) { return JSON.stringify(v).replace(/</g, \"\\\\u003c\"); }\nexport function P({ faq }) {\n  const ld = faq ? toJsonLd({ faq }) : null;\n  return <script dangerouslySetInnerHTML={{ __html: ld }} />;\n}\n", false},
 		{"code.html-sink", "a.jsx", "<script dangerouslySetInnerHTML={{ __html: JSON.stringify(d).replace(/</, \"\") }} />\n", true},
 		{"code.html-sink", "a.js", "el.innerHTML = '<b>Loading</b>';\n", false},
 		{"code.html-sink", "a.js", "el.innerHTML = `<b>Loading</b>`; // spinner\n", false},

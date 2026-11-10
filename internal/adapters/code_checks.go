@@ -138,8 +138,23 @@ func htmlSinkProvenSafe(c lineCtx) bool {
 // of the sink's file; at is where it appears, and trace allows following
 // one identifier to its const declaration.
 func safeHTMLValue(c lineCtx, expr string, at int, trace bool) bool {
-	if isWholeLiteral(expr) || isLtEscapedJSON(expr) {
+	if isWholeLiteral(expr) || isLtEscapedJSON(expr) || expr == "null" || expr == "undefined" {
 		return true
+	}
+	if rest, ok := strings.CutPrefix(expr, "await "); ok {
+		return safeHTMLValue(c, strings.TrimSpace(rest), at, trace)
+	}
+	if trace && identRe.MatchString(expr) && importedConstSafe(c, expr) {
+		return true
+	}
+	// JSON.stringify without escaping "<" is reported by
+	// code.json-in-script-unescaped, with its own fix, not as a generic sink.
+	if unescapedJSON(expr) {
+		return true
+	}
+	// A ternary only picks one of its branches (#352).
+	if _, a, b, ok := splitTernary(expr); ok {
+		return safeHTMLValue(c, strings.TrimSpace(a), at, trace) && safeHTMLValue(c, strings.TrimSpace(b), at, trace)
 	}
 	if callee, args, ok := wholeCall(expr); ok {
 		return sanitizerCall(callee, args, jsImports(c.Text)) || safeHelper(c, callee)
@@ -151,7 +166,7 @@ func safeHTMLValue(c lineCtx, expr string, at int, trace bool) bool {
 	return false
 }
 
-var sanitizerModules = map[string]bool{"sanitize-html": true, "dompurify": true, "isomorphic-dompurify": true, "xss": true}
+var sanitizerModules = map[string]bool{"sanitize-html": true, "dompurify": true, "isomorphic-dompurify": true, "xss": true, "qrcode": true}
 
 // sanitizerCall reports whether callee(args) is a known HTML sanitizer
 // imported in the file, called without options that let scripts through.
@@ -169,6 +184,10 @@ func sanitizerCall(callee, args string, imports map[string]jsBinding) bool {
 		return method == "" && b.imported == "default"
 	case "xss":
 		return method == "" && (b.imported == "default" || b.imported == "filterXSS")
+	case "qrcode":
+		// The library draws the SVG itself; the encoded text becomes module
+		// positions, never markup (#352).
+		return method == "toString" && (b.imported == "default" || b.imported == "*")
 	}
 	// dompurify, isomorphic-dompurify
 	return method == "sanitize" && (b.imported == "default" || b.imported == "*") || method == "" && b.imported == "sanitize"
@@ -217,7 +236,13 @@ func constInit(text, name string, at int) (string, bool) {
 	}
 	start := decl[0][1]
 	end := exprEnd(text, start, ";,", true)
-	if end >= at || regexp.MustCompile(`(?:^|[^.\w$])`+q+`\b`).MatchString(text[end:at]) {
+	if end >= at {
+		return "", false
+	}
+	// Reads in between, such as {ld ? <script ... /> : null} around the
+	// sink, are fine; only a new function scope there could bind the name
+	// again as a parameter (#352).
+	if rebinds(text[end:at], q) {
 		return "", false
 	}
 	depth := 0
@@ -436,3 +461,86 @@ const weakHashCall = `(\b(md5|sha1)(hex|_hex|digest)?\s*\(|\b(md5|sha1)sum\b` +
 	`|:crypto\.hash\(\s*:(md5|sha)\b)`
 
 var weakHashPasswordRe = regexp.MustCompile(`(?i)(` + weakHashCall + `.*\b(password|passwd|pwd)\b|\b(password|passwd|pwd)\b.*` + weakHashCall + `)`)
+
+// unescapedJSON reports whether expr is one JSON.stringify(...) call whose
+// output does not escape "<". Inside a <script> element, a string value
+// containing "</script>" ends the element and starts markup (#352).
+func unescapedJSON(expr string) bool {
+	expr = strings.TrimSpace(expr)
+	if !strings.HasPrefix(expr, "JSON.stringify(") || isLtEscapedJSON(expr) {
+		return false
+	}
+	return matchClose(expr, len("JSON.stringify")) == len(expr)-1
+}
+
+// jsonScriptEscaped drops a code.json-in-script-unescaped match unless one
+// dangerouslySetInnerHTML value on the line, or the value of a const it
+// names, is an unescaped JSON.stringify(...).
+func jsonScriptEscaped(c lineCtx) bool {
+	l := c.File.Lines[c.Index]
+	off := c.offset()
+	for _, loc := range reactSinkRe.FindAllStringIndex(l, -1) {
+		at := off + loc[0]
+		m := htmlPropRe.FindStringIndex(c.Text[at:])
+		if m == nil {
+			continue
+		}
+		start := at + m[1]
+		end := exprEnd(c.Text, start, ",", false)
+		expr := strings.TrimSpace(c.Text[start:end])
+		if identRe.MatchString(expr) {
+			if init, ok := constInit(c.Text, expr, start); ok {
+				expr = strings.TrimSpace(init)
+			}
+		}
+		if unescapedJSON(expr) {
+			return false
+		}
+	}
+	return true
+}
+
+// rebinds reports whether text binds the quoted name again as a parameter
+// of an arrow function, a function or a catch clause, which would shadow a
+// const of the enclosing scope.
+func rebinds(text, q string) bool {
+	return regexp.MustCompile(`\([^()]*\b` + q + `\b[^()]*\)\s*=>|(?:^|[^.\w$])` + q + `\s*=>|\bfunction\b[^(]*\([^()]*\b` + q + `\b|\bcatch\s*\(\s*` + q + `\b`).MatchString(text)
+}
+
+// importedConstSafe reports whether name is a named import of a module in
+// the repository that exports it as a const template literal whose only
+// interpolations are JSON.stringify of a literal or an UPPER_CASE constant,
+// such as an inline theme script (#352).
+func importedConstSafe(c lineCtx, name string) bool {
+	b, ok := jsImports(c.Text)[name]
+	if !ok || b.imported == "default" || b.imported == "*" {
+		return false
+	}
+	f := resolveLocal(c.Inv, c.File.Path, b.module)
+	if f == nil {
+		return false
+	}
+	text := strings.Join(f.Lines, "\n")
+	m := regexp.MustCompile(`(?:^|\n)export\s+const\s+` + regexp.QuoteMeta(b.imported) + `\s*(?::[^=]+)?=\s*`).FindStringIndex(text)
+	if m == nil {
+		return false
+	}
+	init := strings.TrimSpace(text[m[1]:exprEnd(text, m[1], ";", true)])
+	if isWholeLiteral(init) {
+		return true
+	}
+	if len(init) < 2 || init[0] != '`' || init[len(init)-1] != '`' {
+		return false
+	}
+	for _, sub := range templateInterpRe.FindAllStringSubmatch(init, -1) {
+		arg := strings.TrimSpace(sub[1])
+		if !(isWholeLiteral(arg) || upperRe.MatchString(arg)) {
+			return false
+		}
+	}
+	return !strings.Contains(templateInterpRe.ReplaceAllString(init, ""), "${")
+}
+
+// templateInterpRe matches ${JSON.stringify(x)} in a template literal, with
+// x on one or more lines.
+var templateInterpRe = regexp.MustCompile(`\$\{\s*JSON\.stringify\(\s*([^()]*?)\s*,?\s*\)\s*\}`)

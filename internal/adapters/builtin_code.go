@@ -198,6 +198,10 @@ var codeRules = []lineRule{
 	{ID: "code.cookie-flags-off", Control: "B-002", Title: "Session cookie without HttpOnly/Secure", Re: regexp.MustCompile(`(?i)(httpOnly\s*:\s*false|cookie.*\bsecure\s*:\s*false|SESSION_COOKIE_(SECURE|HTTPONLY)\s*=\s*False|CSRF_COOKIE_SECURE\s*=\s*False|HttpOnly\s*=\s*false|Secure\s*=\s*false.*[Cc]ookie)`),
 		Proven: cookiePreferenceOnly, Severity: model.SevMedium, Confidence: model.Confirmed, CWE: "CWE-1004", Message: "Cookie protection flag explicitly disabled.", Fix: "Set HttpOnly, Secure and SameSite=Lax/Strict for session cookies; gate Secure=false to local development only."},
 
+	{ID: "code.json-in-script-unescaped", Control: "H-001", Title: "JSON in a script element without escaping \"<\"", Langs: jsLike, Re: reactSinkRe,
+		Proven: jsonScriptEscaped, Severity: model.SevMedium, Confidence: model.Hypothesis, CWE: "CWE-79",
+		Message: "JSON.stringify output is written into a script element as raw HTML. JSON.stringify does not escape \"<\", so a string value containing \"</script>\" ends the element and runs markup that follows.",
+		Fix:     "Escape \"<\" in the serialized JSON: JSON.stringify(data).replace(/</g, \"\\u003c\")."},
 	{ID: "code.html-sink", Control: "H-001", Title: "Raw HTML sink", Re: htmlSinkRe,
 		Not: htmlSinkNot, Post: htmlSinkDynamic, Proven: htmlSinkOrAssignProvenSafe, Severity: model.SevMedium, Confidence: model.Hypothesis, CWE: "CWE-79",
 		Message: "Content is inserted as raw HTML. If it can contain user data this is cross-site scripting.", Fix: "Render as text, or sanitize with a maintained sanitizer (DOMPurify) right at the sink."},
