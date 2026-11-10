@@ -253,3 +253,30 @@ function copy(target, source) {
   }
   return target;
 }
+
+const { promisify } = require('util');
+const execPromise = promisify(exec);
+const shell = require('execa').shell;
+
+async function more(command, port, src) {
+  // ruleid: pandaward-js-shell-exec
+  await execPromise(command);
+  // ok: pandaward-js-shell-exec
+  await execPromise('git status');
+  // ruleid: pandaward-js-shell-exec
+  await shell(`lsof -i tcp:${port}`);
+  // ruleid: pandaward-js-eval
+  const f = Function('ctx', src);
+  // ok: pandaward-js-eval
+  const g = Function('return this')();
+  return [f, g];
+}
+
+app.get('/dashboard/:name', (req, res) => {
+  load(req.params.name, (err, body) => {
+    // ruleid: pandaward-js-error-to-html
+    if (err) return res.status(400).send(err);
+    // ok: pandaward-js-error-to-html
+    res.json({ body });
+  });
+});
