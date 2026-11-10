@@ -33,23 +33,63 @@ rules:
       cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
     patterns:
       - pattern-either:
+          # child_process.exec and execSync run their argument through the
+          # shell, however the module or the function was imported.
           - patterns:
               - pattern-either:
-                  - pattern: require('child_process').exec($CMD, ...)
-                  - pattern: require('child_process').execSync($CMD, ...)
-                  - pattern-inside: |
-                      import { ..., exec, ... } from 'child_process';
-                      ...
-                  - pattern-inside: |
-                      import { ..., execSync, ... } from 'child_process';
-                      ...
+                  - pattern: require('child_process').$EXEC($CMD, ...)
+                  - patterns:
+                      - pattern-either:
+                          - pattern-inside: |
+                              $CP = require('child_process');
+                              ...
+                          - pattern-inside: |
+                              $CP = require('child_process')
+                              ...
+                          - pattern-inside: |
+                              import * as $CP from 'child_process';
+                              ...
+                          - pattern-inside: |
+                              import $CP from 'child_process';
+                              ...
+                      - pattern: $CP.$EXEC($CMD, ...)
+                  - patterns:
+                      - pattern-either:
+                          - pattern-inside: |
+                              $FN = require('child_process').$EXEC;
+                              ...
+                          - pattern-inside: |
+                              const {..., $EXEC: $FN, ...} = require('child_process');
+                              ...
+                      - pattern: $FN($CMD, ...)
+                  - patterns:
+                      - pattern-either:
+                          - pattern-inside: |
+                              const {..., $EXEC, ...} = require('child_process');
+                              ...
+                          - pattern-inside: |
+                              import { ..., $EXEC, ... } from 'child_process';
+                              ...
+                      - pattern: $EXEC($CMD, ...)
+              - metavariable-regex:
+                  metavariable: $EXEC
+                  regex: ^(exec|execSync)$
+          # shelljs runs its argument through the shell too.
+          - patterns:
               - pattern-either:
-                  - pattern: exec($CMD, ...)
-                  - pattern: execSync($CMD, ...)
-                  - pattern: $CP.exec($CMD, ...)
-                  - pattern: $CP.execSync($CMD, ...)
+                  - pattern-inside: |
+                      $SH = require('shelljs');
+                      ...
+                  - pattern-inside: |
+                      import * as $SH from 'shelljs';
+                      ...
+              - pattern: $SH.exec($CMD, ...)
           - pattern: |
               $CP.spawn($CMD, $ARGS, {..., shell: true, ...})
+          - pattern: |
+              $CP.spawn("cmd.exe", ["/C", ...], ...)
+          - pattern: |
+              $CP.spawn("sh", ["-c", ...], ...)
       - pattern-not: $F("...", ...)
       - pattern-not: $CP.$F("...", ...)
 
@@ -182,27 +222,157 @@ rules:
   - id: pandaward-js-path-traversal
     languages: [javascript, typescript]
     severity: WARNING
-    message: A file path comes from the incoming request. Resolve it and check it stays inside the intended directory.
+    message: A file path comes from the incoming request or from an archive entry name. Resolve it and check it stays inside the intended directory.
     metadata:
       pandaward-control: D-006
       cwe: "CWE-22: Improper Limitation of a Pathname to a Restricted Directory"
     mode: taint
     pattern-sources:
       - patterns:
-          - pattern-either:
-              - pattern: $REQ.query
-              - pattern: $REQ.body
-              - pattern: $REQ.params
+          - pattern: $REQ.$F
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: (?i)^(req|request|ctx|ctx\.request|this\.request)$
+          - metavariable-regex:
+              metavariable: $F
+              regex: ^(query|body|params|url|originalUrl|path|headers|cookies|files|file)$
           # db.query(...) and the like are method calls, not request data.
-          - pattern-not-inside: $REQ.query(...)
-          - pattern-not-inside: $REQ.body(...)
-          - pattern-not-inside: $REQ.params(...)
+          - pattern-not-inside: $REQ.$F(...)
+      # The name of an entry in an archive being extracted (Zip Slip).
+      - patterns:
+          - pattern-either:
+              - pattern-inside: |
+                  $X.on("entry", function ($E, ...) { ... })
+              - pattern-inside: |
+                  $X.on("entry", ($E, ...) => { ... })
+          - pattern-either:
+              - pattern: $E.path
+              - pattern: $E.name
+              - pattern: $E.fileName
+              - pattern: $E.linkname
+              - pattern: $E.linkpath
     pattern-sinks:
       - patterns:
           - pattern-either:
-              - pattern: fs.$F($P, ...)
+              - patterns:
+                  - pattern: $FS.$M($P, ...)
+                  - metavariable-regex:
+                      metavariable: $FS
+                      regex: (?i)^(.*\.)?(\w*fs\w*|filesystem)(\.promises)?$
+                  - metavariable-regex:
+                      metavariable: $M
+                      regex: ^(readFile|readFileSync|writeFile|writeFileSync|appendFile|appendFileSync|createReadStream|createWriteStream|open|openSync|stat|statSync|lstat|lstatSync|exists|existsSync|readdir|readdirSync|unlink|unlinkSync|rmdir|rmdirSync|rm|rmSync|mkdir|mkdirSync|rename|renameSync|copyFile|copyFileSync|symlink|symlinkSync|link|linkSync|chmod|chmodSync|access|accessSync|realpath|realpathSync|outputFile|outputFileSync|remove|removeSync|copy|copySync|move|moveSync|ensureDir|ensureFile|pathExists)$
               - pattern: $RES.sendFile($P, ...)
               - pattern: $RES.download($P, ...)
+              - pattern: send($REQ, $P, ...)
+              - pattern: "$W.Writer({..., path: $P, ...})"
+              - pattern: "Writer({..., path: $P, ...})"
           - focus-metavariable: $P
     pattern-sanitizers:
       - pattern: path.basename(...)
+
+  - id: pandaward-js-prototype-pollution
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: A recursive merge or deep assignment copies keys from its input without skipping __proto__, constructor and prototype, so a key named __proto__ in the input changes Object.prototype for the whole process.
+    metadata:
+      pandaward-control: D-006
+      cwe: "CWE-1321: Improperly Controlled Modification of Object Prototype Attributes"
+    patterns:
+      - pattern-either:
+          - pattern-inside: |
+              for ($K in $SRC) { ... }
+          - pattern-inside: |
+              for (var $K in $SRC) { ... }
+          - pattern-inside: |
+              for (let $K in $SRC) { ... }
+          - pattern-inside: |
+              for (const $K in $SRC) { ... }
+          - pattern-inside: |
+              $X.forEach(function ($K, ...) { ... })
+          - pattern-inside: |
+              $X.forEach(($K, ...) => { ... })
+          - pattern-inside: |
+              for (const $K of $SRC) { ... }
+          - pattern-inside: |
+              for (let $K of $SRC) { ... }
+          - pattern-inside: |
+              for (var $K of $SRC) { ... }
+      # The function calls itself.
+      - pattern-either:
+          - pattern-inside: |
+              function $F(...) { $...BODY }
+          - pattern-inside: |
+              $F = function (...) { $...BODY }
+          - pattern-inside: |
+              $F = (...) => { $...BODY }
+          - pattern-inside: |
+              $G = function $F(...) { $...BODY }
+          - pattern-inside: |
+              $F = $G = function (...) { $...BODY }
+          - pattern-inside: |
+              $F = $G = (...) => { $...BODY }
+      - metavariable-pattern:
+          metavariable: $...BODY
+          pattern: $F(...)
+      - pattern: $T[$K] = $V
+      # The function reads the target's existing value under that key and
+      # merges into it, so a key "__proto__" leads the merge into
+      # Object.prototype. Writing into a fresh object cannot reach it.
+      - metavariable-pattern:
+          metavariable: $...BODY
+          pattern-either:
+            - pattern: $H(..., <... $T[$K] ...>, ...)
+            - pattern: $Y = <... $T[$K] ...>
+      # A check for the dangerous keys, or that the key is the target's
+      # own property, guards the write.
+      - pattern-not-inside: |
+          if (<... "__proto__" ...>) { ... }
+          ...
+      - pattern-not-inside: |
+          if (<... Object.hasOwn($T, $K) ...>) $S
+      - pattern-not-inside: |
+          if (<... $T.hasOwnProperty($K) ...>) $S
+      - pattern-not-inside: |
+          if (<... Object.prototype.hasOwnProperty.call($T, $K) ...>) $S
+      - pattern-not-inside: |
+          if (<... $K === "__proto__" ...>) ...
+          ...
+
+  - id: pandaward-js-reflected-xss
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Request data is written into the HTTP response without HTML encoding. Encode it, or send it as JSON or plain text.
+    metadata:
+      pandaward-control: D-001
+      cwe: "CWE-79: Improper Neutralization of Input During Web Page Generation"
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$F
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: (?i)^(req|request|ctx|ctx\.request|this\.request)$
+          - metavariable-regex:
+              metavariable: $F
+              regex: ^(query|body|params|url|originalUrl|path|headers|cookies)$
+          - pattern-not-inside: $REQ.$F(...)
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $RES.send($X)
+              - pattern: $RES.status($C).send($X)
+              - pattern: $RES.write($X, ...)
+              - pattern: $RES.end($X, ...)
+          - metavariable-regex:
+              metavariable: $RES
+              regex: (?i)^(res|response|resp)$
+          - focus-metavariable: $X
+    pattern-sanitizers:
+      - patterns:
+          - pattern: $ESC(...)
+          - metavariable-regex:
+              metavariable: $ESC
+              regex: (?i)^(.*\.)?\w*(escape|encode|sanitize|purify)\w*$
+      - pattern: JSON.stringify(...)
+      - pattern: encodeURIComponent(...)
