@@ -127,7 +127,7 @@ type codeAdapter struct{}
 
 func (codeAdapter) Name() string { return "builtin-code" }
 func (codeAdapter) Controls() []string {
-	return []string{"B-001", "B-002", "D-001", "D-002", "D-003", "D-004", "E-003", "E-004", "H-001", "H-002", "H-004", "O-002", "P-001", "G-001", "C-004", "P-004"}
+	return []string{"B-001", "B-002", "D-001", "D-002", "D-003", "D-004", "D-007", "E-003", "E-004", "H-001", "H-002", "H-004", "O-002", "P-001", "G-001", "C-004", "P-004"}
 }
 func (codeAdapter) Maturity() string { return MaturityUnvalidated }
 func (codeAdapter) Network() bool    { return false }
@@ -313,6 +313,10 @@ func (a codeAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 					Message: "Model output appears to be passed to a code or shell execution sink. Prompt injection could turn into code execution.",
 					Fix:     "Treat model output as untrusted data: parse into a typed structure, validate against an allowlist, require human approval for side effects."}, f, i+1, a.Name()))
 			}
+		}
+		// D-007: regular expressions that backtrack catastrophically.
+		if jsLike[f.Lang] {
+			res.Signals = append(res.Signals, redosSignals(f, text, a.Name())...)
 		}
 		// H-002: wildcard/reflected CORS together with credentials in the same file.
 		if credRe.MatchString(text) {
