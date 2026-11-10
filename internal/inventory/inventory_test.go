@@ -446,3 +446,28 @@ func TestIgnoredDirsSkipped(t *testing.T) {
 		t.Errorf("include_ignored did not walk the ignored directory (IgnoredDirs %v)", inv.IgnoredDirs)
 	}
 }
+
+// A linked worktree, such as an agent's copy under .claude/worktrees, is
+// another checkout of the repository and is skipped with a reason; a
+// submodule is part of the project and is walked.
+func TestWalkSkipsLinkedWorktrees(t *testing.T) {
+	files := map[string]string{
+		"src/a.js":                           "console.log(1);\n",
+		".claude/worktrees/agent-1/.git":     "gitdir: /home/u/app/.git/worktrees/agent-1\n",
+		".claude/worktrees/agent-1/src/a.js": "console.log(1);\n",
+		"vendored/lib/.git":                  "gitdir: ../../.git/modules/lib\n",
+		"vendored/lib/x.js":                  "console.log(2);\n",
+	}
+	inv := walk(t, files, inventory.Options{})
+	var paths []string
+	for _, f := range inv.Files {
+		paths = append(paths, f.Path)
+	}
+	slices.Sort(paths)
+	if want := []string{"src/a.js", "vendored/lib/x.js"}; !slices.Equal(paths, want) {
+		t.Fatalf("analyzed files = %v, want %v", paths, want)
+	}
+	if !slices.Contains(inv.Skipped, ".claude/worktrees/agent-1: git worktree of another checkout") {
+		t.Errorf("skipped = %v", inv.Skipped)
+	}
+}

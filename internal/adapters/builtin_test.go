@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ratomirjovanovic/pandaward/internal/inventory"
@@ -114,6 +115,15 @@ func TestCodeRuleFalsePositiveGuards(t *testing.T) {
 		{"code.sql-template", "a.ts", "await tx.$queryRaw`SELECT 1 AS ok FROM (SELECT pg_advisory_xact_lock(hashtext(${key}))) AS l`;\n", false},
 		{"code.sql-template", "a.ts", "await prisma.$executeRaw<number>`DELETE FROM t WHERE id = ${id}`;\n", false},
 		{"code.sql-template", "a.ts", "await prisma.$queryRawUnsafe(`SELECT * FROM t WHERE id = ${id}`);\n", true},
+		// A tagged template behind a client getter or named db is parameterized (#352).
+		{"code.sql-template", "a.ts", "const rows = await sql()`SELECT * FROM t WHERE id = ${id}`;\n", false},
+		{"code.sql-template", "a.ts", "await db`DELETE FROM t WHERE email = ${email}`;\n", false},
+		// A cookie flag off for a display preference is on purpose (#352).
+		{"code.cookie-flags-off", "a.ts", "store.set(\"NEXT_LOCALE\", locale, {\n  path: \"/\",\n  httpOnly: false,\n});\n", false},
+		{"code.cookie-flags-off", "a.ts", "res.cookie(\"session\", sid, {\n  httpOnly: false,\n});\n", true},
+		// CORS: the wildcard and the credentials must be one setting (#352).
+		{"code.cors-wildcard-credentials", "a.ts", "const pub = { 'Access-Control-Allow-Origin': '*' };\n" + strings.Repeat("// x\n", 12) + "const admin = { 'Access-Control-Allow-Origin': origin, 'Access-Control-Allow-Credentials': 'true' };\n", false},
+		{"code.cors-wildcard-credentials", "a.ts", "app.use(cors({ origin: '*', credentials: true }));\n", true},
 
 		// code.weak-hash-password: a hashing call, not just the word.
 		{"code.weak-hash-password", "a.ts", "const ok = [\"sha1\", \"sha256\"].some(a => verify(sig, sign(id, password, a)));\n", false},
