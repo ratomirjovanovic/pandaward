@@ -413,7 +413,7 @@ func (p *rxParser) escapedRune(c rune) rune {
 			for p.next() != '}' {
 			}
 			v, err := strconv.ParseUint(string(p.src[start:p.i-1]), 16, 32)
-			if err != nil {
+			if err != nil || v > unicode.MaxRune {
 				panic(rxError{})
 			}
 			return rune(v)
@@ -428,7 +428,7 @@ func (p *rxParser) hex(n int) rune {
 		panic(rxError{})
 	}
 	v, err := strconv.ParseUint(string(p.src[p.i:p.i+n]), 16, 32)
-	if err != nil {
+	if err != nil || v > unicode.MaxRune {
 		panic(rxError{})
 	}
 	p.i += n
@@ -855,7 +855,7 @@ func unquoteJS(lit string) (string, bool) {
 					return "", false
 				}
 				v, err := strconv.ParseUint(body[i+2:i+k], 16, 32)
-				if err != nil {
+				if err != nil || v > unicode.MaxRune {
 					return "", false
 				}
 				b.WriteRune(rune(v))
@@ -866,7 +866,7 @@ func unquoteJS(lit string) (string, bool) {
 				return "", false
 			}
 			v, err := strconv.ParseUint(body[i+1:i+1+n], 16, 32)
-			if err != nil {
+			if err != nil || v > unicode.MaxRune {
 				return "", false
 			}
 			b.WriteRune(rune(v))

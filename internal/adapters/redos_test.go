@@ -45,6 +45,7 @@ func TestAnalyzeRegex(t *testing.T) {
 		// Not understood: no finding.
 		{`(?<x`, "", redosNone},
 		{`a**`, "", redosNone},
+		{`^(\u{FFFFFFFF}+)+$`, "u", redosNone},
 	} {
 		if got := analyzeRegex(c.pattern, c.flags); got.Kind != c.want {
 			t.Errorf("/%s/%s = %d, want %d", c.pattern, c.flags, got.Kind, c.want)
@@ -104,5 +105,16 @@ func TestRedosSignals(t *testing.T) {
 	}
 	if s := sigs[1]; s.StartLine != 4 || s.RuleID != "code.js-redos-polynomial" || s.Severity != model.SevInfo || !strings.Contains(s.Message, "whitespace") {
 		t.Errorf("polynomial = %+v", s)
+	}
+}
+
+// A code point above U+10FFFF is not a character: the pattern or string is
+// not understood rather than read as a negative rune.
+func TestRedosRejectsOutOfRangeCodePoints(t *testing.T) {
+	if _, ok := parseJSRegex(`\u{110000}`, "u"); ok {
+		t.Error("pattern with code point 110000 parsed")
+	}
+	if _, ok := unquoteJS(`"\u{FFFFFFFF}"`); ok {
+		t.Error("string with code point FFFFFFFF decoded")
 	}
 }
