@@ -14,7 +14,7 @@
       "fix_recognized": 6
     },
     "owasp/java/all": {
-      "average_score_covered": 0.4626184579882949,
+      "average_score_covered": 0.4858758800793883,
       "categories": {
         "cmdi": 0.3286984126984127,
         "crypto": 0.7461538461538462,
@@ -22,7 +22,7 @@
         "ldapi": 0.32638888888888884,
         "pathtraver": 0.18351434140907819,
         "securecookie": 1,
-        "sqli": 0.026495943204868144,
+        "sqli": 0.2823275862068966,
         "trustbound": 0.16979546091342113,
         "weakrand": 1,
         "xpathi": 0.2833333333333333,
@@ -73,10 +73,10 @@
       }
     },
     "owasp/python/all": {
-      "average_score_covered": 0.4368134990398449,
+      "average_score_covered": 0.4942750850728595,
       "categories": {
-        "cmdi": -0.15384615384615385,
-        "codeinj": 0,
+        "cmdi": 0.6263736263736264,
+        "codeinj": 0.024242424242424176,
         "deserialization": 0.6666666666666667,
         "hash": 1,
         "ldapi": 0.5961538461538461,

@@ -599,11 +599,22 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 	// Signals a person dismissed as false positive no longer count. Controls
 	// are decided again here, now that every signal has its finding.
 	gone := dismissedSignals(allSignals, ids, ledger)
-	redecide(results, allSignals, decided, gone)
+	// Built-in heuristics a bundled rule replaces count only when the
+	// semgrep adapter (Semgrep or Opengrep) did not complete. A retest that
+	// carries the semgrep results over keeps the replacement.
+	var superseded map[int]string
+	if ranOK["semgrep"] || carried["semgrep"] {
+		superseded = supersededSignals(allSignals, inv)
+	}
+	replacedBy := map[string]string{} // fingerprint -> bundled rule
+	for i, rule := range superseded {
+		replacedBy[ids.FP[i]] = rule
+	}
+	redecide(results, allSignals, decided, gone, superseded)
 	raise(results, allSignals, foreign, gone)
 	for i, s := range allSignals {
 		fp := ids.FP[i]
-		if seen[fp] {
+		if _, ok := superseded[i]; ok || seen[fp] {
 			continue
 		}
 		seen[fp] = true
@@ -664,11 +675,17 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 		f.Status = model.FindingRemediated
 		f.Stale = false
 		f.AssessmentID = asmt.ID
-		f.Note = strings.TrimSpace(f.Note + " Not observed in " + asmt.ID + " (" + f.Collector + " completed OK).")
+		why := "signal no longer observed by " + f.Collector + " in " + asmt.ID
+		if rule, ok := replacedBy[f.Fingerprint]; ok {
+			f.Note = strings.TrimSpace(f.Note + " Replaced in " + asmt.ID + " by the bundled rule " + rule + ", which decides this weakness for the file's language; the built-in heuristic is not reported while Semgrep or Opengrep completes.")
+			why = "built-in heuristic replaced by " + rule + " in " + asmt.ID
+		} else {
+			f.Note = strings.TrimSpace(f.Note + " Not observed in " + asmt.ID + " (" + f.Collector + " completed OK).")
+		}
 		if err := e.St.UpsertFinding(e.ProjectID, f); err != nil {
 			return nil, err
 		}
-		_ = e.St.Event(e.ProjectID, f.ID, string(old), string(f.Status), "signal no longer observed by "+f.Collector+" in "+asmt.ID)
+		_ = e.St.Event(e.ProjectID, f.ID, string(old), string(f.Status), why)
 		res.Remediated++
 	}
 
@@ -901,8 +918,8 @@ func dismissedByPerson(f model.Finding) bool {
 // redecide decides again the controls decide() decided during the scan,
 // without the signals in gone. Controls an adapter decided explicitly, or
 // whose adapter did not complete, are not in decided and keep their status.
-func redecide(results map[string]*model.ControlResult, sigs []model.Signal, decided map[string]signalRange, gone map[int]model.Finding) {
-	if len(gone) == 0 {
+func redecide(results map[string]*model.ControlResult, sigs []model.Signal, decided map[string]signalRange, gone map[int]model.Finding, superseded map[int]string) {
+	if len(gone) == 0 && len(superseded) == 0 {
 		return
 	}
 	for cid, rg := range decided {
@@ -912,26 +929,58 @@ func redecide(results map[string]*model.ControlResult, sigs []model.Signal, deci
 		}
 		var kept []model.Signal
 		var dismissed []model.Finding
+		replaced := 0
 		for i := rg.from; i < rg.to; i++ {
 			if sigs[i].ControlID != cid {
 				continue
 			}
-			if f, ok := gone[i]; ok {
+			if _, ok := superseded[i]; ok {
+				replaced++
+			} else if f, ok := gone[i]; ok {
 				dismissed = append(dismissed, f)
 			} else {
 				kept = append(kept, sigs[i])
 			}
 		}
-		if len(dismissed) == 0 {
+		if len(dismissed) == 0 && replaced == 0 {
 			continue
 		}
+		var notes []string
+		if len(dismissed) > 0 {
+			notes = append(notes, dismissedNote(dismissed))
+		}
+		if replaced > 0 {
+			notes = append(notes, fmt.Sprintf("%d built-in heuristic signal(s) replaced by bundled Semgrep rules", replaced))
+		}
+		note := strings.Join(notes, "; ")
 		if len(kept) == 0 {
-			r.Status, r.Reason = model.StatusPass, "check completed; "+dismissedNote(dismissed)+"; PASS applies to this check only"
+			r.Status, r.Reason = model.StatusPass, "check completed; "+note+"; PASS applies to this check only"
 			continue
 		}
 		r.Status, r.Reason = decide(kept, cid, rg.detail)
-		r.Reason += "; " + dismissedNote(dismissed)
+		r.Reason += "; " + note
 	}
+}
+
+// supersededSignals returns the built-in signals, by index, that a bundled
+// Semgrep rule replaces in the signal's file language, each with that rule.
+// The caller uses it only when the semgrep adapter completed.
+func supersededSignals(sigs []model.Signal, inv *inventory.Inventory) map[int]string {
+	sup, err := adapters.LoadSupersessions()
+	if err != nil || len(sup) == 0 {
+		return nil
+	}
+	out := map[int]string{}
+	for i, s := range sigs {
+		f := inv.FileByPath(s.File)
+		if f == nil {
+			continue
+		}
+		if rule := sup.By(s, f.Lang); rule != "" {
+			out[i] = rule
+		}
+	}
+	return out
 }
 
 // dismissedNote says how many signals were dismissed and by whom.
