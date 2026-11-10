@@ -16,6 +16,7 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 - `tools/cvebench` scores PandaWard as a whole, `pandaward`: the built-in rules plus Semgrep, as a scan runs them. pandaward.dev shows it first in the CVE table and the history (#341).
 
 ### Changed
+- The CVE benchmark runs in eight parallel shards, `tools/cvebench --shard i/n`, joined by `tools/cvebench merge` into the same `cve.json`, so a full run takes a fraction of the time (#355).
 - JavaScript rules for client-side XSS through jQuery: `pandaward-js-jquery-html` reports non-constant HTML passed to `.html()`, markup built by concatenation passed to `$()`, `.append()` and similar, `execCommand('insertHTML')` and `createElement` with concatenation; `pandaward-js-jquery-plugin-option` reports plugin options passed to `$()` or to a jQuery insertion method, as in the Bootstrap tooltip, collapse and affix CVEs. On the OpenSSF CVE Benchmark the Semgrep and Opengrep rules detect 69 CVEs instead of 60 and recognize 32 fixes instead of 27, with no CVE lost (#334).
 - The CVE benchmark baseline is raised to the measurement of main after #330 and #332: built-in rules 45 CVEs detected and 28 fixes recognized, Semgrep and Opengrep 60 and 27, up from 23 and 10, and 13 and 6 (#339).
 - `tools/cvebench` progress lines show how many CVEs are done, the elapsed time and an estimate of the time left, so a CI run can be followed in its live log (#337).
