@@ -101,45 +101,50 @@ The [OWASP Benchmark for Python](https://github.com/OWASP-Benchmark/BenchmarkPyt
 | | |
 |---|---|
 | Benchmark | OWASP BenchmarkPython, commit `f1291485808b66e20ddb6b01b10dc71b3df8c8ba`, expected results 0.1 |
-| PandaWard | source build of `main` at `3c896ba` plus #314 and #315 |
-| Engines | built-in rules; Semgrep 1.182.1 and Opengrep 1.33.1 with the bundled rule set `b24cf8d85498e933...` |
-| Date | 2026-11-09 |
+| PandaWard | source build of the branch of #326 |
+| Engines | built-in rules; Semgrep 1.182.1 and Opengrep 1.33.1 with the bundled rule set `deb166b2074f9c1a...` |
+| Date | 2026-11-10 |
 
 ### Results
 
 | Engine | Covered categories | Average, covered | Average, all 14 |
 |---|---|---|---|
 | Built-in rules | 8 | +0.026 | +0.015 |
-| Semgrep 1.182.1, bundled rules | 5 | +0.039 | +0.014 |
-| Opengrep 1.33.1, bundled rules | 5 | +0.059 | +0.021 |
-| All merged | 9 | +0.029 | +0.018 |
+| Semgrep 1.182.1, bundled rules | 14 | +0.433 | +0.433 |
+| Opengrep 1.33.1, bundled rules | 14 | +0.530 | +0.530 |
+| All merged | 14 | +0.437 | +0.437 |
 
-Per category, for the categories at least one engine covers (TPR / FPR / score):
+Per category (TPR / FPR / score):
 
-| Category | CWE | Real | Not real | Built-in | Semgrep | Opengrep |
-|---|---|---|---|---|---|---|
-| cmdi | 78 | 13 | 7 | 0.54 / 1.00 / -0.462 | 0.54 / 1.00 / -0.462 | 0.54 / 1.00 / -0.462 |
-| codeinj | 94 | 20 | 33 | 1.00 / 1.00 / 0.000 | 1.00 / 1.00 / 0.000 | 1.00 / 1.00 / 0.000 |
-| deserialization | 502 | 18 | 36 | 1.00 / 0.33 / +0.667 | 1.00 / 0.33 / +0.667 | 1.00 / 0.33 / +0.667 |
-| hash | 328 | 71 | 80 | 0.00 / 0.00 / 0.000 | not covered | not covered |
-| pathtraver | 22 | 65 | 103 | not covered | 0.11 / 0.12 / -0.009 | 0.17 / 0.08 / +0.092 |
-| securecookie | 614 | 24 | 15 | 0.00 / 0.00 / 0.000 | not covered | not covered |
-| sqli | 89 | 5 | 11 | 0.00 / 0.00 / 0.000 | 0.00 / 0.00 / 0.000 | 0.00 / 0.00 / 0.000 |
-| weakrand | 330 | 99 | 227 | 0.00 / 0.00 / 0.000 | not covered | not covered |
-| xss | 79 | 31 | 58 | 0.00 / 0.00 / 0.000 | not covered | not covered |
+| Category | CWE | Real | Not real | Built-in | Semgrep | Opengrep | Bundled rule |
+|---|---|---|---|---|---|---|---|
+| cmdi | 78 | 13 | 7 | 0.538 / 1.000 / -0.462 | 0.615 / 0.143 / +0.473 | 0.769 / 0.143 / +0.626 | `pandaward-py-shell` |
+| codeinj | 94 | 20 | 33 | 1.000 / 1.000 / +0.000 | 0.600 / 0.576 / +0.024 | 0.600 / 0.515 / +0.085 | `pandaward-py-eval` |
+| deserialization | 502 | 18 | 36 | 1.000 / 0.333 / +0.667 | 1.000 / 0.333 / +0.667 | 1.000 / 0.333 / +0.667 | `pandaward-py-unsafe-deserialization` |
+| hash | 328 | 71 | 80 | 0.000 / 0.000 / +0.000 | 1.000 / 0.000 / +1.000 | 1.000 / 0.000 / +1.000 | `pandaward-py-weak-hash` |
+| ldapi | 90 | 16 | 13 | not covered | 0.688 / 0.154 / +0.534 | 0.750 / 0.077 / +0.673 | `pandaward-py-ldap-injection` |
+| pathtraver | 22 | 65 | 103 | not covered | 0.415 / 0.262 / +0.153 | 0.508 / 0.204 / +0.304 | `pandaward-py-path-traversal` |
+| redirect | 601 | 13 | 21 | not covered | 0.692 / 0.667 / +0.026 | 0.769 / 0.571 / +0.198 | `pandaward-py-open-redirect` |
+| securecookie | 614 | 24 | 15 | 0.000 / 0.000 / +0.000 | 1.000 / 0.000 / +1.000 | 1.000 / 0.000 / +1.000 | `pandaward-py-insecure-cookie` |
+| sqli | 89 | 5 | 11 | 0.000 / 0.000 / +0.000 | 0.400 / 0.000 / +0.400 | 0.600 / 0.000 / +0.600 | `pandaward-py-sql-injection` |
+| trustbound | 501 | 18 | 19 | not covered | 0.444 / 0.474 / -0.029 | 0.556 / 0.421 / +0.135 | `pandaward-py-trust-boundary` |
+| weakrand | 330 | 99 | 227 | 0.000 / 0.000 / +0.000 | 1.000 / 0.000 / +1.000 | 1.000 / 0.000 / +1.000 | `pandaward-py-weak-random` |
+| xpathi | 643 | 51 | 135 | not covered | 0.412 / 0.200 / +0.212 | 0.431 / 0.163 / +0.268 | `pandaward-py-xpath-injection` |
+| xss | 79 | 31 | 58 | 0.000 / 0.000 / +0.000 | 0.419 / 0.241 / +0.178 | 0.613 / 0.172 / +0.440 | `pandaward-py-xss` |
+| xxe | 611 | 8 | 20 | not covered | 0.625 / 0.200 / +0.425 | 0.625 / 0.200 / +0.425 | `pandaward-py-xxe` |
 
-ldapi, redirect, trustbound, xpathi and xxe have no rule in any engine.
+The first measurement (#315) was +0.059 on Opengrep and +0.039 on Semgrep, with five covered categories.
 
 ### Interpretation
 
-Python is the first suite where an engine is measurably better than not running it, but only in a few categories and far from the 1.0 target of 0.50.
+With the bundled rules on Opengrep, PandaWard reaches the 0.50 target of the PandaWard 1.0 plan on this suite on average, from +0.059 before #326. It is well short of it in several categories.
 
-- **Deserialization (+0.667)** is the one strong category: every real case calls `pickle` or `yaml.load`, and a third of the safe cases do too, with data that never comes from the request.
-- **Code injection and command injection** show what a sink-only rule cannot do. The eval rules flag every `eval` and `exec`, real or safe (FPR 1.00). The shell rules flag every `shell=True` and `os.system`, which in this suite is all 7 safe cases and 7 of the 13 real ones, giving -0.462: the safe cases use the risky API with constant input.
-- **Path traversal** is where data flow pays off: the bundled taint rule scores -0.009 on Semgrep, which follows taint within one function, and +0.092 on Opengrep with `--taint-intrafile`, which also follows it across functions in the same file. Same rule, same files, different engine.
-- Hash, weak random, secure cookie, XSS and SQL injection need the risky call and its argument on one line or a framework source the rules do not model; they find nothing.
-
-Next, for Phase 2: taint rules with Flask sources (`request.args`, `request.form`, `request.cookies`, `request.headers`) for eval, exec, subprocess, SQL and file paths, so the sink rules stop firing on constant input; and Opengrep as the reference engine, since it is the one that improves the same rules.
+- **Taint rules** (#326) follow Flask and Django request data (arguments, form, cookies, headers, query string, body) to eval and exec, OS commands, SQL, file paths, LDAP, XPath, the HTML a view returns, redirects, the session and XML parsing with external entities enabled. Propagators carry taint through `list.append`, `dict.update` and `ConfigParser.set`, which the Benchmark uses to hide input. The cmdi score moved from -0.462 to +0.626 because the rule no longer reports commands built from constants.
+- **Hash, weak random and insecure cookie** are pattern rules and score 1.000.
+- **Deserialization stays a pattern rule**: `pickle` and `yaml.load` run code from their input whatever its source, so every call is reported. A taint version scored lower (+0.528), because it missed cases where the input passes through a step the engines do not follow, and the gate rejected it.
+- **The remaining misses** come mostly from three constructions: input read through a request wrapper class in another module (`helpers.separate_request`), which needs cross-file taint; string slices (`s[4:-17]`), through which neither engine propagates taint; and values passed through a configuration object.
+- **The remaining false positives** come from the same value-dependent constructions as in Java: a `match` on a character of a constant string, a list element taken by index after a removal, and a dictionary read with a constant key. Code injection (+0.085) is low for another reason: two thirds of its safe cases check that the input is a plain string literal before calling `exec`, and a rule cannot model that check.
+- **Opengrep leads Semgrep** (+0.530 against +0.433) for the same reason as in Java: it follows taint through functions in the same file.
 
 ## OpenSSF CVE Benchmark (JavaScript and TypeScript)
 

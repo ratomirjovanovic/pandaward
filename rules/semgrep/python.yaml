@@ -1,52 +1,111 @@
+# Taint rules share one set of sources: the data of an incoming Flask or
+# Django request. request.path is not a source: inside a view it can only
+# hold what the route pattern lets through, and its variable parts arrive
+# as view arguments.
 rules:
   - id: pandaward-py-eval
     languages: [python]
     severity: ERROR
-    message: Dynamic code evaluation of a non-constant value. If any part of it is attacker-controlled this is code injection.
+    message: Request data reaches eval, exec or compile. Never evaluate input as code; parse it instead (ast.literal_eval or json).
     metadata:
       pandaward-control: D-001
       cwe: "CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code"
-    patterns:
-      - pattern-either:
-          - pattern: eval($X, ...)
-          - pattern: exec($X, ...)
-      - pattern-not: eval("...", ...)
-      - pattern-not: exec("...", ...)
+    mode: taint
+    pattern-sources: &request
+      - patterns:
+          - pattern: flask.request.$A
+          - metavariable-regex:
+              metavariable: $A
+              regex: ^(args|form|values|cookies|headers|files|json|data|query_string|full_path|url|stream|get_json|get_data)$
+      - patterns:
+          - pattern-inside: |
+              def $VIEW($REQ, ...):
+                ...
+          - pattern-either:
+              - pattern: $REQ.GET
+              - pattern: $REQ.POST
+              - pattern: $REQ.COOKIES
+              - pattern: $REQ.META
+              - pattern: $REQ.body
+    pattern-propagators: &propagate
+      # Taint moves into a list, set, dict or config object through these calls.
+      - pattern: $TO.append($FROM)
+        from: $FROM
+        to: $TO
+      - pattern: $TO.extend($FROM)
+        from: $FROM
+        to: $TO
+      - pattern: $TO.insert($I, $FROM)
+        from: $FROM
+        to: $TO
+      - pattern: $TO.add($FROM)
+        from: $FROM
+        to: $TO
+      - pattern: $TO.update($FROM)
+        from: $FROM
+        to: $TO
+      - pattern: $TO.set($SECTION, $KEY, $FROM)
+        from: $FROM
+        to: $TO
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: eval($X, ...)
+              - pattern: exec($X, ...)
+              - pattern: compile($X, ...)
+          - focus-metavariable: $X
 
   - id: pandaward-py-shell
     languages: [python]
     severity: ERROR
-    message: A shell command is built from a non-constant string. Pass an argument list without shell=True.
+    message: Request data reaches an OS command. Run a fixed program with an argument list, without shell=True, and validate each argument.
     metadata:
       pandaward-control: D-002
       cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
-    patterns:
-      - pattern-either:
-          - pattern: subprocess.$F($CMD, ..., shell=True, ...)
-          - pattern: os.system($CMD)
-          - pattern: os.popen($CMD, ...)
-      - pattern-not: subprocess.$F("...", ..., shell=True, ...)
-      - pattern-not: os.system("...")
-      - pattern-not: os.popen("...", ...)
+    mode: taint
+    pattern-sources: *request
+    pattern-propagators: *propagate
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - patterns:
+                  - pattern: subprocess.$F($X, ...)
+                  - metavariable-regex:
+                      metavariable: $F
+                      regex: ^(run|call|check_call|check_output|Popen|getoutput|getstatusoutput)$
+              - pattern: os.system($X)
+              - pattern: os.popen($X, ...)
+          - focus-metavariable: $X
+      - patterns:
+          - pattern: os.$EXEC($P, $X, ...)
+          - metavariable-regex:
+              metavariable: $EXEC
+              regex: ^(exec[lv]p?e?|spawn[lv]p?e?)$
+          - focus-metavariable: $X
 
-  - id: pandaward-py-sql-string
+  - id: pandaward-py-sql-injection
     languages: [python]
     severity: ERROR
-    message: SQL text is built with string formatting. Use query parameters.
+    message: Request data reaches an SQL statement. Pass it as a query parameter instead of formatting it into the SQL text.
     metadata:
       pandaward-control: D-003
       cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
-    patterns:
-      - pattern-either:
-          - pattern: $CUR.$EXEC("..." % $X, ...)
-          - pattern: $CUR.$EXEC("...".format(...), ...)
-          - pattern: $CUR.$EXEC(f"...", ...)
-          - pattern: $CUR.$EXEC("..." + $X, ...)
-      - metavariable-regex:
-          metavariable: $EXEC
-          regex: ^(execute|executemany|executescript|raw|text)$
-      - pattern-not: $CUR.$EXEC("..." + "...", ...)
+    mode: taint
+    pattern-sources: *request
+    pattern-propagators: *propagate
+    pattern-sinks:
+      - patterns:
+          - pattern: $CUR.$EXEC($Q, ...)
+          - metavariable-regex:
+              metavariable: $EXEC
+              regex: ^(execute|executemany|executescript|raw|extra)$
+          - focus-metavariable: $Q
+      - patterns:
+          - pattern: sqlalchemy.text($Q)
+          - focus-metavariable: $Q
 
+  # Not a taint rule: these deserializers run code from their input
+  # whatever its source (a file, a cache, a queue), so any call is reported.
   - id: pandaward-py-unsafe-deserialization
     languages: [python]
     severity: ERROR
@@ -57,14 +116,201 @@ rules:
     pattern-either:
       - pattern: pickle.loads(...)
       - pattern: pickle.load(...)
+      - pattern: _pickle.loads(...)
       - pattern: cPickle.loads(...)
       - pattern: dill.loads(...)
       - pattern: marshal.loads(...)
+      - pattern: jsonpickle.decode(...)
+      - pattern: yaml.unsafe_load(...)
       - patterns:
           - pattern: yaml.load(...)
           - pattern-not: yaml.load(..., Loader=yaml.SafeLoader, ...)
           - pattern-not: yaml.load(..., Loader=yaml.CSafeLoader, ...)
           - pattern-not: yaml.load(..., Loader=SafeLoader, ...)
+
+  - id: pandaward-py-path-traversal
+    languages: [python]
+    severity: WARNING
+    message: Request data is used as a file path. Resolve it and check it stays inside the intended directory.
+    metadata:
+      pandaward-control: D-006
+      cwe: "CWE-22: Improper Limitation of a Pathname to a Restricted Directory"
+    mode: taint
+    pattern-sources: *request
+    pattern-propagators: *propagate
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: open($P, ...)
+              - pattern: io.open($P, ...)
+              - pattern: codecs.open($P, ...)
+              - pattern: os.open($P, ...)
+              - pattern: os.remove($P)
+              - pattern: os.unlink($P)
+              - pattern: shutil.$SH($P, ...)
+              - pattern: pathlib.Path($P, ...)
+              - pattern: pathlib.Path(...) / $P
+              - pattern: send_file($P, ...)
+              - pattern: flask.send_file($P, ...)
+          - focus-metavariable: $P
+    pattern-sanitizers:
+      - pattern: os.path.basename(...)
+      - pattern: werkzeug.utils.secure_filename(...)
+      - pattern: secure_filename(...)
+
+  - id: pandaward-py-ldap-injection
+    languages: [python]
+    severity: ERROR
+    message: Request data reaches an LDAP search filter. Escape it with escape_filter_chars.
+    metadata:
+      pandaward-control: D-006
+      cwe: "CWE-90: Improper Neutralization of Special Elements used in an LDAP Query"
+    mode: taint
+    pattern-sources: *request
+    pattern-propagators: *propagate
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: $C.search($B, $X, ...)
+              - pattern: $C.search_s($B, $S, $X, ...)
+              - pattern: $C.search_st($B, $S, $X, ...)
+              - pattern: $C.search_ext_s($B, $S, $X, ...)
+          - metavariable-regex:
+              metavariable: $C
+              regex: (?i)^(.*\.)?\w*(conn|ldap)\w*$
+          - focus-metavariable: $X
+    pattern-sanitizers:
+      - pattern: ldap3.utils.conv.escape_filter_chars(...)
+      - pattern: ldap.filter.escape_filter_chars(...)
+      - pattern: escape_filter_chars(...)
+
+  - id: pandaward-py-xpath-injection
+    languages: [python]
+    severity: ERROR
+    message: Request data reaches an XPath expression. Pass it as an XPath variable (root.xpath(query, name=value)) instead.
+    metadata:
+      pandaward-control: D-006
+      cwe: "CWE-643: Improper Neutralization of Data within XPath Expressions"
+    mode: taint
+    pattern-sources: *request
+    pattern-propagators: *propagate
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: lxml.etree.XPath($X, ...)
+              - pattern: lxml.etree.ETXPath($X, ...)
+              - pattern: $ROOT.xpath($X, ...)
+          - focus-metavariable: $X
+
+  - id: pandaward-py-xss
+    languages: [python]
+    severity: ERROR
+    message: Request data is returned in an HTML response without escaping. Escape it (markupsafe.escape) or render it with an autoescaping template.
+    metadata:
+      pandaward-control: D-001
+      cwe: "CWE-79: Improper Neutralization of Input During Web Page Generation"
+    mode: taint
+    pattern-sources: *request
+    pattern-propagators: *propagate
+    pattern-sinks:
+      - patterns:
+          - pattern-inside: |
+              @$APP.route(...)
+              def $VIEW(...):
+                ...
+          - pattern: return $X
+          - focus-metavariable: $X
+      - patterns:
+          - pattern-either:
+              - pattern: flask.make_response($X, ...)
+              - pattern: flask.Response($X, ...)
+              - pattern: django.http.HttpResponse($X, ...)
+          - focus-metavariable: $X
+    pattern-sanitizers:
+      - patterns:
+          - pattern: $ESC(...)
+          - metavariable-regex:
+              metavariable: $ESC
+              regex: (?i)^(.*\.)?(escape|\w*html\w*escape\w*|\w*escape\w*html\w*)$
+      # These build a response that is not HTML from the value, or render
+      # it through an autoescaping template; template injection is its own rule.
+      - pattern: flask.render_template(...)
+      - pattern: flask.render_template_string(...)
+      - pattern: flask.jsonify(...)
+      - pattern: json.dumps(...)
+      - pattern: flask.send_file(...)
+      - pattern: flask.send_from_directory(...)
+      - pattern: flask.redirect(...)
+      - pattern: flask.url_for(...)
+
+  - id: pandaward-py-open-redirect
+    languages: [python]
+    severity: WARNING
+    message: Request data decides the redirect target. Redirect only to relative paths or an allowlist of hosts.
+    metadata:
+      pandaward-control: D-006
+      cwe: "CWE-601: URL Redirection to Untrusted Site ('Open Redirect')"
+    mode: taint
+    pattern-sources: *request
+    pattern-propagators: *propagate
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: flask.redirect($X, ...)
+              - pattern: django.shortcuts.redirect($X, ...)
+              - pattern: django.http.HttpResponseRedirect($X, ...)
+          - focus-metavariable: $X
+    pattern-sanitizers:
+      - pattern: flask.url_for(...)
+
+  - id: pandaward-py-trust-boundary
+    languages: [python]
+    severity: WARNING
+    message: Request data is stored in the session, where later code treats it as trusted. Validate it before storing it.
+    metadata:
+      pandaward-control: D-006
+      cwe: "CWE-501: Trust Boundary Violation"
+    mode: taint
+    pattern-sources: *request
+    pattern-propagators: *propagate
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: flask.session[$X] = $V
+              - pattern: flask.session[$K] = $X
+              - pattern: flask.session.update($X)
+          - focus-metavariable: $X
+
+  - id: pandaward-py-xxe
+    languages: [python]
+    severity: ERROR
+    message: Request data is parsed as XML with external entities enabled. Leave external entities off, or use defusedxml.
+    metadata:
+      pandaward-control: D-006
+      cwe: "CWE-611: Improper Restriction of XML External Entity Reference"
+    mode: taint
+    pattern-sources: *request
+    pattern-propagators: *propagate
+    pattern-sinks:
+      - patterns:
+          - pattern-inside: |
+              $P.setFeature(xml.sax.handler.feature_external_ges, True)
+              ...
+          - pattern-either:
+              - pattern: xml.dom.minidom.parseString($X, $P)
+              - pattern: xml.dom.minidom.parse($X, $P)
+              - pattern: xml.dom.pulldom.parseString($X, $P)
+              - pattern: $P.parse($X)
+          - focus-metavariable: $X
+      - patterns:
+          - pattern-inside: |
+              $P = lxml.etree.XMLParser(..., resolve_entities=True, ...)
+              ...
+          - pattern-either:
+              - pattern: lxml.etree.fromstring($X, $P, ...)
+              - pattern: lxml.etree.parse($X, $P, ...)
+              - pattern: lxml.etree.XML($X, $P, ...)
+          - focus-metavariable: $X
 
   - id: pandaward-py-tls-verify-off
     languages: [python]
@@ -86,14 +332,8 @@ rules:
       pandaward-control: D-006
       cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
     mode: taint
-    pattern-sources:
-      - pattern-either:
-          - pattern: flask.request.$ATTR
-          - pattern: request.args
-          - pattern: request.form
-          - pattern: request.json
-          - pattern: request.GET
-          - pattern: request.POST
+    pattern-sources: *request
+    pattern-propagators: *propagate
     pattern-sinks:
       - patterns:
           - pattern-either:
@@ -101,32 +341,6 @@ rules:
               - pattern: httpx.$M($URL, ...)
               - pattern: urllib.request.urlopen($URL, ...)
           - focus-metavariable: $URL
-
-  - id: pandaward-py-path-traversal
-    languages: [python]
-    severity: WARNING
-    message: A file path comes from the incoming request. Resolve it and check it stays inside the intended directory.
-    metadata:
-      pandaward-control: D-006
-      cwe: "CWE-22: Improper Limitation of a Pathname to a Restricted Directory"
-    mode: taint
-    pattern-sources:
-      - pattern-either:
-          - pattern: request.args
-          - pattern: request.form
-          - pattern: request.GET
-          - pattern: request.POST
-    pattern-sinks:
-      - patterns:
-          - pattern-either:
-              - pattern: open($P, ...)
-              - pattern: send_file($P, ...)
-              - pattern: flask.send_file($P, ...)
-          - focus-metavariable: $P
-    pattern-sanitizers:
-      - pattern: os.path.basename(...)
-      - pattern: werkzeug.utils.secure_filename(...)
-      - pattern: secure_filename(...)
 
   - id: pandaward-py-template-injection
     languages: [python]
@@ -143,3 +357,44 @@ rules:
       - pattern-not: render_template_string("...", ...)
       - pattern-not: flask.render_template_string("...", ...)
       - pattern-not: jinja2.Template("...", ...)
+
+  - id: pandaward-py-weak-hash
+    languages: [python]
+    severity: WARNING
+    message: MD4, MD5 and SHA-1 are broken hashes. Use SHA-256 or stronger, and a password hash such as Argon2 or bcrypt for passwords.
+    metadata:
+      pandaward-control: E-004
+      cwe: "CWE-328: Use of Weak Hash"
+    patterns:
+      - pattern-either:
+          - pattern: hashlib.md5(...)
+          - pattern: hashlib.sha1(...)
+          - patterns:
+              - pattern: hashlib.new("$ALG", ...)
+              - metavariable-regex:
+                  metavariable: $ALG
+                  regex: (?i)^(md4|md5|sha1|sha-1|sha)$
+      # usedforsecurity=False declares a non-security use, such as a cache key.
+      - pattern-not: hashlib.$H(..., usedforsecurity=False, ...)
+
+  - id: pandaward-py-weak-random
+    languages: [python]
+    severity: WARNING
+    message: The random module is predictable. Use the secrets module for tokens, keys and other security values.
+    metadata:
+      pandaward-control: E-004
+      cwe: "CWE-330: Use of Insufficiently Random Values"
+    patterns:
+      - pattern: random.$F(...)
+      - metavariable-regex:
+          metavariable: $F
+          regex: ^(random|randint|randrange|randbytes|getrandbits|choice|choices|sample|shuffle|uniform|triangular|normalvariate|gauss|lognormvariate|expovariate|vonmisesvariate|gammavariate|betavariate|paretovariate|weibullvariate|binomialvariate)$
+
+  - id: pandaward-py-insecure-cookie
+    languages: [python]
+    severity: WARNING
+    message: This cookie is set with secure=False, so browsers also send it over plain HTTP. Set secure=True.
+    metadata:
+      pandaward-control: B-002
+      cwe: "CWE-614: Sensitive Cookie in HTTPS Session Without 'Secure' Attribute"
+    pattern: $R.set_cookie(..., secure=False, ...)

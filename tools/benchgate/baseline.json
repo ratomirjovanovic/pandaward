@@ -73,17 +73,22 @@
       }
     },
     "owasp/python/all": {
-      "average_score_covered": 0.028650457776671374,
+      "average_score_covered": 0.4368134990398449,
       "categories": {
-        "cmdi": -0.46153846153846156,
+        "cmdi": -0.15384615384615385,
         "codeinj": 0,
         "deserialization": 0.6666666666666667,
-        "hash": 0,
-        "pathtraver": 0.0527259148618372,
-        "securecookie": 0,
-        "sqli": 0,
-        "weakrand": 0,
-        "xss": 0
+        "hash": 1,
+        "ldapi": 0.5961538461538461,
+        "pathtraver": 0.22613890963405525,
+        "redirect": 0.10256410256410264,
+        "securecookie": 1,
+        "sqli": 0.6,
+        "trustbound": 0.08187134502923982,
+        "weakrand": 1,
+        "xpathi": 0.21655773420479305,
+        "xss": 0.3542825361512792,
+        "xxe": 0.425
       }
     },
     "owasp/python/builtin": {
@@ -100,23 +105,41 @@
       }
     },
     "owasp/python/opengrep": {
-      "average_score_covered": 0.05933781428927061,
+      "average_score_covered": 0.5300699038607737,
       "categories": {
-        "cmdi": -0.46153846153846156,
-        "codeinj": 0,
+        "cmdi": 0.6263736263736264,
+        "codeinj": 0.08484848484848484,
         "deserialization": 0.6666666666666667,
-        "pathtraver": 0.09156086631814789,
-        "sqli": 0
+        "hash": 1,
+        "ldapi": 0.6730769230769231,
+        "pathtraver": 0.3038088125466766,
+        "redirect": 0.19780219780219788,
+        "securecookie": 1,
+        "sqli": 0.6,
+        "trustbound": 0.13450292397660824,
+        "weakrand": 1,
+        "xpathi": 0.2684095860566449,
+        "xss": 0.44048943270300334,
+        "xxe": 0.425
       }
     },
     "owasp/python/semgrep": {
-      "average_score_covered": 0.039263131690316165,
+      "average_score_covered": 0.43296289974652036,
       "categories": {
-        "cmdi": -0.46153846153846156,
-        "codeinj": 0,
+        "cmdi": 0.47252747252747257,
+        "codeinj": 0.024242424242424176,
         "deserialization": 0.6666666666666667,
-        "pathtraver": -0.008812546676624344,
-        "sqli": 0
+        "hash": 1,
+        "ldapi": 0.5336538461538461,
+        "pathtraver": 0.15324869305451833,
+        "redirect": 0.02564102564102566,
+        "securecookie": 1,
+        "sqli": 0.4,
+        "trustbound": -0.029239766081871343,
+        "weakrand": 1,
+        "xpathi": 0.2117647058823529,
+        "xss": 0.17797552836484984,
+        "xxe": 0.425
       }
     }
   }
