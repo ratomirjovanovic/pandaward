@@ -1,37 +1,202 @@
+# Taint rules share one set of sources: the data of an incoming servlet
+# request. Types are written fully qualified, which also matches code that
+# imports them and uses the short name.
 rules:
-  - id: pandaward-java-sql-string
+  - id: pandaward-java-sql-injection
     languages: [java]
     severity: ERROR
-    message: SQL text is built by string concatenation. Use PreparedStatement with placeholders.
+    message: Request data reaches an SQL statement. Use PreparedStatement with placeholders and pass the value as a parameter.
     metadata:
       pandaward-control: D-003
       cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
-    patterns:
-      - pattern-either:
-          - pattern: (java.sql.Statement $S).$EXEC("$SQL" + $X, ...)
-          - pattern: (java.sql.Connection $C).prepareStatement("$SQL" + $X, ...)
-          - pattern: (javax.persistence.EntityManager $EM).createQuery("$SQL" + $X, ...)
-          - pattern: (javax.persistence.EntityManager $EM).createNativeQuery("$SQL" + $X, ...)
-          - pattern: $JDBC.$EXEC("$SQL" + $X, ...)
-      - metavariable-regex:
-          metavariable: $EXEC
-          regex: ^(execute|executeQuery|executeUpdate|addBatch|prepareStatement|createQuery|createNativeQuery|queryForObject|queryForList|query|update)$
+    mode: taint
+    pattern-sources: &request
+      - patterns:
+          - pattern-either:
+              - pattern: (javax.servlet.http.HttpServletRequest $R).$M(...)
+              - pattern: (jakarta.servlet.http.HttpServletRequest $R).$M(...)
+              - pattern: (javax.servlet.ServletRequest $R).$M(...)
+              - pattern: (jakarta.servlet.ServletRequest $R).$M(...)
+          - metavariable-regex:
+              metavariable: $M
+              regex: ^(getParameter|getParameterValues|getParameterMap|getParameterNames|getHeader|getHeaders|getHeaderNames|getQueryString|getCookies|getReader|getInputStream|getPathInfo)$
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: (java.sql.Statement $S).$EXEC($Q, ...)
+              - pattern: (java.sql.Connection $C).$EXEC($Q, ...)
+              - pattern: (org.springframework.jdbc.core.JdbcTemplate $T).$EXEC($Q, ...)
+              - pattern: (javax.persistence.EntityManager $EM).$EXEC($Q, ...)
+              - pattern: (jakarta.persistence.EntityManager $EM).$EXEC($Q, ...)
+              - pattern: (org.hibernate.Session $HS).$EXEC($Q, ...)
+              # A JdbcTemplate held in a field of another class has no type
+              # here; its name gives it away.
+              - patterns:
+                  - pattern: $JT.$EXEC($Q, ...)
+                  - metavariable-regex:
+                      metavariable: $JT
+                      regex: (?i)^(.*\.)?\w*(jdbc|template)\w*$
+          - metavariable-regex:
+              metavariable: $EXEC
+              regex: ^(execute|executeQuery|executeUpdate|executeLargeUpdate|addBatch|prepareStatement|prepareCall|nativeSQL|query|queryForObject|queryForList|queryForMap|queryForRowSet|queryForLong|queryForInt|update|batchUpdate|createQuery|createNativeQuery|createSQLQuery)$
+          - focus-metavariable: $Q
 
   - id: pandaward-java-command-exec
     languages: [java]
     severity: ERROR
-    message: An OS command is built from a non-constant string. Pass a fixed program and separate arguments to ProcessBuilder.
+    message: Request data reaches an OS command. Run a fixed program with ProcessBuilder and validate each argument.
     metadata:
       pandaward-control: D-002
       cwe: "CWE-78: Improper Neutralization of Special Elements used in an OS Command"
-    patterns:
-      - pattern-either:
-          - pattern: Runtime.getRuntime().exec($CMD, ...)
-          - pattern: new ProcessBuilder("sh", "-c", $CMD, ...)
-          - pattern: new ProcessBuilder("bash", "-c", $CMD, ...)
-          - pattern: new ProcessBuilder("cmd", "/c", $CMD, ...)
-      - pattern-not: Runtime.getRuntime().exec("...", ...)
-      - pattern-not: new ProcessBuilder($SH, $FLAG, "...", ...)
+    mode: taint
+    pattern-sources: *request
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: (java.lang.Runtime $RT).exec($X, ...)
+              - pattern: (java.lang.Runtime $RT).exec($A, $X, ...)
+              - pattern: (Runtime $RT).exec($X, ...)
+              - pattern: (Runtime $RT).exec($A, $X, ...)
+              - pattern: Runtime.getRuntime().exec($X, ...)
+              - pattern: Runtime.getRuntime().exec($A, $X, ...)
+              - pattern: java.lang.Runtime.getRuntime().exec($X, ...)
+              - pattern: java.lang.Runtime.getRuntime().exec($A, $X, ...)
+              - pattern: new ProcessBuilder(..., $X, ...)
+              - pattern: new java.lang.ProcessBuilder(..., $X, ...)
+              - pattern: (ProcessBuilder $PB).command($X, ...)
+              - pattern: (java.lang.ProcessBuilder $PB).command($X, ...)
+          - focus-metavariable: $X
+
+  - id: pandaward-java-path-traversal
+    languages: [java]
+    severity: WARNING
+    message: Request data is used as a file path. Resolve it and check it stays inside the intended directory.
+    metadata:
+      pandaward-control: D-006
+      cwe: "CWE-22: Improper Limitation of a Pathname to a Restricted Directory"
+    mode: taint
+    pattern-sources: *request
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: new java.io.File($X, ...)
+              - pattern: new java.io.File($D, $X)
+              - pattern: new java.io.FileInputStream($X, ...)
+              - pattern: new java.io.FileOutputStream($X, ...)
+              - pattern: new java.io.FileReader($X, ...)
+              - pattern: new java.io.FileWriter($X, ...)
+              - pattern: new java.io.RandomAccessFile($X, ...)
+              - pattern: java.nio.file.Paths.get($X, ...)
+              - pattern: java.nio.file.Path.of($X, ...)
+          - focus-metavariable: $X
+    pattern-sanitizers:
+      - pattern: org.apache.commons.io.FilenameUtils.getName(...)
+
+  - id: pandaward-java-ldap-injection
+    languages: [java]
+    severity: ERROR
+    message: Request data reaches an LDAP search. Encode it for the filter or name, or pass it as a filter argument ({0}).
+    metadata:
+      pandaward-control: D-006
+      cwe: "CWE-90: Improper Neutralization of Special Elements used in an LDAP Query"
+    mode: taint
+    pattern-sources: *request
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: (javax.naming.directory.DirContext $C).search($X, ...)
+              - pattern: (javax.naming.directory.DirContext $C).search($N, $X, ...)
+              - pattern: (javax.naming.directory.InitialDirContext $C).search($X, ...)
+              - pattern: (javax.naming.directory.InitialDirContext $C).search($N, $X, ...)
+          - focus-metavariable: $X
+    pattern-sanitizers:
+      - pattern: org.owasp.esapi.ESAPI.encoder().encodeForLDAP(...)
+      - pattern: org.owasp.esapi.ESAPI.encoder().encodeForDN(...)
+
+  - id: pandaward-java-xpath-injection
+    languages: [java]
+    severity: ERROR
+    message: Request data reaches an XPath expression. Bind it as an XPath variable instead of building the expression from it.
+    metadata:
+      pandaward-control: D-006
+      cwe: "CWE-643: Improper Neutralization of Data within XPath Expressions"
+    mode: taint
+    pattern-sources: *request
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: (javax.xml.xpath.XPath $XP).evaluate($X, ...)
+              - pattern: (javax.xml.xpath.XPath $XP).compile($X)
+          - focus-metavariable: $X
+    pattern-sanitizers:
+      - pattern: org.owasp.esapi.ESAPI.encoder().encodeForXPath(...)
+
+  - id: pandaward-java-xss
+    languages: [java]
+    severity: ERROR
+    message: Request data is written into the response without HTML encoding. Encode it for HTML first.
+    metadata:
+      pandaward-control: D-001
+      cwe: "CWE-79: Improper Neutralization of Input During Web Page Generation"
+    mode: taint
+    pattern-sources: *request
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: (javax.servlet.http.HttpServletResponse $RS).getWriter().$W(..., $X, ...)
+              - pattern: (jakarta.servlet.http.HttpServletResponse $RS).getWriter().$W(..., $X, ...)
+              - pattern: (java.io.PrintWriter $PW).$W(..., $X, ...)
+          - metavariable-regex:
+              metavariable: $W
+              regex: ^(print|println|write|format|printf|append)$
+          - focus-metavariable: $X
+    pattern-sanitizers:
+      - pattern: org.owasp.esapi.ESAPI.encoder().encodeForHTML(...)
+      - pattern: org.springframework.web.util.HtmlUtils.htmlEscape(...)
+      - pattern: org.apache.commons.lang.StringEscapeUtils.escapeHtml(...)
+      - pattern: org.apache.commons.text.StringEscapeUtils.escapeHtml4(...)
+
+  - id: pandaward-java-trust-boundary
+    languages: [java]
+    severity: WARNING
+    message: Request data is stored in the session, where later code treats it as trusted. Validate it before storing it.
+    metadata:
+      pandaward-control: D-006
+      cwe: "CWE-501: Trust Boundary Violation"
+    mode: taint
+    pattern-sources: *request
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: (javax.servlet.http.HttpSession $S).$SET($X, ...)
+              - pattern: (javax.servlet.http.HttpSession $S).$SET($N, $X)
+              - pattern: (jakarta.servlet.http.HttpSession $S).$SET($X, ...)
+              - pattern: (jakarta.servlet.http.HttpSession $S).$SET($N, $X)
+              - pattern: (javax.servlet.http.HttpServletRequest $R).getSession().$SET($X, ...)
+              - pattern: (javax.servlet.http.HttpServletRequest $R).getSession().$SET($N, $X)
+              - pattern: (jakarta.servlet.http.HttpServletRequest $R).getSession().$SET($X, ...)
+              - pattern: (jakarta.servlet.http.HttpServletRequest $R).getSession().$SET($N, $X)
+          - metavariable-regex:
+              metavariable: $SET
+              regex: ^(setAttribute|putValue)$
+          - focus-metavariable: $X
+
+  - id: pandaward-java-ssrf
+    languages: [java]
+    severity: WARNING
+    message: An outbound request URL comes from the incoming request. Validate it against an allowlist to prevent SSRF.
+    metadata:
+      pandaward-control: D-006
+      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
+    mode: taint
+    pattern-sources: *request
+    pattern-sinks:
+      - patterns:
+          - pattern-either:
+              - pattern: new java.net.URL($U)
+              - pattern: java.net.URI.create($U)
+              - pattern: (org.springframework.web.client.RestTemplate $T).$M($U, ...)
+          - focus-metavariable: $U
 
   - id: pandaward-java-deserialization
     languages: [java]
@@ -42,63 +207,61 @@ rules:
       cwe: "CWE-502: Deserialization of Untrusted Data"
     pattern-either:
       - pattern: (java.io.ObjectInputStream $IN).readObject()
-      - pattern: new ObjectInputStream(...).readObject()
+      - pattern: new java.io.ObjectInputStream(...).readObject()
       - pattern: new java.beans.XMLDecoder(...)
-      - pattern: new XMLDecoder(...)
 
   - id: pandaward-java-weak-cipher
     languages: [java]
     severity: WARNING
-    message: This cipher or mode is weak (DES, RC4, or ECB). Use AES-GCM.
+    message: This cipher or mode is weak (DES, 3DES, RC2, RC4, Blowfish, or ECB, which plain "AES" defaults to). Use AES-GCM.
     metadata:
       pandaward-control: E-004
       cwe: "CWE-327: Use of a Broken or Risky Cryptographic Algorithm"
     patterns:
-      - pattern: Cipher.getInstance("$ALG", ...)
+      - pattern: javax.crypto.Cipher.getInstance("$ALG", ...)
       - metavariable-regex:
           metavariable: $ALG
-          regex: (?i)^(DES|DESede|RC4|ARCFOUR|Blowfish|AES)(/ECB/.*)?$|.*/ECB/.*
+          regex: (?i)^(DES|DESede|TripleDES|RC2|RC4|ARCFOUR|Blowfish)(/.*)?$|^AES$|^[^/]+/ECB(/.*)?$
 
-  - id: pandaward-java-path-traversal
+  - id: pandaward-java-weak-hash
     languages: [java]
     severity: WARNING
-    message: A file path comes from the incoming request. Resolve it and check it stays inside the intended directory.
+    message: MD2, MD4, MD5 and SHA-1 are broken hashes. Use SHA-256 or stronger, and a password hash such as Argon2 or bcrypt for passwords.
     metadata:
-      pandaward-control: D-006
-      cwe: "CWE-22: Improper Limitation of a Pathname to a Restricted Directory"
-    mode: taint
-    pattern-sources:
-      - pattern: (javax.servlet.http.HttpServletRequest $R).getParameter(...)
-      - pattern: (jakarta.servlet.http.HttpServletRequest $R).getParameter(...)
-      - pattern: (HttpServletRequest $R).getParameter(...)
-    pattern-sinks:
+      pandaward-control: E-004
+      cwe: "CWE-328: Use of Weak Hash"
+    pattern-either:
       - patterns:
-          - pattern-either:
-              - pattern: new File($P, ...)
-              - pattern: new File($D, $P)
-              - pattern: new FileInputStream($P)
-              - pattern: Paths.get($P, ...)
-              - pattern: Path.of($P, ...)
-          - focus-metavariable: $P
-    pattern-sanitizers:
-      - pattern: FilenameUtils.getName(...)
+          - pattern: java.security.MessageDigest.getInstance("$ALG", ...)
+          - metavariable-regex:
+              metavariable: $ALG
+              regex: (?i)^(MD2|MD4|MD5|SHA|SHA-?1)$
+      - pattern: org.apache.commons.codec.digest.DigestUtils.md5(...)
+      - pattern: org.apache.commons.codec.digest.DigestUtils.md5Hex(...)
+      - pattern: org.apache.commons.codec.digest.DigestUtils.sha(...)
+      - pattern: org.apache.commons.codec.digest.DigestUtils.sha1(...)
+      - pattern: org.apache.commons.codec.digest.DigestUtils.sha1Hex(...)
+      - pattern: org.apache.commons.codec.digest.DigestUtils.shaHex(...)
 
-  - id: pandaward-java-ssrf
+  - id: pandaward-java-weak-random
     languages: [java]
     severity: WARNING
-    message: An outbound request URL comes from the incoming request. Validate it against an allowlist to prevent SSRF.
+    message: java.util.Random and Math.random are predictable. Use java.security.SecureRandom for tokens, keys and other security values.
     metadata:
-      pandaward-control: D-006
-      cwe: "CWE-918: Server-Side Request Forgery (SSRF)"
-    mode: taint
-    pattern-sources:
-      - pattern: (javax.servlet.http.HttpServletRequest $R).getParameter(...)
-      - pattern: (jakarta.servlet.http.HttpServletRequest $R).getParameter(...)
-      - pattern: (HttpServletRequest $R).getParameter(...)
-    pattern-sinks:
-      - patterns:
-          - pattern-either:
-              - pattern: new URL($U)
-              - pattern: URI.create($U)
-              - pattern: (RestTemplate $T).$M($U, ...)
-          - focus-metavariable: $U
+      pandaward-control: E-004
+      cwe: "CWE-330: Use of Insufficiently Random Values"
+    pattern-either:
+      - pattern: new java.util.Random(...)
+      - pattern: java.lang.Math.random()
+      - pattern: Math.random()
+
+  - id: pandaward-java-insecure-cookie
+    languages: [java]
+    severity: WARNING
+    message: This cookie is marked as not secure, so browsers also send it over plain HTTP. Call setSecure(true).
+    metadata:
+      pandaward-control: B-002
+      cwe: "CWE-614: Sensitive Cookie in HTTPS Session Without 'Secure' Attribute"
+    pattern-either:
+      - pattern: (javax.servlet.http.Cookie $C).setSecure(false)
+      - pattern: (jakarta.servlet.http.Cookie $C).setSecure(false)

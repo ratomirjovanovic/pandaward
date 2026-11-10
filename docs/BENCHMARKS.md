@@ -48,8 +48,8 @@ A category with no rule for an engine is shown as "not covered" rather than as a
 | | |
 |---|---|
 | Benchmark | OWASP BenchmarkJava, commit `f40c618c5a709afce350ef06ed2899c85cf586e9`, expected results 1.2 |
-| PandaWard | source build of `main` at `3c896ba` plus the benchmark changes of #314 |
-| Engines | built-in rules; Semgrep 1.182.1 and Opengrep 1.33.1 with the bundled rule set `b24cf8d85498e933...` |
+| PandaWard | source build of the branch of #324 |
+| Engines | built-in rules; Semgrep 1.182.1 and Opengrep 1.33.1 with the bundled rule set `0a90a20b7a589dd1...` |
 | Date | 2026-11-09 |
 | Tool | `tools/owaspbench` |
 
@@ -60,40 +60,39 @@ Average score over covered categories, and over all 11 categories with not cover
 | Engine | Covered categories | Average, covered | Average, all 11 |
 |---|---|---|---|
 | Built-in rules | 6 | -0.000 | -0.000 |
-| Semgrep 1.182.1, bundled rules | 4 | 0.000 | 0.000 |
-| Opengrep 1.33.1, bundled rules | 4 | 0.000 | 0.000 |
-| All merged | 8 | -0.000 | -0.000 |
+| Semgrep 1.182.1, bundled rules | 11 | 0.467 | 0.467 |
+| Opengrep 1.33.1, bundled rules | 11 | 0.723 | 0.723 |
+| All merged | 11 | 0.463 | 0.463 |
 
-Per category, for the covered categories (TPR / FPR / score):
+Per category (TPR / FPR / score):
 
-| Category | CWE | Real | Not real | Built-in | Semgrep and Opengrep (identical) |
-|---|---|---|---|---|---|
-| cmdi | 78 | 126 | 125 | 0.00 / 0.00 / 0.00 (`code.java-shell`) | 0.00 / 0.00 / 0.00 (`pandaward-java-command-exec`) |
-| crypto | 327 | 130 | 116 | not covered | 0.00 / 0.00 / 0.00 (`pandaward-java-weak-cipher`) |
-| hash | 328 | 129 | 107 | 0.00 / 0.00 / 0.00 (`code.weak-hash-password`) | not covered |
-| pathtraver | 22 | 133 | 135 | not covered | 0.00 / 0.00 / 0.00 (`pandaward-java-path-traversal`) |
-| securecookie | 614 | 36 | 31 | 0.00 / 0.00 / 0.00 (`code.cookie-flags-off`) | not covered |
-| sqli | 89 | 272 | 232 | 0.886 / 0.888 / -0.002 (`code.sql-concat` and two more) | 0.00 / 0.00 / 0.00 (`pandaward-java-sql-string`) |
-| weakrand | 330 | 218 | 275 | 0.00 / 0.00 / 0.00 (`code.insecure-random`) | not covered |
-| xss | 79 | 246 | 209 | 0.00 / 0.00 / 0.00 (`code.html-sink`) | not covered |
+| Category | CWE | Real | Not real | Built-in | Semgrep | Opengrep | Bundled rule |
+|---|---|---|---|---|---|---|---|
+| cmdi | 78 | 126 | 125 | 0.000 / 0.000 / 0.000 | 0.690 / 0.488 / 0.202 | 0.913 / 0.240 / 0.673 | `pandaward-java-command-exec` |
+| crypto | 327 | 130 | 116 | not covered | 0.746 / 0.000 / 0.746 | 0.746 / 0.000 / 0.746 | `pandaward-java-weak-cipher` |
+| hash | 328 | 129 | 107 | 0.000 / 0.000 / 0.000 | 0.690 / 0.000 / 0.690 | 0.690 / 0.000 / 0.690 | `pandaward-java-weak-hash` |
+| ldapi | 90 | 27 | 32 | not covered | 0.852 / 0.562 / 0.289 | 0.889 / 0.219 / 0.670 | `pandaward-java-ldap-injection` |
+| pathtraver | 22 | 133 | 135 | not covered | 0.835 / 0.681 / 0.153 | 0.887 / 0.326 / 0.561 | `pandaward-java-path-traversal` |
+| securecookie | 614 | 36 | 31 | 0.000 / 0.000 / 0.000 | 1.000 / 0.000 / 1.000 | 1.000 / 0.000 / 1.000 | `pandaward-java-insecure-cookie` |
+| sqli | 89 | 272 | 232 | 0.886 / 0.888 / -0.002 | 0.860 / 0.616 / 0.244 | 0.938 / 0.259 / 0.679 | `pandaward-java-sql-injection` |
+| trustbound | 501 | 83 | 43 | not covered | 0.831 / 0.605 / 0.227 | 0.867 / 0.465 / 0.402 | `pandaward-java-trust-boundary` |
+| weakrand | 330 | 218 | 275 | 0.000 / 0.000 / 0.000 | 1.000 / 0.000 / 1.000 | 1.000 / 0.000 / 1.000 | `pandaward-java-weak-random` |
+| xpathi | 643 | 15 | 20 | not covered | 0.933 / 0.650 / 0.283 | 0.933 / 0.150 / 0.783 | `pandaward-java-xpath-injection` |
+| xss | 79 | 246 | 209 | 0.000 / 0.000 / 0.000 | 0.821 / 0.517 / 0.304 | 0.894 / 0.144 / 0.751 | `pandaward-java-xss` |
 
-ldapi, trustbound and xpathi have no rule in any engine.
-
-The built-in rules reported 461 findings on the checkout: 447 `code.sql-concat` in test case files (241 in real and 206 in not real SQL injection cases), and 14 about the project's own CI workflows, Dockerfile, routes and a tracked key store. The bundled Semgrep rules reported one finding on either engine, a `pandaward-js-html-sink` in a JavaScript helper of the web UI, none in a test case.
+"All merged" counts a test case as flagged when any engine flags it, so the built-in SQL rule, which flags safe and vulnerable cases alike, and Semgrep's extra findings pull it below Opengrep alone. It is not a configuration anyone runs.
 
 ### Interpretation
 
-On this suite none of PandaWard's engines is better than not running them. That is the baseline the PandaWard 1.0 plan starts from; the target for 1.0 is a score of 0.50 or more in covered categories.
+With the bundled rules on Opengrep, PandaWard is above the 0.50 target of the PandaWard 1.0 plan on this suite, and in every category except trust boundary (0.402). The first measurement (0.000 on every engine, before #324) failed for two reasons: no rule followed data from the request to the sink, and the patterns used short type names (`new File`, `Cipher.getInstance`) while the Benchmark writes them fully qualified.
 
-The reason is the same for every engine: no rule follows data from the request to the sink. The Benchmark moves input through variables, helper classes, collections and conditionals before it reaches the sink, and the safe variants differ from the vulnerable ones only in that data flow.
+- **Taint rules** (#324) follow request parameters, headers, cookies, the query string and the body to SQL, OS command, file path, LDAP, XPath, HTML response and session sinks, with the usual encoders as sanitizers. The Benchmark's safe variants that pass a constant, overwrite the input or take a branch decided by constant arithmetic are not reported.
+- **Opengrep is ahead of Semgrep** on the injection categories because it follows taint through methods of the same file (`--taint-intrafile`); many test cases pass the input through a helper method or an inner class. Weak cipher, hash, random and cookie rules are patterns and score the same on both.
+- **Every remaining false positive** on Opengrep comes from two Benchmark constructions: a value taken from a list by index after the tainted element was removed, and a `switch` on a character of a constant string. Telling those apart needs value tracking, not rules.
+- **The remaining misses** are mostly test cases that read the request through a helper class in another file (`SeparateClassRequest`), which needs cross-file taint, and weak algorithms named in a properties file (`hashAlg1`, `cryptoAlg1`) rather than in the code.
+- **The built-in rules** still score 0. They are single-line regular expressions; for Java injection, crypto and randomness findings, install Opengrep (see [Configuration](https://github.com/ratomirjovanovic/pandaward/wiki)).
 
-- Built-in rules are single-line regular expressions. `code.sql-concat` now matches the Benchmark's SQL concatenation (`"... PASSWORD='" + param + "'"`), so it flags 89% of the real cases and 89% of the safe ones alike: it sees the concatenation, not whether the concatenated value is attacker controlled. The other Java rules need the risky call and its argument on one line (`Runtime.getRuntime().exec(`, MD5 next to a password word, a weak random call next to a token name), which the test cases never write.
-- The bundled Semgrep rules are mostly structural patterns. `pandaward-java-sql-string` requires the concatenation inside the call (`executeQuery("..." + x)`); the test cases build the SQL in a variable first. The two Java taint rules (path traversal and SSRF) model sources the Benchmark does not use. Opengrep's intra-file taint does not change this, because the rules themselves are patterns, and the two taint rules find no matching source.
-- securecookie, xss and hash are matched by built-in rules written for other languages' idioms (configuration files, browser sinks, password hashing on one line), not for Java servlet code.
-
-What this means for users: on Java server code, PandaWard's current rules should not be relied on for injection, crypto or randomness findings. The built-in rules remain useful for what the own corpus covers, such as CI, infrastructure, supply chain, secrets and the idioms they match in other languages.
-
-Next: Java taint rules with servlet and Spring sources (PandaWard 1.0, Phase 2). Every change that targets the Benchmark reports its score next to the own-corpus results; tuning to a single suite overstates real-world accuracy.
+Every rule has `ruleid` and `ok` fixtures in `rules/semgrep/java.java` that run on both engines, and the benchmark gate keeps these scores from dropping. The Benchmark is a synthetic suite; tuning to it alone overstates real-world accuracy, which is why the CVE benchmark below measures real projects.
 
 ## OWASP Benchmark for Python
 
