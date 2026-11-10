@@ -121,7 +121,14 @@ rules:
           - metavariable-regex:
               metavariable: $Q
               regex: ^(query|execute|raw|run|all|prepare|unsafe|\$queryRawUnsafe|\$executeRawUnsafe)$
+          # Promise.all(...) is not sqlite's db.all().
+          - pattern-not: Promise.$Q(...)
           - focus-metavariable: $SQL
+      # A PostgREST (Supabase) filter string: a comma or parenthesis in
+      # request data adds conditions to the filter.
+      - patterns:
+          - pattern-inside: $C.from(...). ... .or($SQL, ...)
+          - pattern: $SQL
     pattern-sanitizers:
       - patterns:
           - pattern: $F(...)

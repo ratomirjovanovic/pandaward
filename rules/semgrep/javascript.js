@@ -312,3 +312,14 @@ async function pspCall(keys, path, body) {
   // ok: pandaward-js-ssrf
   return fetch(`${keys.base}${path}`, { method: 'POST', body: opts.body });
 }
+
+// Promise.all is not a query; a Supabase .or() filter string is (#352).
+export async function GET(req) {
+  const q = req.query.q;
+  const pattern = `%${q}%`;
+  // ok: pandaward-js-sql-injection
+  const [a, b] = await Promise.all([search(q), count(q)]);
+  // ruleid: pandaward-js-sql-injection
+  const r = await supabase.from("posts").select("id").or(`title.ilike.${pattern},excerpt.ilike.${pattern}`);
+  return [a, b, r];
+}
