@@ -2,16 +2,16 @@
   "note": "Scores that must not drop. Raise them with `go run ./tools/benchgate --update` and commit; see docs/BENCHMARKS.md.",
   "scores": {
     "cve/builtin": {
-      "detected": 23,
-      "fix_recognized": 10
+      "detected": 45,
+      "fix_recognized": 28
     },
     "cve/opengrep": {
-      "detected": 13,
-      "fix_recognized": 6
+      "detected": 60,
+      "fix_recognized": 27
     },
     "cve/semgrep": {
-      "detected": 13,
-      "fix_recognized": 6
+      "detected": 60,
+      "fix_recognized": 27
     },
     "owasp/java/all": {
       "average_score_covered": 0.4858758800793883,
