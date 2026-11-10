@@ -141,12 +141,13 @@ func measure(ctx context.Context, bench, work string, selected []string, only st
 	}
 	var mu sync.Mutex
 	var firstErr error
+	prog := newProgress(len(cves))
 	sem := make(chan struct{}, jobs)
 	var wg sync.WaitGroup
-	for i, c := range cves {
+	for _, c := range cves {
 		wg.Add(1)
 		sem <- struct{}{}
-		go func(i int, c CVE) {
+		go func(c CVE) {
 			defer wg.Done()
 			defer func() { <-sem }()
 			rec, ok := done[c.ID]
@@ -160,7 +161,7 @@ func measure(ctx context.Context, bench, work string, selected []string, only st
 			}
 			mu.Lock()
 			defer mu.Unlock()
-			fmt.Fprintf(os.Stderr, "[%d/%d] %s", i+1, len(cves), c.ID)
+			fmt.Fprintf(os.Stderr, "%s %s", prog.next(!ok), c.ID)
 			if err != nil {
 				if firstErr == nil {
 					firstErr = fmt.Errorf("%s: %w", c.ID, err)
@@ -192,7 +193,7 @@ func measure(ctx context.Context, bench, work string, selected []string, only st
 			for _, o := range rec.Outcomes {
 				sums[o.Engine].Add(o)
 			}
-		}(i, c)
+		}(c)
 	}
 	wg.Wait()
 	if firstErr != nil {
