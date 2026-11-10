@@ -250,6 +250,19 @@ Measured with a full `benchmarks` run on the branch ([run 42866055034](https://g
 
 The nine new detections are CVE-2017-1000427, CVE-2017-16082, CVE-2018-11615, CVE-2018-3743, CVE-2019-10775, CVE-2019-10785, CVE-2019-16763, CVE-2019-5423 and CVE-2019-9844; no CVE detected before was lost and the OWASP scores did not change. On seven real application repositories the rules report two lines, both real instances of the pattern: a single-character `replace("<", "&lt;")` in a test and a one-pass `<script>` removal.
 
+### Recognizing fixes
+
+Most fixes add a check rather than remove the sink, so a sink-only rule fires as often after the fix. The path traversal rule no longer reports a sink after a check that stops the request (`return` in the `if`): the path compared with its root (`indexOf`, `startsWith`), tested for `..` (`search`, a regular expression test), or passed to `isPathInside`; nor in the branch after an `allowPath`-style check. `path.join('/', name)`, `path.resolve('/', name)`, a regular expression that removes `..` and removing `..` in a `while` loop are sanitizers. The shell rule no longer reports a command after a regular expression test that stops on bad input, and `innerHTML` is not reported for values passed through `DOMPurify.sanitize` or an escape function.
+
+Measured with a full `benchmarks` run on the branch ([run 42869647146](https://github.com/ratomirjovanovic/pandaward/actions/runs/42869647146)) against main at `597264a`:
+
+| Engine | Detected | Fix recognized | Still flagged after fix |
+|---|---|---|---|
+| Semgrep and Opengrep, before | 60 | 27 | 33 |
+| Semgrep and Opengrep, with these checks | 57 | 39 | 18 |
+
+Twelve fixes are now recognized (CVE-2017-16029, CVE-2017-16107, CVE-2018-1002203, CVE-2018-11798, CVE-2018-16478, CVE-2018-16485, CVE-2018-19048, CVE-2018-20835, CVE-2018-3725, CVE-2018-3731, CVE-2019-10765, CVE-2019-10777). Three CVEs are no longer detected: CVE-2018-3712, CVE-2018-3713 and CVE-2018-3718 already had a containment check or a `..` removal in the vulnerable commit, bypassed through URL encoding or a path the check did not cover. A pattern rule cannot tell such a check from a correct one, so the trade is fewer findings on guarded code for those three; the CVE baseline is lowered by three detections for it. The OWASP scores did not change.
+
 ### Built-in ReDoS check
 
 Control D-007 analyses every regex literal and every string passed to `RegExp(...)` in JavaScript and TypeScript files. The pattern becomes its position automaton; for each character the check looks for a repetition that can match a run of it in two ways (exponential, as in `^(a+)+$`) or for two repetitions over it in sequence, counting the implicit leading loop of an unanchored search (polynomial, as in `\s+$`), followed by a way for the match to fail. Exponential cases are suspected findings (`code.js-redos`). Polynomial cases are listed as info (`code.js-redos-polynomial`) and do not fail the control: they matter only when long input from outside reaches the pattern, which the check does not follow.

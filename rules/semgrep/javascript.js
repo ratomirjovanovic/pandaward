@@ -297,6 +297,51 @@ function copy(target, source) {
   return target;
 }
 
+// Fixes the rules recognize: a containment or traversal check that stops
+// the request, a sanitizer, or an input check before a shell command.
+const root = path.resolve('public');
+app.get('/files', (req, res) => {
+  const file = path.resolve(path.join(root, req.query.name));
+  // ruleid: pandaward-js-path-traversal
+  fs.readFileSync(path.join(root, req.query.other));
+  if (file.indexOf(root) !== 0) {
+    res.status(400).end();
+    return;
+  }
+  // ok: pandaward-js-path-traversal
+  fs.readFileSync(file);
+});
+
+app.get('/static', (req, res) => {
+  if (req.url.search(/(\/|^)\.\.(\/|$)/) !== -1) return res.sendStatus(404);
+  // ok: pandaward-js-path-traversal
+  fs.createReadStream(path.join(root, req.url));
+});
+
+app.get('/norm', (req, res) => {
+  // ok: pandaward-js-path-traversal
+  fs.createReadStream(__dirname + path.normalize(req.url).replace(/^(\.\.[\/\\])+/, ''));
+  // ok: pandaward-js-path-traversal
+  fs.createReadStream(path.join(root, path.join('/', req.query.name)));
+});
+
+function deploy(config) {
+  if (!/^[a-zA-Z0-9-_.]+$/.test(config.name)) {
+    process.exit(1);
+  }
+  // ok: pandaward-js-shell-exec
+  exec('aws lambda update-function --name ' + config.name);
+}
+
+function preview(el, html) {
+  // ok: pandaward-js-html-sink
+  el.innerHTML = DOMPurify.sanitize(html);
+  // ok: pandaward-js-html-sink
+  el.innerHTML = escapeHtml(html);
+  // ruleid: pandaward-js-html-sink
+  el.innerHTML = html;
+}
+
 const { promisify } = require('util');
 const execPromise = promisify(exec);
 const execaShell = require('execa').shell;
