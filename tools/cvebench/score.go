@@ -242,6 +242,9 @@ func (s *Summary) Finish() {
 	if s.Detected > 0 {
 		s.FixRate = float64(s.FixRecognized) / float64(s.Detected)
 	}
+	// Outcomes in CVE order, so a run and the merge of its shards print the
+	// same document.
+	sort.Slice(s.Outcomes, func(i, j int) bool { return s.Outcomes[i].CVE < s.Outcomes[j].CVE })
 	s.ByCWE = s.ByCWE[:0]
 	for _, c := range s.byCWE {
 		s.ByCWE = append(s.ByCWE, *c)
