@@ -318,6 +318,39 @@ app.get('/static', (req, res) => {
   fs.createReadStream(path.join(root, req.url));
 });
 
+// A helper that serves a file for a request, with the path from its caller.
+function serveStatic(req, res, path) {
+  // ruleid: pandaward-js-path-traversal
+  return send(req, path);
+}
+
+const dispatch = {};
+dispatch.static = function (pathname, req, res) {
+  // ruleid: pandaward-js-path-traversal
+  return fs.exists(root + unescape(pathname), (ok) => res.end(String(ok)));
+};
+
+// A path parameter without the request is library input, not request data.
+function readConfig(path) {
+  // ok: pandaward-js-path-traversal
+  return fs.readFileSync(path);
+}
+
+function route(req, res) {
+  for (const dir of dirs) {
+    // ruleid: pandaward-js-path-traversal
+    if (fs.existsSync(path.join(dir, req.urlBase))) return res.end();
+  }
+  for (const dir of dirs) {
+    const target = path.join(dir, req.urlBase);
+    if (!target.startsWith(dir)) {
+      break;
+    }
+    // ok: pandaward-js-path-traversal
+    if (fs.existsSync(target)) return res.end();
+  }
+}
+
 app.get('/norm', (req, res) => {
   // ok: pandaward-js-path-traversal
   fs.createReadStream(__dirname + path.normalize(req.url).replace(/^(\.\.[\/\\])+/, ''));
