@@ -211,7 +211,7 @@ var codeRules = []lineRule{
 		Message: "Content is inserted as raw HTML. If it can contain user data this is cross-site scripting.", Fix: "Render as text, or sanitize with a maintained sanitizer (DOMPurify) right at the sink."},
 
 	{ID: "code.secret-logged", Control: "O-002", Title: "Sensitive value written to logs", Re: regexp.MustCompile(`(?i)(console\.(log|info|debug|warn|error)|\blogger?\.(info|debug|warn|warning|error|trace)|\blog\.(Print\w*|Info\w*|Debug\w*|Warn\w*|Error\w*)|\bprint|\bputs|System\.out\.print\w*)\s*\(.*\b(password|passwd|secret|api_?key|access_?token|refresh_?token|authorization|private_?key)\b`),
-		Prep: blankProse, Not: regexp.MustCompile(`(?i)redact|mask|\*\*\*|invalid|missing|required|incorrect|wrong|reset|changed|updated|expired`), Severity: model.SevLow, Confidence: model.Hypothesis, CWE: "CWE-532",
+		Prep: blankProse, Not: regexp.MustCompile(`(?i)redact|mask|\*\*\*|invalid|missing|required|incorrect|wrong|reset|changed|updated|expired`), Severity: model.SevLow, Confidence: model.Hypothesis, CWE: "CWE-532", Demote: loggedHashOnly,
 		Message: "A credential-like value appears to be logged.", Fix: "Log identifiers and outcomes only; pass secrets through a redaction helper."},
 }
 

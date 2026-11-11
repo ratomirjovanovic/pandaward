@@ -132,3 +132,31 @@ func TestMaskLiterals(t *testing.T) {
 		t.Fatalf("maskLiterals must keep offsets and line breaks")
 	}
 }
+
+// A log line whose credential words all sit inside a hashing call is listed
+// as info; any credential outside one keeps the low finding (#363).
+func TestSecretLoggedHashOnly(t *testing.T) {
+	cases := []struct {
+		name, src string
+		want      model.Severity
+	}{
+		{"prints a password hash", "const password = process.argv[2]\nconsole.log(hashPassword(password))\n", model.SevInfo},
+		{"bcrypt hash", "console.log(await bcrypt.hash(password, 12))\n", model.SevInfo},
+		{"sha256 of an api key", "logger.info(sha256(apiKey))\n", model.SevInfo},
+		{"hash next to the plain value", "console.log(hashPassword(password), password)\n", model.SevLow},
+		{"plain password", "console.log('login', password)\n", model.SevLow},
+		{"call that is not a hash", "console.log(normalize(password))\n", model.SevLow},
+	}
+	for _, c := range cases {
+		sigs := runOn(t, codeAdapter{}, map[string]string{"scripts/x.ts": c.src})
+		var got model.Severity
+		for _, s := range sigs {
+			if s.RuleID == "code.secret-logged" {
+				got = s.Severity
+			}
+		}
+		if got != c.want {
+			t.Errorf("%s: severity %q, want %q", c.name, got, c.want)
+		}
+	}
+}
