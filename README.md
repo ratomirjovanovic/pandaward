@@ -118,7 +118,7 @@ scoop bucket add pandaward https://github.com/ratomirjovanovic/pandaward; scoop 
 Or download a binary from the [releases page](https://github.com/ratomirjovanovic/pandaward/releases) (Linux and macOS on amd64 and arm64, Windows on amd64). For example on Linux:
 
 ```sh
-v=v0.2.14
+v=v0.2.15
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/pandaward-linux-amd64
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/SHA256SUMS
 sha256sum --ignore-missing -c SHA256SUMS
@@ -128,7 +128,7 @@ chmod +x pandaward-linux-amd64 && sudo mv pandaward-linux-amd64 /usr/local/bin/p
 On Windows (PowerShell), save `pandaward-windows-amd64.exe` as `pandaward.exe` in a folder on your `PATH`:
 
 ```powershell
-Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.14/pandaward-windows-amd64.exe -OutFile pandaward.exe
+Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.15/pandaward-windows-amd64.exe -OutFile pandaward.exe
 (Get-FileHash pandaward.exe).Hash   # compare with the line in SHA256SUMS
 ```
 
@@ -193,11 +193,11 @@ Five controls cannot be decided by automation: A-004 (threat model), C-003 (auth
 | A Inventory and architecture | entrypoints with file and line (`pandaward routes`): HTTP routes for Express, NestJS, Next.js, Flask, FastAPI, Django, Go, Spring, Laravel, Rails, ASP.NET with router prefixes and mounts resolved; GraphQL schema operations; gRPC services; queue consumers and cron jobs; services in monorepos; OpenAPI drift. For Next.js apps the file-system route table (pages, layouts, route handlers, metadata routes, server actions and middleware of every app, with route groups, dynamic and catch-all segments, parallel slots and intercepting folders resolved) decides A-002: PASS only when nothing found can add routes outside it, otherwise INCONCLUSIVE with each blocker named (a custom server, next.config or vercel.json rewrites and redirects to other origins or not resolvable statically, middleware that proxies or answers requests itself, another web framework or server, serverless function directories, PHP, an OpenAPI mismatch, skipped code files) | threat model |
 | B Authentication | JWT `none` or unverified decode, cookie flags | revoked credentials refused (`staging-active`); login, reset and MFA flows |
 | C Authorization | Supabase/Postgres RLS update policies that let users change privileged columns of their own row (from SQL migrations) | object and function level authorization with test identities (`staging-active`), route review (manual-assisted) |
-| D Injection | eval, shell, SQL concatenation, unsafe deserialization | ZAP active scan (`staging-active`, opt-in) |
+| D Injection | built in: eval, shell, SQL concatenation, unsafe deserialization, regular expressions with catastrophic backtracking (ReDoS, D-007); with Semgrep or Opengrep: taint rules that follow request data (and, in Python, model output) to SQL, OS command, file path, LDAP, XPath, code and XXE sinks in Java, Python and JavaScript, plus prototype pollution through recursive merges and path setters in JavaScript | ZAP active scan (`staging-active`, opt-in) |
 | E Secrets and crypto | 16 high-specificity secret formats, tracked `.env` and key files, tracked tool-local settings such as `.claude/settings.local.json`, disabled TLS verification, weak hash or random | |
 | F Business logic | | invariants, idempotency, races (manual-assisted) |
 | G APIs and webhooks | webhook signature verification presence | contract vs runtime |
-| H Web | raw HTML sinks, CORS wildcard with credentials, CSP allowing `'unsafe-inline'` or `'unsafe-eval'` scripts in `vercel.json`, `netlify.toml`, `_headers` and literal Next.js `headers()` values | security headers and weak CSP (`production-observe`) |
+| H Web | raw HTML sinks, reflected XSS, jQuery HTML insertion and plugin options, incomplete escaping and URL scheme checks, open redirects, CORS wildcard with credentials, CSP allowing `'unsafe-inline'` or `'unsafe-eval'` scripts in `vercel.json`, `netlify.toml`, `_headers` and literal Next.js `headers()` values | security headers and weak CSP (`production-observe`) |
 | I Supply chain | missing lockfiles, npm install scripts, unpinned Python requirements | advisories via osv-scanner |
 | J Infrastructure | Dockerfile root and unpinned base, privileged containers, public storage and admin ports in Terraform | trivy |
 | K, L Mobile | Android manifest flags and exported components, credentials in SharedPreferences, world-readable storage; iOS ATS, `get-task-allow` in release entitlements, Keychain accessibility and credentials in UserDefaults | built APKs via apktool; built APKs and IPAs via a local MobSF server; plain credentials in app storage on an emulator or simulator (`local-runtime`) |
@@ -429,7 +429,7 @@ With [pre-commit](https://pre-commit.com), add this to `.pre-commit-config.yaml`
 ```yaml
 repos:
   - repo: https://github.com/ratomirjovanovic/pandaward
-    rev: v0.2.14
+    rev: v0.2.15
     hooks:
       - id: pandaward-system   # uses the pandaward on your PATH; use id: pandaward to build it with Go 1.27+
 ```
