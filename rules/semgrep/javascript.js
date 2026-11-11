@@ -297,6 +297,45 @@ function redact(value) {
   return out;
 }
 
+// A setter that walks into the object along a dotted path.
+function setPath(obj, path, value) {
+  const parts = path.split('.');
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i];
+    if (i === parts.length - 1) {
+      // ruleid: pandaward-js-prototype-pollution-path
+      obj[p] = value;
+      break;
+    }
+    // ruleid: pandaward-js-prototype-pollution-path
+    if (!obj[p]) obj[p] = {};
+    obj = obj[p];
+  }
+}
+
+function setPathSafe(obj, path, value) {
+  const parts = path.split('.');
+  for (let i = 0; i < parts.length; i++) {
+    const p = parts[i];
+    if (p === '__proto__' || p === 'constructor' || p === 'prototype') return;
+    if (i === parts.length - 1) {
+      // ok: pandaward-js-prototype-pollution-path
+      obj[p] = value;
+      break;
+    }
+    obj = obj[p];
+  }
+}
+
+function setPathDenyList(obj, keys, value) {
+  for (const k of keys) {
+    if (BLOCKED.includes(k)) throw new Error('bad key');
+    // ok: pandaward-js-prototype-pollution-path
+    obj[k] = obj[k] || {};
+    obj = obj[k];
+  }
+}
+
 // A shallow copy does not recurse, so it cannot reach Object.prototype.
 function copy(target, source) {
   for (const key in source) {

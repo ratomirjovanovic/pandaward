@@ -678,6 +678,46 @@ rules:
           if (<... $K === "__proto__" ...>) ...
           ...
 
+  - id: pandaward-js-prototype-pollution-path
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: A loop walks into an object along a path of keys and writes a key, without skipping __proto__, constructor and prototype, so a path such as "__proto__.polluted" changes Object.prototype for the whole process.
+    metadata:
+      pandaward-control: D-006
+      cwe: "CWE-1321: Improperly Controlled Modification of Object Prototype Attributes"
+    patterns:
+      # The loop descends into the object by a key and writes a key of it.
+      - pattern-either:
+          - pattern-inside: |
+              for (...) { ... $O = $O[$K2]; ... }
+          - pattern-inside: |
+              for (...) { ... $O = $O[$K2] || $D; ... }
+          - pattern-inside: |
+              while (...) { ... $O = $O[$K2]; ... }
+          - pattern-inside: |
+              for (...) { ... $O[$K2] = $O[$K2] || $D; ... $O = $O[$K2]; ... }
+      - pattern: $O[$K] = $V
+      - metavariable-regex:
+          metavariable: $K
+          regex: ^[A-Za-z_$][\w$]*$
+      # A check for the dangerous keys in the loop.
+      - pattern-not-inside: |
+          for (...) { ... if (<... "__proto__" ...>) $S; ... }
+      - pattern-not-inside: |
+          for (...) { ... if (<... "constructor" ...>) $S; ... }
+      - pattern-not-inside: |
+          while (...) { ... if (<... "__proto__" ...>) $S; ... }
+      - pattern-not-inside: |
+          for (...) { ... if (<... $F($K) ...>) $S; ... }
+      - pattern-not-inside: |
+          for (...) { ... if (<... $RE.test($K) ...>) $S; ... }
+      - pattern-not-inside: |
+          for (...) { ... if (<... $X.includes($K) ...>) $S; ... }
+      - pattern-not-inside: |
+          for (...) { ... if (<... $X.indexOf($K) ...>) $S; ... }
+      - pattern-not-inside: |
+          for (...) { ... if (<... $O.hasOwnProperty($K) ...>) $S; ... }
+
   - id: pandaward-js-reflected-xss
     languages: [javascript, typescript]
     severity: ERROR
