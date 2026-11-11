@@ -12,7 +12,7 @@ The binaries are reproducible: building the tag again with the same Go version g
 ## 1. Check the checksums
 
 ```sh
-gh release download v0.2.14 -R ratomirjovanovic/pandaward
+gh release download v0.2.15 -R ratomirjovanovic/pandaward
 sha256sum -c SHA256SUMS
 ```
 
@@ -45,9 +45,9 @@ Use the Go version named in `go.mod`, then:
 
 ```sh
 git clone https://github.com/ratomirjovanovic/pandaward && cd pandaward
-git checkout v0.2.14
+git checkout v0.2.15
 go install github.com/CycloneDX/cyclonedx-gomod/cmd/cyclonedx-gomod@v1.11.0
-sh packaging/build-release.sh 0.2.14 rebuilt
+sh packaging/build-release.sh 0.2.15 rebuilt
 diff rebuilt/SHA256SUMS SHA256SUMS
 ```
 
