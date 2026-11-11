@@ -164,11 +164,19 @@ def get(url):
     req.add_unredirected_header("Authorization", "Bearer " + os.environ["GH_TOKEN"])
     with urllib.request.urlopen(req, timeout=60) as r:
         return r.read()
-runs = json.loads(get(api + "/actions/workflows/benchmarks.yml/runs?branch=main&status=success&per_page=20"))["workflow_runs"]
-runs = [r for r in runs if r["event"] in ("schedule", "workflow_dispatch")]
+# The run that triggered this build when pages runs from workflow_run;
+# otherwise the newest successful scheduled or manual run of main. The
+# listing is read without a status filter: the filtered listing can lag
+# behind a run that just succeeded (#353).
+want = os.environ.get("BENCH_RUN_ID", "").strip()
+if want:
+    runs = [json.loads(get(api + "/actions/runs/" + want))]
+else:
+    runs = json.loads(get(api + "/actions/workflows/benchmarks.yml/runs?branch=main&per_page=30"))["workflow_runs"]
+runs = [r for r in runs if r.get("head_branch") == "main" and r.get("conclusion") == "success" and r["event"] in ("schedule", "workflow_dispatch")]
 if not runs:
     sys.exit("no successful run of main")
-run = runs[0]
+run = max(runs, key=lambda r: r["created_at"])
 arts = json.loads(get(api + "/actions/runs/%d/artifacts" % run["id"]))["artifacts"]
 wanted = ("owasp-java.json", "owasp-python.json", "cve.json")
 found = {}
