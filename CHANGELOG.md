@@ -4,6 +4,8 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 
 ## [Unreleased]
 
+## [0.2.15] - 2026-11-11
+
 ### Added
 - `code.json-in-script-unescaped` reports `JSON.stringify` output written into a script element without escaping `<`, which lets a value containing `</script>` end the element; it was a generic raw HTML finding before, now with its own message and one-line fix. The raw HTML rule follows ternaries, consts read around the sink, `await`, SVG from the `qrcode` library and imported constant scripts built only from constants (#352).
 - Control D-007 finds regular expressions with catastrophic backtracking (ReDoS) in JavaScript and TypeScript: regex literals and `RegExp(...)` strings are analysed as automata. Exponential patterns are suspected findings; polynomial ones are listed as info, since they matter only for long input from outside. On the OpenSSF CVE Benchmark the built-in rules now detect 21 of 24 ReDoS CVEs, up from none, and recognize 17 fixes (#332).
@@ -223,7 +225,8 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 - Deterministic SBOM serial number for the release attestation (#39)
 
 
-[Unreleased]: https://github.com/ratomirjovanovic/pandaward/compare/v0.2.14...HEAD
+[Unreleased]: https://github.com/ratomirjovanovic/pandaward/compare/v0.2.15...HEAD
+[0.2.15]: https://github.com/ratomirjovanovic/pandaward/compare/v0.2.14...v0.2.15
 [0.2.14]: https://github.com/ratomirjovanovic/pandaward/compare/v0.2.13...v0.2.14
 [0.2.13]: https://github.com/ratomirjovanovic/pandaward/compare/v0.2.12...v0.2.13
 [0.2.12]: https://github.com/ratomirjovanovic/pandaward/compare/v0.2.11...v0.2.12
