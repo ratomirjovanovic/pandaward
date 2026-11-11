@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"text/tabwriter"
@@ -51,6 +52,13 @@ type Output struct {
 }
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "merge" {
+		if err := runMerge(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, "cvebench merge:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	bench := flag.String("bench", "", "path to an ossf-cve-benchmark checkout (required)")
 	work := flag.String("work", "", "directory for project checkouts, reused between runs (required)")
 	engineList := flag.String("engine", "builtin", "comma-separated engines to measure: "+strings.Join(engines.Names, ", "))
@@ -58,7 +66,13 @@ func main() {
 	limit := flag.Int("limit", 0, "measure only the first N CVEs (0: all)")
 	jobs := flag.Int("jobs", 2, "CVEs measured in parallel")
 	asJSON := flag.Bool("json", false, "print JSON instead of a table")
+	shardFlag := flag.String("shard", "", "measure one shard i/n of the CVEs, such as 0/8, for parallel jobs; combine with `cvebench merge`")
 	flag.Parse()
+	shard, shards, err := parseShard(*shardFlag)
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "cvebench:", err)
+		os.Exit(2)
+	}
 	if *bench == "" || *work == "" {
 		fmt.Fprintln(os.Stderr, "usage: cvebench --bench <ossf-cve-benchmark checkout> --work <dir> [--engine builtin,semgrep,opengrep] [--cve ids] [--limit n] [--json]")
 		os.Exit(2)
@@ -68,7 +82,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "cvebench:", err)
 		os.Exit(2)
 	}
-	out, err := measure(context.Background(), *bench, *work, sel, *only, *limit, *jobs)
+	out, err := measure(context.Background(), *bench, *work, sel, *only, *limit, *jobs, shard, shards)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "cvebench:", err)
 		os.Exit(1)
@@ -88,7 +102,7 @@ func main() {
 	printTable(out)
 }
 
-func measure(ctx context.Context, bench, work string, selected []string, only string, limit, jobs int) (*Output, error) {
+func measure(ctx context.Context, bench, work string, selected []string, only string, limit, jobs, shard, shards int) (*Output, error) {
 	cves, skipped, err := LoadCVEs(bench)
 	if err != nil {
 		return nil, err
@@ -109,6 +123,7 @@ func measure(ctx context.Context, bench, work string, selected []string, only st
 	if limit > 0 && len(cves) > limit {
 		cves = cves[:limit]
 	}
+	cves = shardOf(cves, shard, shards)
 	hash, err := rules.SemgrepHash()
 	if err != nil {
 		return nil, err
@@ -211,6 +226,7 @@ func measure(ctx context.Context, bench, work string, selected []string, only st
 	for _, s := range out.Engines {
 		s.Finish()
 	}
+	sort.Strings(out.Unavailable)
 	return out, nil
 }
 

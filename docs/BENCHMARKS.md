@@ -18,7 +18,7 @@ The numbers below are guarded so they cannot drop unnoticed:
 | Rule fixtures (`ruleid:` and `ok:` per bundled Semgrep rule) | every pull request | a rule lacks either kind of fixture |
 | Fixtures on Semgrep and Opengrep (`real-tools` job) | every pull request | either engine disagrees with a fixture annotation |
 | OWASP Java and Python on all engines (`benchmarks` workflow) | pull requests that touch rules, adapters, inventory or the benchmark tools; weekly | any average or per-category score drops below `tools/benchgate/baseline.json` |
-| OpenSSF CVE Benchmark on all engines (`benchmarks` workflow) | weekly and on demand (about 75 minutes on GitHub Actions) | fewer CVEs detected or fewer fixes recognized than the baseline |
+| OpenSSF CVE Benchmark on all engines (`benchmarks` workflow) | weekly and on demand (about 20 minutes on GitHub Actions, in eight parallel shards merged by `tools/cvebench merge`) | fewer CVEs detected or fewer fixes recognized than the baseline |
 
 The baseline is committed. A change that improves a score raises it in the same pull request with `go run ./tools/benchgate --update --owasp owasp-java.json --owasp owasp-python.json` (and `--cve cve.json`), using the JSON from the workflow's artifacts. A score may only go down through the same explicit change, with the reason in the pull request.
 
