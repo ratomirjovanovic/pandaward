@@ -385,9 +385,32 @@ rules:
               regex: (?i)^(req|request|ctx|ctx\.request|this\.request)$
           - metavariable-regex:
               metavariable: $F
-              regex: ^(query|body|params|url|originalUrl|path|headers|cookies|files|file)$
+              regex: ^(query|body|params|url|originalUrl|path|headers|cookies|files|file|pathname|urlBase|baseUrl|filename|filePath)$
           # db.query(...) and the like are method calls, not request data.
           - pattern-not-inside: $REQ.$F(...)
+      # A helper that serves a file for a request and gets the path from
+      # its caller, such as serveStatic(req, res, path).
+      - patterns:
+          - pattern-either:
+              - pattern-inside: function $FN(..., $REQ, $RES, ...) { ... }
+              - pattern-inside: export function $FN(..., $REQ, $RES, ...) { ... }
+              - pattern-inside: $O[$K] = function (..., $REQ, $RES, ...) { ... }
+              - pattern-inside: $O.$K = function (..., $REQ, $RES, ...) { ... }
+          - pattern-either:
+              - pattern-inside: function $FN(..., $P, ...) { ... }
+              - pattern-inside: export function $FN(..., $P, ...) { ... }
+              - pattern-inside: $O[$K] = function (..., $P, ...) { ... }
+              - pattern-inside: $O.$K = function (..., $P, ...) { ... }
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: (?i)^(req|request)$
+          - metavariable-regex:
+              metavariable: $RES
+              regex: (?i)^(res|resp|response)$
+          - metavariable-regex:
+              metavariable: $P
+              regex: (?i)^(path|pathname|file|filename|filepath|urlPath|relPath|relativePath)$
+          - pattern: $P
       # The name of an entry in an archive being extracted (Zip Slip).
       - patterns:
           - pattern-either:
@@ -444,6 +467,20 @@ rules:
               ...
           - pattern-not-inside: |
               if (<... $A.startsWith($B) ...>) return $V;
+              ...
+          # Inside a loop over candidate roots the check may skip or stop
+          # instead of returning.
+          - pattern-not-inside: |
+              if (<... $A.indexOf($B) ...>) { ... break; }
+              ...
+          - pattern-not-inside: |
+              if (<... $A.indexOf($B) ...>) { ... continue; }
+              ...
+          - pattern-not-inside: |
+              if (<... $A.startsWith($B) ...>) { ... break; }
+              ...
+          - pattern-not-inside: |
+              if (<... $A.startsWith($B) ...>) { ... continue; }
               ...
           - pattern-not-inside: |
               if (<... $A.search($B) ...>) { ... return; }
