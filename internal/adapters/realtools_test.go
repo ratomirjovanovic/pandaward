@@ -75,7 +75,7 @@ func TestRealTools(t *testing.T) {
 	for _, want := range []string{
 		"gitleaks|gitleaks.stripe-access-token|.env|1",
 		"gitleaks|gitleaks.stripe-access-token|src/server.js|2",
-		"semgrep|semgrep.pandaward-js-sql-string|src/server.js|6",
+		"semgrep|semgrep.pandaward-js-sql-injection|src/server.js|6",
 		"semgrep|semgrep.pandaward-js-shell-exec|src/server.js|8",
 		"semgrep|semgrep.pandaward-js-eval|src/server.js|8",
 		"semgrep|semgrep.pandaward-js-html-sink|src/server.js|9",

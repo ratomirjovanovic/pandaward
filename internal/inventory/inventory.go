@@ -349,6 +349,13 @@ func walkFiles(ctx context.Context, absRoot string, opt Options, withLines bool,
 			if skipDir(rel, d.Name()) {
 				return fs.SkipDir
 			}
+			// A linked git worktree, such as an agent's copy under
+			// .claude/worktrees, is another checkout of a repository: its
+			// files would be reported a second time. Submodules are walked.
+			if isLinkedWorktree(p) {
+				skip(rel, "git worktree of another checkout")
+				return fs.SkipDir
+			}
 			return nil
 		}
 		if !d.Type().IsRegular() {
@@ -645,7 +652,7 @@ func isWebhookPath(p string) bool {
 // oauthQueryRe matches a read of the OAuth "code" or "state" query
 // parameter: searchParams.get("code"), req.query.state, request.args["code"],
 // r.URL.Query().Get("state"), c.Query("code") and similar.
-var oauthQueryRe = regexp.MustCompile(`(?:(?i:searchParams|query|args|GET)(?:\(\))?\s*(?:\.\s*(?:get|Get|getAll)\s*\(\s*|\[\s*)['"](code|state)['"]|(?i:query|args|GET)\s*\.\s*(code|state)\b|\b(?:Query|QueryParam|query_param|query_params)\s*\(\s*['"](code|state)['"])`)
+var oauthQueryRe = regexp.MustCompile(`(?:(?i:searchParams|query|args|GET)(?:\(\))?\s*(?:\.\s*(?:get|Get|getAll)\s*\(\s*|\[\s*)['"](code|state)['"]|\b(?:q|qs|params|sp|search)\s*\.\s*get\s*\(\s*['"](code|state)['"]|(?i:query|args|GET)\s*\.\s*(code|state)\b|\b(?:Query|QueryParam|query_param|query_params)\s*\(\s*['"](code|state)['"])`)
 
 // oauthDestructureRe matches `const { code, state } = req.query` and the
 // reverse order.
@@ -1002,4 +1009,23 @@ func DomainsForPath(p string) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// isLinkedWorktree reports whether dir is the root of a linked git worktree:
+// its .git is a file whose gitdir points into a repository's worktrees
+// directory. A submodule's .git file points into modules/ instead.
+func isLinkedWorktree(dir string) bool {
+	fi, err := os.Lstat(filepath.Join(dir, ".git"))
+	if err != nil || !fi.Mode().IsRegular() || fi.Size() > 4096 {
+		return false
+	}
+	b, err := os.ReadFile(filepath.Join(dir, ".git"))
+	if err != nil {
+		return false
+	}
+	line := strings.TrimSpace(string(b))
+	if !strings.HasPrefix(line, "gitdir:") {
+		return false
+	}
+	return strings.Contains(filepath.ToSlash(line), "/worktrees/")
 }
