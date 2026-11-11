@@ -165,7 +165,7 @@ var codeRules = []lineRule{
 		Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-78", Message: "Interpolated shell command.", Fix: "Use system with separate arguments (system(cmd, arg1, arg2))."},
 
 	{ID: "code.sql-template", Control: "D-003", Title: "SQL built with string interpolation", Re: regexp.MustCompile(`(?i)(\x60[^\x60]*\b(select\s[^\x60]*\sfrom|insert\s+into|update\s+\w+\s+set|delete\s+from)\b[^\x60]*\$\{|\bf['"][^'"]*\b(select\s.*\sfrom|insert\s+into|update\s+\w+\s+set|delete\s+from)\b[^'"]*\{)`),
-		Not: regexp.MustCompile(`(?i)\bsql(<[^\x60]*>)?\x60|Prisma\.sql|sql\.raw\(\s*\x60\s*\x60|\$(queryRaw|executeRaw)(<[^\x60]*>)?\x60`), Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-89",
+		Not: regexp.MustCompile(`(?i)\bsql(<[^\x60]*>)?\x60|\b(sql|db|tx)\s*\(\s*\)\s*\x60|\bdb\x60|Prisma\.sql|sql\.raw\(\s*\x60\s*\x60|\$(queryRaw|executeRaw)(<[^\x60]*>)?\x60`), Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-89",
 		Message: "Query text is built with string interpolation.", Fix: "Use bound parameters (tagged sql templates, placeholders) instead of interpolation."},
 	{ID: "code.sql-concat", Control: "D-003", Title: "SQL built with string concatenation", Re: sqlConcatRe, SupersededBy: "code.sql-template", Demote: sqlForFileOnly,
 		Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-89", Message: "Query text is concatenated with values; if a value is user controlled this is SQL injection.", Fix: "Use parameterized queries / prepared statements or the ORM query builder."},
@@ -196,8 +196,12 @@ var codeRules = []lineRule{
 	{ID: "code.jwt-decode-no-verify", Control: "B-001", Title: "jwt.decode used (no signature check)", Langs: jsLike, Re: regexp.MustCompile(`\bjwt\.decode\s*\(`),
 		Severity: model.SevMedium, Confidence: model.Hypothesis, CWE: "CWE-347", Message: "jsonwebtoken's decode() does not verify the signature; trusting its output for authorization is unsafe.", Fix: "Use jwt.verify(token, key, { algorithms: [...] }) for anything security relevant."},
 	{ID: "code.cookie-flags-off", Control: "B-002", Title: "Session cookie without HttpOnly/Secure", Re: regexp.MustCompile(`(?i)(httpOnly\s*:\s*false|cookie.*\bsecure\s*:\s*false|SESSION_COOKIE_(SECURE|HTTPONLY)\s*=\s*False|CSRF_COOKIE_SECURE\s*=\s*False|HttpOnly\s*=\s*false|Secure\s*=\s*false.*[Cc]ookie)`),
-		Severity: model.SevMedium, Confidence: model.Confirmed, CWE: "CWE-1004", Message: "Cookie protection flag explicitly disabled.", Fix: "Set HttpOnly, Secure and SameSite=Lax/Strict for session cookies; gate Secure=false to local development only."},
+		Proven: cookiePreferenceOnly, Severity: model.SevMedium, Confidence: model.Confirmed, CWE: "CWE-1004", Message: "Cookie protection flag explicitly disabled.", Fix: "Set HttpOnly, Secure and SameSite=Lax/Strict for session cookies; gate Secure=false to local development only."},
 
+	{ID: "code.json-in-script-unescaped", Control: "H-001", Title: "JSON in a script element without escaping \"<\"", Langs: jsLike, Re: reactSinkRe,
+		Proven: jsonScriptEscaped, Severity: model.SevMedium, Confidence: model.Hypothesis, CWE: "CWE-79",
+		Message: "JSON.stringify output is written into a script element as raw HTML. JSON.stringify does not escape \"<\", so a string value containing \"</script>\" ends the element and runs markup that follows.",
+		Fix:     "Escape \"<\" in the serialized JSON: JSON.stringify(data).replace(/</g, \"\\u003c\")."},
 	{ID: "code.html-sink", Control: "H-001", Title: "Raw HTML sink", Re: htmlSinkRe,
 		Not: htmlSinkNot, Post: htmlSinkDynamic, Proven: htmlSinkOrAssignProvenSafe, Severity: model.SevMedium, Confidence: model.Hypothesis, CWE: "CWE-79",
 		Message: "Content is inserted as raw HTML. If it can contain user data this is cross-site scripting.", Fix: "Render as text, or sanitize with a maintained sanitizer (DOMPurify) right at the sink."},
@@ -321,7 +325,11 @@ func (a codeAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 		// H-002: wildcard/reflected CORS together with credentials in the same file.
 		if credRe.MatchString(text) {
 			for i, l := range f.Lines {
-				if corsAnyRe.MatchString(l) {
+				// The credentials setting must belong to the same CORS
+				// configuration: within a few lines of the wildcard. A file
+				// that answers public endpoints with "*" and admin endpoints
+				// with an allowlist and credentials is not reported (#352).
+				if corsAnyRe.MatchString(l) && credNear(f.Lines, i) {
 					v := goVerdict(corsAnyRe, i)
 					if v == "pattern" {
 						continue
@@ -395,4 +403,32 @@ func isCode(lang string) bool {
 		return true
 	}
 	return false
+}
+
+// credNear reports whether a CORS credentials setting is within six lines of
+// line i, where a wildcard origin was found.
+func credNear(lines []string, i int) bool {
+	for j := max(i-6, 0); j < min(i+7, len(lines)); j++ {
+		if credRe.MatchString(lines[j]) {
+			return true
+		}
+	}
+	return false
+}
+
+// cookieNotSessionRe names cookies that hold a display preference, which
+// page scripts read on purpose; cookieSessionRe names cookies that carry a
+// session or a credential.
+var (
+	cookieNotSessionRe = regexp.MustCompile(`(?i)\b(locale|lang|language|theme|consent|currency|timezone|tz|sidebar|pref|prefs|preference|preferences|color-?scheme)\b`)
+	cookieSessionRe    = regexp.MustCompile(`(?i)(session|auth|token|sid\b|jwt|refresh|csrf|xsrf|login|remember)`)
+)
+
+// cookiePreferenceOnly drops a disabled cookie flag when the lines around it
+// name a preference cookie and nothing that looks like a session or
+// credential cookie (#352).
+func cookiePreferenceOnly(c lineCtx) bool {
+	lines := c.File.Lines
+	win := strings.Join(lines[max(c.Index-6, 0):min(c.Index+3, len(lines))], "\n")
+	return cookieNotSessionRe.MatchString(win) && !cookieSessionRe.MatchString(win)
 }

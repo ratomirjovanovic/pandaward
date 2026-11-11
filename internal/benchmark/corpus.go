@@ -126,6 +126,8 @@ func Corpus() []Case {
 	add(code("code.cookie-flags-off", "a.js", "res.cookie('sid', v, { httpOnly: false });\n", "res.cookie('sid', v, { httpOnly: true, secure: true });\n"))
 	add(code("code.html-sink", "a.js", "el.innerHTML = msg;\n", "el.innerHTML = DOMPurify.sanitize(msg);\n"))
 	add(code("code.secret-logged", "a.js", "console.log(\"login\", password);\n", "console.log(\"invalid password\");\n"))
+	add(code("code.json-in-script-unescaped", "a.tsx", "<script type=\"application/ld+json\" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld) }} />\n",
+		"<script type=\"application/ld+json\" dangerouslySetInnerHTML={{ __html: JSON.stringify(ld).replace(/</g, \"\\\\u003c\") }} />\n"))
 	// Known false positives that structural checks rule out.
 	safe := func(rule, file, src, note string) {
 		cs = append(cs, Case{Rule: rule, Adapter: "builtin-code", Files: map[string]string{"src/" + file: src}, Note: note})
@@ -141,6 +143,15 @@ func Corpus() []Case {
 		Case{Rule: "code.html-sink", Adapter: "builtin-code", Vulnerable: true, Files: map[string]string{"src/app/ld.tsx": "function jsonLd(data) {\n  return JSON.stringify(data)\n}\n" + ldSink},
 			Note: "JSON-LD through a helper that does not escape <"})
 	safe("code.html-sink", "a.tsx", "export const Tag = () => (\n  <script\n    type=\"text/plain\"\n    dangerouslySetInnerHTML={{\n      __html:\n        \"window.dataLayer=window.dataLayer||[];\",\n    }}\n  />\n)\n", "a whole string literal")
+	safe("code.html-sink", "qr.tsx", "import QRCode from \"qrcode\";\nexport async function Qr({ link }) {\n  const svg = link ? await QRCode.toString(link, { type: \"svg\" }) : null;\n  return <div dangerouslySetInnerHTML={{ __html: svg }} />;\n}\n", "an SVG drawn by the qrcode library")
+	cs = append(cs, Case{Rule: "code.html-sink", Adapter: "builtin-code", Files: map[string]string{
+		"src/theme.ts":   "const KEY = \"theme\";\nexport const themeScript = `try{var t=localStorage.getItem(${JSON.stringify(\n  KEY,\n)});}catch(e){}`;\n",
+		"src/layout.tsx": "import { themeScript } from \"./theme\";\nexport const L = () => <script dangerouslySetInnerHTML={{ __html: themeScript }} />;\n"},
+		Note: "an imported constant script built only from constants"},
+		Case{Rule: "code.html-sink", Adapter: "builtin-code", Vulnerable: true, Files: map[string]string{
+			"src/theme.ts":   "export const themeScript = `var t=${location.hash};`;\n",
+			"src/layout.tsx": "import { themeScript } from \"./theme\";\nexport const L = () => <script dangerouslySetInnerHTML={{ __html: themeScript }} />;\n"},
+			Note: "an imported template that interpolates page data"})
 	cs = append(cs, Case{Rule: "code.sql-concat", Adapter: "builtin-code", Vulnerable: true,
 		Files: map[string]string{"scripts/gen.mjs": "import { writeFileSync } from 'node:fs'\nawait db.query('delete from prices where id = ' + id)\nwriteFileSync('out.sql', 'x')\n"},
 		Note:  "a query run in a file that also writes files"})
