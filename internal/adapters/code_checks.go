@@ -3,6 +3,8 @@ package adapters
 import (
 	"regexp"
 	"strings"
+
+	"github.com/ratomirjovanovic/pandaward/internal/inventory"
 )
 
 // Structural checks that narrow the line rules in builtin_code.go. Each one
@@ -157,7 +159,11 @@ func safeHTMLValue(c lineCtx, expr string, at int, trace bool) bool {
 		return safeHTMLValue(c, strings.TrimSpace(a), at, trace) && safeHTMLValue(c, strings.TrimSpace(b), at, trace)
 	}
 	if callee, args, ok := wholeCall(expr); ok {
-		return sanitizerCall(callee, args, jsImports(c.Text)) || safeHelper(c, callee)
+		imports := jsImports(c.Text)
+		if isReactMemo(callee, imports) {
+			return memoSafe(c, args, at)
+		}
+		return sanitizerCall(callee, args, imports) || safeHelper(c, callee)
 	}
 	if trace && identRe.MatchString(expr) {
 		init, ok := constInit(c.Text, expr, at)
@@ -197,20 +203,32 @@ func sanitizerCall(callee, args string, imports map[string]jsBinding) bool {
 // only return is a proven-safe expression: defined in the sink's file, or a
 // named import from a module of the repository (never a package).
 func safeHelper(c lineCtx, name string) bool {
-	if strings.Contains(name, ".") {
+	return safeHelperIn(c.Inv, c.File.Path, c.Text, name, 0)
+}
+
+// maxHelperHops bounds how many repository helpers safeHelperIn follows,
+// such as markdownToHtml returning sanitizeHtml(html) of another module,
+// which returns sanitize(html, ...) of sanitize-html (#361).
+const maxHelperHops = 3
+
+// safeHelperIn applies safeHelper to name called in the file at path with
+// text. A helper whose only return calls another helper counts when that
+// helper is safe in turn.
+func safeHelperIn(inv *inventory.Inventory, path, text, name string, hops int) bool {
+	if strings.Contains(name, ".") || hops > maxHelperHops {
 		return false
 	}
-	imports := jsImports(c.Text)
-	text, fn, exported := c.Text, name, false
+	imports := jsImports(text)
+	fn, exported := name, false
 	if b, ok := imports[name]; ok {
 		if b.imported == "default" || b.imported == "*" {
 			return false
 		}
-		f := resolveLocal(c.Inv, c.File.Path, b.module)
+		f := resolveLocal(inv, path, b.module)
 		if f == nil {
 			return false
 		}
-		text, fn, exported = strings.Join(f.Lines, "\n"), b.imported, true
+		path, text, fn, exported = f.Path, strings.Join(f.Lines, "\n"), b.imported, true
 		imports = jsImports(text)
 	}
 	ret, ok := funcReturn(text, fn, exported)
@@ -221,7 +239,55 @@ func safeHelper(c lineCtx, name string) bool {
 		return true
 	}
 	callee, args, ok := wholeCall(ret)
-	return ok && sanitizerCall(callee, args, imports)
+	if !ok {
+		return false
+	}
+	if sanitizerCall(callee, args, imports) {
+		// Options built elsewhere in the module, such as options(profile),
+		// are not read at the call, so the module must not allow scripts
+		// anywhere.
+		_, opts, more := strings.Cut(args, ",")
+		return !more || strings.HasPrefix(strings.TrimSpace(opts), "{") || !unsafeOptsRe.MatchString(text)
+	}
+	return safeHelperIn(inv, path, text, callee, hops+1)
+}
+
+var memoArrowRe = regexp.MustCompile(`^\(\s*\)\s*=>\s*`)
+
+// memoSafe reports whether args of a React useMemo call is an arrow function
+// without parameters whose every return value is proven safe in the sink's
+// file, such as a placeholder literal or a call to a sanitizing helper.
+func memoSafe(c lineCtx, args string, at int) bool {
+	args = strings.TrimSpace(args)
+	m := memoArrowRe.FindStringIndex(args)
+	if m == nil {
+		return false
+	}
+	var rets []string
+	if strings.HasPrefix(args[m[1]:], "{") {
+		rets = blockReturns(args, m[1])
+	} else {
+		rets = []string{strings.TrimSpace(args[m[1]:exprEnd(args, m[1], ",", true)])}
+	}
+	if len(rets) == 0 {
+		return false
+	}
+	for _, r := range rets {
+		if !safeHTMLValue(c, r, at, false) {
+			return false
+		}
+	}
+	return true
+}
+
+// isReactMemo reports whether callee is useMemo imported from react, or
+// React.useMemo.
+func isReactMemo(callee string, imports map[string]jsBinding) bool {
+	if callee == "React.useMemo" {
+		return true
+	}
+	b, ok := imports[callee]
+	return ok && b.module == "react" && b.imported == "useMemo"
 }
 
 // constInit returns the initializer of the one const declaration of name in

@@ -4,6 +4,9 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 
 ## [Unreleased]
 
+### Changed
+- `code.html-sink` follows a chain of repository helpers to the sanitizer, such as `markdownToHtml` returning `sanitizeHtml(html)` of another module that calls sanitize-html with options built in that module (then the module must not allow `script` anywhere); helpers bound by a destructured dynamic import, `const { f } = await import('./m')`; and a React `useMemo` whose every return is a literal or a sanitizing helper (#361).
+
 ## [0.2.15] - 2026-11-11
 
 ### Added
