@@ -8,9 +8,9 @@ import (
 	"github.com/ratomirjovanovic/pandaward/internal/model"
 )
 
-// A built-in SQL heuristic in a Java file is replaced by the bundled Java
-// rule; the same heuristic in a JavaScript file and a Java signal of
-// another rule stay.
+// A built-in SQL heuristic in a Java or JavaScript file is replaced by the
+// bundled taint rule of that language (JavaScript since #352); a JavaScript
+// shell heuristic and a Java signal of another rule stay.
 func TestSupersededSignals(t *testing.T) {
 	inv := &inventory.Inventory{Files: []*inventory.File{
 		{Path: "src/Dao.java", Lang: "java"},
@@ -20,11 +20,12 @@ func TestSupersededSignals(t *testing.T) {
 		{RuleID: "code.sql-concat", ControlID: "D-003", Collector: "builtin-code", File: "src/Dao.java"},
 		{RuleID: "code.sql-concat", ControlID: "D-003", Collector: "builtin-code", File: "web/db.js"},
 		{RuleID: "code.tls-verify-off", ControlID: "E-003", Collector: "builtin-code", File: "src/Dao.java"},
+		{RuleID: "code.js-shell", ControlID: "D-002", Collector: "builtin-code", File: "web/db.js"},
 		{RuleID: "semgrep.pandaward-java-sql-injection", ControlID: "D-003", Collector: "semgrep", File: "src/Dao.java"},
 	}
 	got := supersededSignals(sigs, inv)
-	if len(got) != 1 || got[0] != "semgrep.pandaward-java-sql-injection" {
-		t.Fatalf("superseded = %v, want only signal 0", got)
+	if len(got) != 2 || got[0] != "semgrep.pandaward-java-sql-injection" || got[1] != "semgrep.pandaward-js-sql-injection" {
+		t.Fatalf("superseded = %v, want signals 0 and 1", got)
 	}
 }
 

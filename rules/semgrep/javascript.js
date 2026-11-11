@@ -28,13 +28,22 @@ app.get('/shell', (req, res) => {
 });
 
 app.get('/invoices/:id', async (req, res) => {
-  // ruleid: pandaward-js-sql-string
+  // ruleid: pandaward-js-sql-injection
   await db.query("SELECT * FROM invoices WHERE id = " + req.params.id);
-  // ruleid: pandaward-js-sql-string
+  // ruleid: pandaward-js-sql-injection
   await db.query(`SELECT * FROM invoices WHERE id = ${req.params.id}`);
-  // ok: pandaward-js-sql-string
+  // ok: pandaward-js-sql-injection
   await db.query("SELECT * FROM invoices WHERE id = $1", [req.params.id]);
+  // A tagged template is parameterized by the driver.
+  // ok: pandaward-js-sql-injection
+  await sql`SELECT * FROM invoices WHERE id = ${req.params.id}`;
 });
+
+// Dynamic SQL built in code, with no request data, is not reported (#352).
+async function byId(tx, table, id) {
+  // ok: pandaward-js-sql-injection
+  return tx.query(`select ${USER_COLUMNS} from ${quote(table)} where u.id = $1`, [id]);
+}
 
 const OPEN_DISPUTE_STATUSES = ['open', 'needs_response'];
 const INVOICES_TABLE = 'invoices';
@@ -42,37 +51,37 @@ const RETRY = { delaysMs: [100, 500, 2000] };
 
 app.get('/reports', async (req, res) => {
   // Module constants, lists built from them and numbers carry no request data.
-  // ok: pandaward-js-sql-string
+  // ok: pandaward-js-sql-injection
   await db.execute(sql.raw(`SELECT * FROM disputes WHERE status IN (${OPEN_DISPUTE_STATUSES.map((s) => `'${s}'`).join(', ')})`));
-  // ok: pandaward-js-sql-string
+  // ok: pandaward-js-sql-injection
   await sql.raw(`SELECT * FROM disputes WHERE status IN (${OPEN_DISPUTE_STATUSES.map((s) => `'${s}'`).join(', ')})`);
-  // ok: pandaward-js-sql-string
+  // ok: pandaward-js-sql-injection
   await db.query("SELECT count(*) FROM " + INVOICES_TABLE);
-  // ok: pandaward-js-sql-string
+  // ok: pandaward-js-sql-injection
   await db.query(`DELETE FROM jobs WHERE attempts > ${Math.trunc(req.query.days)}`);
-  // ok: pandaward-js-sql-string
+  // ok: pandaward-js-sql-injection
   await db.query("SELECT * FROM " + INVOICES_TABLE + " LIMIT " + 50);
-  // ruleid: pandaward-js-sql-string
+  // ruleid: pandaward-js-sql-injection
   await db.query(`SELECT * FROM ${INVOICES_TABLE} WHERE id = ${req.query.id}`);
-  // ruleid: pandaward-js-sql-string
+  // ruleid: pandaward-js-sql-injection
   await db.query("SELECT * FROM " + INVOICES_TABLE + " WHERE id = " + req.query.id);
-  // ruleid: pandaward-js-sql-string
+  // ruleid: pandaward-js-sql-injection
   await db.query(req.query.where + " AND " + INVOICES_TABLE);
-  // ruleid: pandaward-js-sql-string
+  // ruleid: pandaward-js-sql-injection
   await sql.raw(`SELECT * FROM t WHERE x = ${CONFIG.prefix + req.body.x}`);
   // A ternary between two string literals only picks fixed SQL text (#221).
-  // ok: pandaward-js-sql-string
+  // ok: pandaward-js-sql-injection
   await db.query(`SET LOCAL ROLE ${req.user.isAdmin ? 'admin' : 'reader'}`);
-  // ruleid: pandaward-js-sql-string
+  // ruleid: pandaward-js-sql-injection
   await db.query(`SET LOCAL ROLE ${req.user.isAdmin ? req.body.role : 'reader'}`);
   // A list built from a property of a module constant (#221).
-  // ok: pandaward-js-sql-string
+  // ok: pandaward-js-sql-injection
   await db.query(`SELECT * FROM jobs WHERE delay_ms IN (${RETRY.delaysMs.map((ms) => Math.trunc(ms)).join(",")})`);
-  // ok: pandaward-js-sql-string
+  // ok: pandaward-js-sql-injection
   await db.query("SELECT * FROM jobs WHERE delay_ms IN (" + RETRY.delaysMs.map((ms) => Math.trunc(ms)).join(",") + ")");
-  // ruleid: pandaward-js-sql-string
+  // ruleid: pandaward-js-sql-injection
   await db.query(`SELECT * FROM jobs WHERE delay_ms IN (${req.body.delays.map((ms) => Math.trunc(ms)).join(",")})`);
-  // ruleid: pandaward-js-sql-string
+  // ruleid: pandaward-js-sql-injection
   await db.query("SELECT * FROM jobs WHERE delay_ms IN (" + req.body.delays.map((ms) => Math.trunc(ms)).join(",") + ")");
   res.end();
 });
@@ -295,6 +304,24 @@ function copy(target, source) {
     target[key] = source[key];
   }
   return target;
+}
+
+// A payload's .body built for an outgoing call is not request data (#352).
+async function pspCall(keys, path, body) {
+  const opts = { body: JSON.stringify(body) };
+  // ok: pandaward-js-ssrf
+  return fetch(`${keys.base}${path}`, { method: 'POST', body: opts.body });
+}
+
+// Promise.all is not a query; a Supabase .or() filter string is (#352).
+export async function GET(req) {
+  const q = req.query.q;
+  const pattern = `%${q}%`;
+  // ok: pandaward-js-sql-injection
+  const [a, b] = await Promise.all([search(q), count(q)]);
+  // ruleid: pandaward-js-sql-injection
+  const r = await supabase.from("posts").select("id").or(`title.ilike.${pattern},excerpt.ilike.${pattern}`);
+  return [a, b, r];
 }
 
 // Fixes the rules recognize: a containment or traversal check that stops

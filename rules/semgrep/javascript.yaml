@@ -152,44 +152,48 @@ rules:
           if (<... $RE.test(...) ...>) { ... throw $E; }
           ...
 
-  - id: pandaward-js-sql-string
+  - id: pandaward-js-sql-injection
     languages: [javascript, typescript]
     severity: ERROR
-    message: SQL text is built with string concatenation or template interpolation. Use parameterized queries.
+    message: Request data reaches the text of an SQL query. Pass it as a bound parameter ($1, ?) or through a tagged sql template instead.
     metadata:
       pandaward-control: D-003
       cwe: "CWE-89: Improper Neutralization of Special Elements used in an SQL Command"
-    # A value that is an UPPER_CASE module constant (or a property of one),
-    # a list built from one with .map(...).join(...), or a number cannot
-    # carry request data, so it is not reported on its own (#160). The
-    # constant may be followed by a property chain before .map (#221). A
-    # template interpolation that is a ternary choosing between two string
-    # literals only selects fixed SQL text, so it is not reported (#221).
-    patterns:
-      - pattern-either:
-          - patterns:
-              - pattern-either:
-                  - pattern: $DB.$Q("$SQL" + $X, ...)
-                  - pattern: $DB.$Q(`...${$X}...`, ...)
-              - metavariable-regex:
-                  metavariable: $X
-                  # Semgrep binds a template interpolation without its ${...};
-                  # Opengrep binds it with them. Both forms are checked.
-                  regex: (?s)^(?:\$\{(?!(?:[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*|[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*\.map\(.*\)\.join\([^()]*\)|(Math\.(trunc|floor|ceil|round)|Number|parseInt|parseFloat)\([^()]*\)|\d+(\.\d+)?|[^'"\x60]*\?\s*(?:"[^"]*"|'[^']*')\s*:\s*(?:"[^"]*"|'[^']*'))\}$)|(?!\$\{)(?!(?:[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*|[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*\.map\(.*\)\.join\([^()]*\)|(Math\.(trunc|floor|ceil|round)|Number|parseInt|parseFloat)\([^()]*\)|\d+(\.\d+)?|[^'"\x60]*\?\s*(?:"[^"]*"|'[^']*')\s*:\s*(?:"[^"]*"|'[^']*'))$))
-          - patterns:
-              - pattern: $DB.$Q($A + $B, ...)
-              - metavariable-regex:
-                  metavariable: $B
-                  regex: (?s)^(?!(?:[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*|[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*\.map\(.*\)\.join\([^()]*\)|(Math\.(trunc|floor|ceil|round)|Number|parseInt|parseFloat)\([^()]*\)|\d+(\.\d+)?|"[^"]*"|'[^']*')$)
-          - patterns:
-              - pattern: $DB.$Q($A + $B, ...)
-              - metavariable-regex:
-                  metavariable: $A
-                  regex: (?s)^(?!(?:(?:[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*|[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*\.map\(.*\)\.join\([^()]*\)|(Math\.(trunc|floor|ceil|round)|Number|parseInt|parseFloat)\([^()]*\)|\d+(\.\d+)?|"[^"]*"|'[^']*')(?:\s*\+\s*(?:[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*|[A-Z][A-Z0-9_]*(\.[A-Za-z_$][\w$]*)*\.map\(.*\)\.join\([^()]*\)|(Math\.(trunc|floor|ceil|round)|Number|parseInt|parseFloat)\([^()]*\)|\d+(\.\d+)?|"[^"]*"|'[^']*'))*)$)
-      - metavariable-regex:
-          metavariable: $Q
-          regex: ^(query|execute|raw|run|all|prepare|\$queryRawUnsafe|\$executeRawUnsafe)$
-      - pattern-not: $DB.$Q("..." + "...", ...)
+      # Dynamic SQL built in code from constants, identifier helpers and
+      # placeholder numbers is common and safe; only text that carries request
+      # data is reported, so this rule replaces the line heuristics (#352).
+      pandaward-supersedes: [code.sql-concat, code.sql-template, code.sql-unsafe-raw]
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern: $REQ.$F
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: (?i)^(req|request|ctx|ctx\.request|this\.request)$
+          - metavariable-regex:
+              metavariable: $F
+              regex: ^(query|body|params|url|originalUrl|path|headers|cookies)$
+          - pattern-not-inside: $REQ.$F(...)
+    pattern-sinks:
+      - patterns:
+          - pattern: $DB.$Q($SQL, ...)
+          - metavariable-regex:
+              metavariable: $Q
+              regex: ^(query|execute|raw|run|all|prepare|unsafe|\$queryRawUnsafe|\$executeRawUnsafe)$
+          # Promise.all(...) is not sqlite's db.all().
+          - pattern-not: Promise.$Q(...)
+          - focus-metavariable: $SQL
+      # A PostgREST (Supabase) filter string: a comma or parenthesis in
+      # request data adds conditions to the filter.
+      - patterns:
+          - pattern-inside: $C.from(...). ... .or($SQL, ...)
+          - pattern: $SQL
+    pattern-sanitizers:
+      - patterns:
+          - pattern: $F(...)
+          - metavariable-regex:
+              metavariable: $F
+              regex: ^(Number|parseInt|parseFloat|Math\.(trunc|floor|ceil|round)|Boolean)$
 
   - id: pandaward-js-html-sink
     languages: [javascript, typescript]
@@ -322,6 +326,12 @@ rules:
               - pattern: $REQ.query
               - pattern: $REQ.body
               - pattern: $REQ.params
+          # Only the incoming request: any other object's .body or .query,
+          # such as a payload built for an outgoing call, is not a source
+          # (#352).
+          - metavariable-regex:
+              metavariable: $REQ
+              regex: (?i)^(req|request|ctx|ctx\.request|this\.request)$
           # db.query(...) and the like are method calls, not request data.
           - pattern-not-inside: $REQ.query(...)
           - pattern-not-inside: $REQ.body(...)
