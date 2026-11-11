@@ -37,7 +37,7 @@ Most scanners print a list of alerts and stop. PandaWard keeps a **ledger**: eve
   <a href="https://pandaward.dev/demo/">
     <picture>
       <source media="(prefers-color-scheme: dark)" srcset="docs/media/findings-dark.png">
-      <img src="docs/media/findings-light.png" width="860" alt="PandaWard findings explorer for the bundled acme-shop fixture: 22 confirmed findings, 11 suspected, 40% decisive coverage, with a critical pull_request_target finding and hardcoded secrets at the top">
+      <img src="docs/media/findings-light.png" width="860" alt="PandaWard findings explorer for the bundled acme-shop fixture: 20 confirmed findings, 19 suspected, 42% decisive coverage, with a critical pull_request_target finding and hardcoded secrets at the top">
     </picture>
   </a>
   <br><sub>Findings from a real scan of the bundled vulnerable fixture. <a href="https://pandaward.dev/demo/">Open the live demo</a> for the terminal replay and the full report.</sub>
