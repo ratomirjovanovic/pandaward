@@ -371,7 +371,7 @@ app.get('*', (req, res) => {
   if (c.search(/(\/|^)\.\.(\/|$)/) != -1) { return res.sendStatus(404); }
   fs.readFile(root + c);
   fs.readFile(root + req.query.f);
-});`, false, "path-traversal:12")
+});`, false, "incomplete-sanitization:4", "path-traversal:12")
 }
 
 func TestPrototypePollution(t *testing.T) {
@@ -485,4 +485,38 @@ app.get('/a', (req, res) => {
     req.query.q +
     '</p>');
 });`, false, "xss:3")
+}
+
+func TestShapes(t *testing.T) {
+	expect(t, "string replace escapes the first quote only", `
+function q(name) { return "this['" + name.replace("'", "\'") + "']"; }
+function ok(name) { return name.replace(/'/g, "\'"); }`, true, "incomplete-sanitization:2")
+
+	expect(t, "regex without g", `
+function enc(s) { return s.replace(/[<>&"]/, ''); }
+function enc2(s) { return s.replace(/[<>&"]/g, ''); }`, true, "incomplete-sanitization:2")
+
+	expect(t, "one pass removal", `
+function clean(p) { return p.replace(/\.\.\//g, ''); }
+function strip(h) { return h.replace(/<script[^>]*>/gi, ''); }`, true, "incomplete-sanitization:2", "incomplete-sanitization:3")
+
+	expect(t, "javascript only scheme check", `
+function sanitizeURL(url) {
+  if (url.trim().toLowerCase().indexOf('javascript:') === 0) return 'about:blank';
+  return url;
+}
+function full(url) {
+  var p = url.toLowerCase();
+  if (p.startsWith('javascript:') || p.startsWith('data:') || p.startsWith('vbscript:')) return '';
+  return url;
+}`, true, "incomplete-url-scheme-check:3")
+}
+
+func TestShapesInApplications(t *testing.T) {
+	expect(t, "only input from a source counts", `
+const strip = (html) => html.replace(/<!--[\s\S]*?-->/g, '');
+app.get('/p', (req, res) => {
+  const own = template.replace(/<!--[\s\S]*?-->/g, '');
+  const name = req.query.name.replace("'", "\'");
+});`, false, "incomplete-sanitization:5")
 }
