@@ -25,10 +25,11 @@ const (
 	XSS
 	SSRF
 	Redirect
+	Proto
 	All Kind = 1<<iota - 1
 )
 
-var kindByName = map[string]Kind{"cmd": Cmd, "code": Code, "path": Path, "sql": SQL, "xss": XSS, "ssrf": SSRF, "redirect": Redirect, "all": All}
+var kindByName = map[string]Kind{"cmd": Cmd, "code": Code, "path": Path, "sql": SQL, "xss": XSS, "ssrf": SSRF, "redirect": Redirect, "proto": Proto, "all": All}
 
 // Spec is a parsed taint specification.
 type Spec struct {
@@ -50,7 +51,12 @@ type Sources struct {
 	Handlers struct {
 		Receivers []string `yaml:"receivers"`
 		Methods   []string `yaml:"methods"`
+		Calls     []string `yaml:"calls"`
 	} `yaml:"handlers"`
+	HelperParams      []string `yaml:"helper_params"`
+	Events            []string `yaml:"events"`
+	Sockets           []string `yaml:"sockets"`
+	PluginOptions     []string `yaml:"plugin_options"`
 	Globals           []string `yaml:"globals"`
 	LibraryParameters bool     `yaml:"library_parameters"`
 }
