@@ -43,6 +43,7 @@ type Spec struct {
 type Sources struct {
 	Request struct {
 		Names   []string `yaml:"names"`
+		Weak    []string `yaml:"weak_names"`
 		Props   []string `yaml:"props"`
 		Methods []string `yaml:"methods"`
 	} `yaml:"request"`
@@ -199,7 +200,24 @@ type Trace struct {
 	// Library is set when the source is a parameter of an exported
 	// function rather than client input.
 	Library bool
-	n       int
+	// Param marks a placeholder source, parameter Param-1 of a function
+	// being summarized; it never reaches a finding.
+	Param int
+	n     int
+}
+
+// NewMarker starts the placeholder trace of parameter i of a function
+// being summarized.
+func NewMarker(line, i int) *Trace {
+	return &Trace{Step: Step{line, "parameter"}, Param: i + 1, n: 1}
+}
+
+// Root returns the source of the trace.
+func (t *Trace) Root() *Trace {
+	for t != nil && t.Prev != nil {
+		t = t.Prev
+	}
+	return t
 }
 
 // maxTrace bounds the steps kept per trace.
@@ -219,7 +237,7 @@ func (t *Trace) Add(line int, what string) *Trace {
 	if t.Line == line && t.What == what || t.n >= maxTrace {
 		return t
 	}
-	return &Trace{Step: Step{line, what}, Prev: t, Library: t.Library, n: t.n + 1}
+	return &Trace{Step: Step{line, what}, Prev: t, Library: t.Library, Param: t.Param, n: t.n + 1}
 }
 
 // Steps returns the trace from source to the newest step.
