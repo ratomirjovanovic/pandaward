@@ -9,6 +9,10 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 - The built-in taint engine follows data from a source to a dangerous call within a JavaScript or TypeScript file (#347): request objects and route handler parameters, browser URL globals and, in a published npm package, the parameters of exported functions, to shell commands, eval, file paths, SQL text, HTML output, server-side requests and redirects. Sources, sinks and sanitizers are data in `rules/taint/javascript.yaml`; a check that leaves the function on bad input counts as validation. Each finding shows the path from source to sink. It runs as the adapter `builtin-taint`, which is not enabled by default yet (add it to `scan.adapters` to try it), and the CVE benchmark measures it as the engine `taint`.
 - The taint engine follows calls between the functions of a file: each function gets a summary of which parameters reach which sinks and its return value, applied where it is called, including methods called on `this`, fields set by constructors (also TypeScript parameter properties), prototype classes and hoisted function declarations. Redirect findings need a value that can choose the host: a parsed request URL, its `origin`, and text after a literal path such as `/api/?` do not count (#347).
 
+### Fixed
+- Gitleaks no longer walks the directories `inventory.exclude` skips: PandaWard runs it with a config that extends the project's `.gitleaks.toml` or the default rules and allowlists those directories. A large `target` or `node_modules` directory made gitleaks outlast the adapter timeout and every assessment end incomplete; on this repository gitleaks went from 35 s to 2 s with the same findings (#374).
+- A finding whose file was deleted, excluded or moved into a git-ignored directory is closed on the next scan even when its collector is skipped for lack of input files; infra and mobile findings stayed open as STALE before. The note says the file is no longer scanned (#372).
+
 ## [0.2.15] - 2026-11-11
 
 ### Added

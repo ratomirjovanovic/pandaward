@@ -289,7 +289,12 @@ func gitleaks() Adapter {
 		name: "gitleaks", binary: "gitleaks", controls: []string{"E-005"}, verArgs: []string{"version"},
 		okExit: map[int]bool{0: true},
 		args: func(c *Context, out string) ([]string, error) {
-			return []string{"detect", "--no-git", "--source", c.Root, "--redact", "--no-banner", "--exit-code", "0", "--report-format", "json", "--report-path", out}, nil
+			args := []string{"detect", "--no-git", "--source", c.Root, "--redact", "--no-banner", "--exit-code", "0", "--report-format", "json", "--report-path", out}
+			cfg, err := gitleaksConfig(c)
+			if err != nil {
+				return nil, err
+			}
+			return append(args, "--config", cfg), nil
 		},
 		normalize: func(c *Context, raw []byte) ([]model.Signal, error) {
 			var items []struct {
@@ -347,6 +352,71 @@ func gitleaks() Adapter {
 		},
 	}
 	return t
+}
+
+// gitleaksConfig writes a gitleaks config into the run directory that
+// extends the project's own .gitleaks.toml (or the default rules) and
+// allowlists the directories inventory.exclude skips. Gitleaks then does not
+// walk node_modules, target or .next at all: those signals were dropped
+// anyway, and a Rust or Node build directory could take longer than the
+// adapter timeout to read.
+func gitleaksConfig(c *Context) (string, error) {
+	var b strings.Builder
+	b.WriteString("[extend]\n")
+	if own := filepath.Join(c.Root, ".gitleaks.toml"); regularFile(own) {
+		b.WriteString("path = '''" + own + "'''\n")
+	} else {
+		b.WriteString("useDefault = true\n")
+	}
+	b.WriteString("\n[allowlist]\ndescription = \"PandaWard inventory.exclude\"\npaths = [\n")
+	var exclude []string
+	if c.Cfg != nil {
+		exclude = c.Cfg.Inventory.Exclude
+	}
+	for _, re := range excludePathRegexes(exclude) {
+		b.WriteString("  '''" + re + "''',\n")
+	}
+	b.WriteString("]\n")
+	p := filepath.Join(c.RunDir, "gitleaks.toml")
+	return p, os.WriteFile(p, []byte(b.String()), 0o600)
+}
+
+// excludePathRegexes turns inventory.exclude entries into path regexes
+// with the same meaning as the inventory walk: a plain name matches a
+// directory of that name anywhere, an entry with a slash matches that
+// directory path, and * or ? in an entry match within one name. Separators
+// may be / or \, since gitleaks reports OS paths.
+func excludePathRegexes(exclude []string) []string {
+	const sep = `[\\/]`
+	var out []string
+	for _, e := range exclude {
+		e = strings.Trim(filepath.ToSlash(e), "/")
+		if e == "" || strings.Contains(e, "'''") {
+			continue
+		}
+		var parts []string
+		for _, seg := range strings.Split(e, "/") {
+			var r strings.Builder
+			for _, ch := range seg {
+				switch ch {
+				case '*':
+					r.WriteString(`[^\\/]*`)
+				case '?':
+					r.WriteString(`[^\\/]`)
+				default:
+					r.WriteString(regexp.QuoteMeta(string(ch)))
+				}
+			}
+			parts = append(parts, r.String())
+		}
+		out = append(out, `(^|`+sep+`)`+strings.Join(parts, sep)+sep)
+	}
+	return out
+}
+
+func regularFile(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && fi.Mode().IsRegular()
 }
 
 // placeholderHit re-reads a single-line gitleaks match and reports whether
