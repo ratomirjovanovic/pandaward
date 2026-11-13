@@ -5,6 +5,7 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 ## [Unreleased]
 
 ### Fixed
+- Gitleaks no longer walks the directories `inventory.exclude` skips: PandaWard runs it with a config that extends the project's `.gitleaks.toml` or the default rules and allowlists those directories. A large `target` or `node_modules` directory made gitleaks outlast the adapter timeout and every assessment end incomplete; on this repository gitleaks went from 35 s to 2 s with the same findings (#374).
 - A finding whose file was deleted, excluded or moved into a git-ignored directory is closed on the next scan even when its collector is skipped for lack of input files; infra and mobile findings stayed open as STALE before. The note says the file is no longer scanned (#372).
 
 ## [0.2.15] - 2026-11-11
