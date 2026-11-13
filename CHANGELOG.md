@@ -4,6 +4,9 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 
 ## [Unreleased]
 
+### Changed
+- `code.secret-logged` lists a log line as info when every credential word on it is inside a hashing call, such as a CLI that prints `hashPassword(password)` for an environment variable; a credential outside the call keeps the finding (#363).
+
 ## [0.2.15] - 2026-11-11
 
 ### Added
