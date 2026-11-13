@@ -1,0 +1,181 @@
+# Taint specification for JavaScript and TypeScript, read by the built-in
+# taint engine (builtin-taint). Names are matched after module resolution:
+# `child_process.exec` matches require('child_process').exec, a destructured
+# or imported exec, and cp.exec where cp = require('child_process').
+# `name#N` selects argument N (default 0); `name#*` any argument.
+
+sources:
+  # Properties and methods of a request object that carry client input. A
+  # request object is a variable with one of these names, or the first
+  # parameter of a route handler (see handlers).
+  request:
+    names: [req, request, ctx, ctx.request, this.request, event]
+    props: [query, body, params, url, originalUrl, path, headers, cookies, files, file, hostname, payload, queryStringParameters, pathParameters, rawBody]
+    methods: [get, header, param]
+  # Route registration: the last function argument of
+  # <receiver>.<method>('/path', ...) gets the request as its first
+  # parameter and the response as its second.
+  handlers:
+    receivers: [app, router, server, api, routes, route, r, fastify, express]
+    methods: [get, post, put, patch, delete, del, all, use, options, head]
+  # Browser globals an attacker controls through the URL or window name.
+  globals: [location.hash, location.search, location.href, location.pathname, document.URL, document.documentURI, document.referrer, document.baseURI, window.name, window.location.hash, window.location.search, window.location.href]
+  # In a library, the parameters of exported functions come from the
+  # caller. Findings from these sources are hypotheses.
+  library_parameters: true
+
+sinks:
+  - id: taint.js-command-injection
+    kind: cmd
+    control: D-002
+    cwe: "CWE-78"
+    title: Shell command built from untrusted input
+    message: Input reaches a command run through a shell, so shell metacharacters in it run extra commands.
+    fix: Use execFile or spawn with an argument array and no shell, or validate the value against a strict allowlist first.
+    calls:
+      - child_process.exec
+      - child_process.execSync
+      - shelljs.exec
+      - execa.command
+      - execa.commandSync
+      - execa.shell
+      - execa.shellSync
+      - exec-sh
+    # spawn and execFile run a shell only with { shell: true }.
+    calls_with_shell_option:
+      - child_process.spawn#0
+      - child_process.spawnSync#0
+      - child_process.execFile#0
+      - child_process.execFileSync#0
+
+  - id: taint.js-code-injection
+    kind: code
+    control: D-001
+    cwe: "CWE-94"
+    title: Code built from untrusted input is evaluated
+    message: Input reaches eval, the Function constructor or a similar evaluator, so it runs as code.
+    fix: Never evaluate input. Parse it as data (JSON.parse) or map it through a lookup table.
+    calls: [eval, Function#*, setTimeout, setInterval, vm.runInNewContext, vm.runInThisContext, vm.runInContext, vm.compileFunction, vm.Script, new Function#*]
+
+  - id: taint.js-path-traversal
+    kind: path
+    control: D-006
+    cwe: "CWE-22"
+    title: File path built from untrusted input
+    message: Input reaches a file system path, so ../ sequences or absolute paths read or write files outside the intended directory.
+    fix: Resolve the path and check that it stays inside the base directory (path.resolve(base, p).startsWith(base + path.sep)), or take only path.basename of the input.
+    # A library that opens the path its caller gives is doing its job.
+    request_only: true
+    calls:
+      - fs.readFile
+      - fs.readFileSync
+      - fs.writeFile
+      - fs.writeFileSync
+      - fs.appendFile
+      - fs.appendFileSync
+      - fs.createReadStream
+      - fs.createWriteStream
+      - fs.unlink
+      - fs.unlinkSync
+      - fs.rm
+      - fs.rmSync
+      - fs.rmdir
+      - fs.rmdirSync
+      - fs.mkdir
+      - fs.mkdirSync
+      - fs.readdir
+      - fs.readdirSync
+      - fs.stat
+      - fs.statSync
+      - fs.open
+      - fs.openSync
+      - fs.rename
+      - fs.renameSync
+      - fs.copyFile
+      - fs.copyFileSync
+      - fs.promises.readFile
+      - fs.promises.writeFile
+      - fs.promises.unlink
+      - fs/promises.readFile
+      - fs/promises.writeFile
+      - fs/promises.unlink
+      - fs/promises.rm
+      - fs-extra.readFile
+      - fs-extra.readFileSync
+      - fs-extra.writeFile
+      - fs-extra.outputFile
+      - fs-extra.remove
+      - fs-extra.copy
+    methods: [sendFile#0, download#0, sendfile#0]
+
+  - id: taint.js-sql-injection
+    kind: sql
+    control: D-003
+    cwe: "CWE-89"
+    title: SQL query text built from untrusted input
+    message: Input reaches the text of an SQL query, so it can change the query.
+    fix: Pass the value as a bound parameter ($1, ?) or through a tagged sql template.
+    methods: [query#0, execute#0, raw#0, $queryRawUnsafe#0, $executeRawUnsafe#0, unsafe#0]
+    receivers_not: [Promise, res, response, this.res, router, app, $]
+
+  - id: taint.js-xss
+    kind: xss
+    control: H-001
+    cwe: "CWE-79"
+    title: Untrusted input written as HTML
+    message: Input is written into the page as HTML, so a script in it runs in the user's browser.
+    fix: Write it as text (textContent, a template that escapes) or sanitize it with DOMPurify first.
+    calls: [document.write, document.writeln]
+    methods: [send#0, write#0, end#0, insertAdjacentHTML#1, html#0, append#0, prepend#0, after#0, before#0, replaceWith#0]
+    # res.send/write/end only on a response object; the jQuery methods only
+    # on a jQuery selection ("$"): the DOM's own append() inserts text.
+    method_receivers:
+      send: [res, response, reply, h, ctx.res, this.res]
+      write: [res, response, ctx.res, this.res, document]
+      end: [res, response, ctx.res, this.res]
+      html: [$]
+      append: [$]
+      prepend: [$]
+      after: [$]
+      before: [$]
+      replaceWith: [$]
+    props: [innerHTML, outerHTML, ctx.body]
+    jsx: [dangerouslySetInnerHTML.__html]
+
+  - id: taint.js-ssrf
+    kind: ssrf
+    control: D-006
+    cwe: "CWE-918"
+    title: Request URL built from untrusted input
+    message: Input chooses the URL of a server-side request, so it can reach internal services.
+    fix: Allow only known hosts; parse the URL and compare its host with an allowlist.
+    calls: [fetch, axios, axios.get, axios.post, axios.request, got, got.get, request, request.get, needle.get, http.get, http.request, https.get, https.request, node-fetch, superagent.get]
+    request_only: true
+
+  - id: taint.js-open-redirect
+    kind: redirect
+    control: D-006
+    cwe: "CWE-601"
+    title: Redirect target built from untrusted input
+    message: Input chooses where the user is redirected, so a link can send users to another site.
+    fix: Redirect only to relative paths or to an allowlist of hosts.
+    methods: [redirect#0]
+    method_receivers:
+      redirect: [res, response, reply, ctx]
+    props: [location.href, window.location.href, location]
+    request_only: true
+
+sanitizers:
+  # Conversions that leave no characters of the input.
+  - kinds: [all]
+    calls: [Number, parseInt, parseFloat, Boolean, Math.floor, Math.ceil, Math.round, Math.trunc, Math.abs, Math.min, Math.max, isNaN, Number.isInteger, Number.parseInt, Number.parseFloat, crypto.createHash, uuid]
+  - kinds: [cmd]
+    calls: [shell-quote.quote, shell-escape, shellescape, any-shell-escape, escapeShellArg, shellQuote, quote]
+  - kinds: [path]
+    calls: [path.basename, sanitize-filename, sanitizeFilename]
+  - kinds: [xss]
+    calls: [escape, escapeHtml, escape-html, he.encode, he.escape, lodash.escape, _.escape, validator.escape, DOMPurify.sanitize, dompurify.sanitize, sanitizeHtml, sanitize-html, xss, encodeURIComponent, encodeURI]
+  - kinds: [sql]
+    calls: [mysql.escape, escape, pg-format, SqlString.escape, sqlstring.escape, connection.escape]
+  - kinds: [code]
+    calls: [JSON.stringify]

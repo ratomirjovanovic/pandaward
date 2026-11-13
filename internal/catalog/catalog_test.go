@@ -56,7 +56,15 @@ func TestControlsAreConsistent(t *testing.T) {
 // otherwise its decision would be written under the wrong owner.
 func TestAdaptersClaimTheirOwnControls(t *testing.T) {
 	for _, a := range adapters.Registry() {
-		if len(a.Controls()) == 0 {
+		// A contributor only reports findings for controls other adapters
+		// own; those must exist.
+		if c, ok := a.(adapters.Contributor); ok {
+			for _, id := range c.Contributes() {
+				if catalog.ControlByID(id) == nil {
+					t.Errorf("%s contributes to unknown control %s", a.Name(), id)
+				}
+			}
+		} else if len(a.Controls()) == 0 {
 			t.Errorf("%s claims no controls", a.Name())
 		}
 		for _, id := range a.Controls() {
