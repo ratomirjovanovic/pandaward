@@ -4,6 +4,9 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 
 ## [Unreleased]
 
+### Fixed
+- A finding whose file was deleted, excluded or moved into a git-ignored directory is closed on the next scan even when its collector is skipped for lack of input files; infra and mobile findings stayed open as STALE before. The note says the file is no longer scanned (#372).
+
 ## [0.2.15] - 2026-11-11
 
 ### Added
