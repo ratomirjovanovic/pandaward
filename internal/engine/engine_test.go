@@ -225,3 +225,36 @@ func TestHypothesisValidation(t *testing.T) {
 		t.Fatalf("hypothesis must stay HYPOTHESIS/OPEN: %+v", f)
 	}
 }
+
+// builtin-taint owns no control: its findings raise the controls of their
+// weakness, and a scan with it enabled keeps working.
+func TestTaintAdapterRaisesControls(t *testing.T) {
+	root := testfixture.VulnerableRepo(t)
+	e, _, err := Init(root, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+	e.Cfg.Scan.Adapters = []string{"builtin-inventory", "builtin-code", "builtin-taint"}
+	res, err := e.Scan(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fs, err := e.St.Findings(e.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, f := range fs {
+		if f.Collector == "builtin-taint" {
+			n++
+		}
+	}
+	if n < 3 {
+		t.Fatalf("%d builtin-taint findings, want at least 3", n)
+	}
+	cm := controlMap(t, e, res.AssessmentID)
+	if st := cm["D-002"].Status; st != model.StatusFail && st != model.StatusSuspected {
+		t.Fatalf("D-002 is %s after a command injection flow", st)
+	}
+}

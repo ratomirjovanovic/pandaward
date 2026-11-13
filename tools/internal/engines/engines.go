@@ -19,7 +19,7 @@ import (
 )
 
 // Names are the engines that can be measured.
-var Names = []string{"builtin", "semgrep", "opengrep"}
+var Names = []string{"builtin", "semgrep", "opengrep", "taint"}
 
 // Finding is the part of a signal the benchmarks score.
 type Finding struct {
@@ -73,8 +73,11 @@ func Walk(root string) (*inventory.Inventory, error) {
 
 // Measure runs one engine on an inventoried tree.
 func Measure(ctx context.Context, inv *inventory.Inventory, engine string) (Run, error) {
-	if engine == "builtin" {
+	switch engine {
+	case "builtin":
 		return builtin(ctx, inv)
+	case "taint":
+		return taintEngine(ctx, inv)
 	}
 	return semgrep(ctx, inv, engine)
 }
@@ -83,8 +86,9 @@ func builtin(ctx context.Context, inv *inventory.Inventory) (Run, error) {
 	r := Run{Engine: "builtin", Version: version.Version}
 	actx := &adapters.Context{Root: inv.Root, Inv: inv, Cfg: config.Default("benchmark")}
 	for _, a := range adapters.Registry() {
-		// Only the built-in adapters; the Semgrep rules are their own engines.
-		if !strings.HasPrefix(a.Name(), "builtin-") {
+		// Only the built-in adapters; the Semgrep rules and the taint
+		// engine (not enabled by default yet) are their own engines.
+		if !strings.HasPrefix(a.Name(), "builtin-") || a.Name() == "builtin-taint" {
 			continue
 		}
 		res, run := a.Run(ctx, actx)
@@ -92,6 +96,23 @@ func builtin(ctx context.Context, inv *inventory.Inventory) (Run, error) {
 			return r, fmt.Errorf("%s did not complete: %s %s", a.Name(), run.ExitClass, run.Detail)
 		}
 		r.Findings = append(r.Findings, findings(res.Signals)...)
+	}
+	return r, nil
+}
+
+// taintEngine runs the built-in taint engine (#347) alone.
+func taintEngine(ctx context.Context, inv *inventory.Inventory) (Run, error) {
+	r := Run{Engine: "taint", Version: version.Version}
+	actx := &adapters.Context{Root: inv.Root, Inv: inv, Cfg: config.Default("benchmark")}
+	for _, a := range adapters.Registry() {
+		if a.Name() != "builtin-taint" {
+			continue
+		}
+		res, run := a.Run(ctx, actx)
+		if run.ExitClass != model.ExitOK {
+			return r, fmt.Errorf("%s did not complete: %s %s", a.Name(), run.ExitClass, run.Detail)
+		}
+		r.Findings = findings(res.Signals)
 	}
 	return r, nil
 }

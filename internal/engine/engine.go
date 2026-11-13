@@ -489,7 +489,11 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 		if !enabled[ad.Name()] {
 			continue
 		}
-		for _, cid := range ad.Controls() {
+		controls := ad.Controls()
+		if c, ok := ad.(adapters.Contributor); ok {
+			controls = append(append([]string{}, controls...), c.Contributes()...)
+		}
+		for _, cid := range controls {
 			if r := results[cid]; r != nil && r.Status != model.StatusNotApplicable {
 				todo = append(todo, ad)
 				break

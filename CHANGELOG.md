@@ -6,6 +6,7 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 
 ### Added
 - A JavaScript, TypeScript and JSX parser in pure Go (`internal/taint/js`), the first part of the built-in taint engine (#347). It keeps parsing after a syntax error, losing only the broken statement, and skips type annotations, including Flow. `tools/jsparse` measures it on real code: 61,624 of 61,626 files in four `node_modules` trees and 99.8% of 31,555 application files parse without error. It produces no findings yet.
+- The built-in taint engine follows data from a source to a dangerous call within a JavaScript or TypeScript file (#347): request objects and route handler parameters, browser URL globals and, in a published npm package, the parameters of exported functions, to shell commands, eval, file paths, SQL text, HTML output, server-side requests and redirects. Sources, sinks and sanitizers are data in `rules/taint/javascript.yaml`; a check that leaves the function on bad input counts as validation. Each finding shows the path from source to sink. It runs as the adapter `builtin-taint`, which is not enabled by default yet (add it to `scan.adapters` to try it), and the CVE benchmark measures it as the engine `taint`.
 
 ## [0.2.15] - 2026-11-11
 

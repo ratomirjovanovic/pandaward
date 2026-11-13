@@ -279,3 +279,9 @@ On the 24 CVEs of the benchmark whose first weakness is a regular expression, me
 The three misses report the regex where it is used, not where it is written (`CHARSET_RE.exec(...)`, `regexps[i].toString()`), or are in a YAML file. The CVEs list CWE-730, so the CWE match column stays 0; the check reports CWE-1333.
 
 On seven real application repositories (about 5,000 JavaScript and TypeScript files) the check lists about 110 polynomial patterns, such as `/\/+$/` and the common `^[^\s@]+@[^\s@]+\.[^\s@]+$` email check, and one exponential pattern, in a test file that the built-in rules skip.
+
+### Built-in taint engine (preview)
+
+The built-in taint engine (#347, adapter `builtin-taint`, not enabled by default yet) follows data from a source to a sink within one file: request objects and route handler parameters, browser URL globals and, in a published npm package, the parameters of exported functions. The CVE benchmark measures it as the engine `taint` (`--engine taint`).
+
+`tools/taintcve` is the development check: it analyzes only the labelled files of each CVE, fetched beforehand at both commits, and scores them the same way. On the first version, which does not follow calls between functions yet, it detects 32 of 220 CVEs (18 of 48 with CWE-78) and recognizes 20 fixes. On 10,220 application files of local repositories its two findings were both false positives (a variable named `request` holding something else); with that fixed it reports none there.
