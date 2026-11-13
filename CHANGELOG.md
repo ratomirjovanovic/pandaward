@@ -11,6 +11,10 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 - The taint engine covers more of what only the Semgrep rules found: path traversal through `http.createServer` handlers, helpers such as `serveStatic(req, res, path)`, `send(req, path)`, `fs.exists`/`stat`/`lstat`/`link` and archive entries (zip slip), with `..` checks and stripping as fixes; prototype pollution by shape (recursive merges and key-path walks without a `__proto__` check, not merges into a fresh copy); and cross-site scripting from socket messages, `res.status(...).send(...)`, jQuery selectors and plugin options, `execCommand('inserthtml')` and, in libraries, page text read back as HTML. Functions of the file named like sanitizers are judged by their code, not their name (#347).
 - The taint engine reports incomplete escaping (a string `replace("'", ...)` or a regex without the `g` flag changes only the first match; removing `../`, `<script` or `<!--` in one pass can rebuild them) and URL checks that reject `javascript:` but not `data:`. In a library every such call counts; in an application only one applied to input from a source (#347).
 
+### Fixed
+- Gitleaks no longer walks the directories `inventory.exclude` skips: PandaWard runs it with a config that extends the project's `.gitleaks.toml` or the default rules and allowlists those directories. A large `target` or `node_modules` directory made gitleaks outlast the adapter timeout and every assessment end incomplete; on this repository gitleaks went from 35 s to 2 s with the same findings (#374).
+- A finding whose file was deleted, excluded or moved into a git-ignored directory is closed on the next scan even when its collector is skipped for lack of input files; infra and mobile findings stayed open as STALE before. The note says the file is no longer scanned (#372).
+
 ## [0.2.15] - 2026-11-11
 
 ### Added
