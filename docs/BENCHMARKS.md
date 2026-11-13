@@ -291,7 +291,8 @@ The built-in taint engine (#347, adapter `builtin-taint`, not enabled by default
 | intraprocedural only | 32 | 20 |
 | with function summaries | 38 | 23 |
 | with path, prototype pollution and browser XSS patterns | 56 | 37 |
+| with incomplete escaping and URL scheme checks | 64 | 43 |
 
-Compared with the full benchmark of `main` (run 43019314306) it adds 3 CVEs to the 116 the built-in rules and Semgrep find together, and recognizes 5 fixes they do not. Most of what Semgrep still finds alone is ReDoS (found by the built-in check, not by taint), jQuery plugin options and HTML written from values the engine cannot trace to a source.
+Compared with the full benchmark of `main` (run 43019314306) it adds 4 CVEs to the 116 the built-in rules and Semgrep find together, and recognizes 6 fixes they do not. Most of what Semgrep still finds alone is ReDoS (found by the built-in check, not by taint), jQuery plugin options and HTML written from values the engine cannot trace to a source.
 
 On 10,220 application files of 46 local repositories it reports 12 findings: 8 open redirects, all real (`${origin}${next}` with `next` from the query string in Supabase auth callbacks, where `?next=@evil.example` leaves the site), and 4 prototype pollution shapes, two of them in a generated `.wrangler` directory and two in a message lookup whose keys come from the code. Each false positive seen while building it became a rule and a test.

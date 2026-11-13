@@ -49,6 +49,12 @@ func Analyze(f *js.File, spec *taint.Spec, opt Options) []taint.Finding {
 		a.function(p.env, p.fn, a.exportName(p.fn, p.fn.Name), nil)
 	}
 	a.protoPollution(f)
+	if opt.Library {
+		// A library cannot know its input: any incomplete escaping counts.
+		// An application's own content is not attacker input; there only
+		// tainted values count (see call).
+		a.shapes(f)
+	}
 	sort.Slice(a.out, func(i, j int) bool {
 		if a.out[i].Line != a.out[j].Line {
 			return a.out[i].Line < a.out[j].Line
@@ -1795,6 +1801,9 @@ func (a *analyzer) call(s *scope, c *js.Call) val {
 		}
 		out.safe |= k
 		return out
+	}
+	if method == "replace" && !a.opt.Library {
+		a.shapeOnTainted(c, recv)
 	}
 	if method == "replace" || method == "replaceAll" {
 		if len(c.Args) == 2 && stripsToSafe(c.Args[0], c.Args[1]) {

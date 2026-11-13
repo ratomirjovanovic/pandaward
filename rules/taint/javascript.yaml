@@ -225,6 +225,22 @@ sinks:
     message: A recursive merge or a walk along a path of keys writes a key taken from its input without skipping __proto__, constructor and prototype, so a key named __proto__ changes Object.prototype for the whole process.
     fix: Skip the keys __proto__, constructor and prototype (or write only the target's own properties), or build the result with Object.create(null) or a Map.
 
+  - id: taint.js-incomplete-sanitization
+    kind: shape
+    control: D-006
+    cwe: "CWE-116"
+    title: Escaping or removal that misses repeated or rebuilt input
+    message: This replace() escapes or removes only the first match, or removes a sequence that a single pass can rebuild (....// becomes ../).
+    fix: Use a regular expression with the g flag and a proper encoder, or reject input that contains the sequence instead of removing it.
+
+  - id: taint.js-incomplete-url-scheme-check
+    kind: shape
+    control: H-001
+    cwe: "CWE-184"
+    title: URL check that rejects javascript but not data or vbscript
+    message: The check rejects javascript URLs but not data or vbscript URLs, which also run script.
+    fix: Allow only the schemes you expect (http, https, mailto) instead of rejecting a list.
+
 sanitizers:
   # Conversions that leave no characters of the input.
   - kinds: [all]
