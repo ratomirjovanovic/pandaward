@@ -7,7 +7,9 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -402,5 +404,80 @@ func TestSemgrepLowConfidenceRegistryRules(t *testing.T) {
 	}
 	if tool.note != "; 2 low-confidence audit result(s) listed as info" {
 		t.Errorf("note %q", tool.note)
+	}
+}
+
+// Gitleaks must not walk the directories inventory.exclude skips: a Rust
+// target or node_modules directory could outlast the adapter timeout.
+func TestGitleaksExcludeRegexes(t *testing.T) {
+	res := excludePathRegexes([]string{"node_modules", ".next-*", "apps/web/out"})
+	match := func(p string) bool {
+		for _, r := range res {
+			if regexp.MustCompile(r).MatchString(p) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, p := range []string{`C:\w\repo\node_modules\a.js`, "/w/repo/src/node_modules/x/y.js", "node_modules/a.js", "/w/repo/.next-cache/a.js", `C:\w\repo\apps\web\out\a.js`} {
+		if !match(p) {
+			t.Errorf("%s should be excluded", p)
+		}
+	}
+	for _, p := range []string{"/w/repo/src/node_modulesX/a.js", "/w/repo/src/node_modules.js", "/w/repo/.nextcache/a.js", "/w/repo/web/out/a.js"} {
+		if match(p) {
+			t.Errorf("%s should not be excluded", p)
+		}
+	}
+}
+
+func TestGitleaksConfigExtendsProjectConfig(t *testing.T) {
+	root, run := t.TempDir(), t.TempDir()
+	c := &Context{Root: root, RunDir: run, Cfg: config.Default("x")}
+	p, err := gitleaksConfig(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, _ := os.ReadFile(p)
+	if !strings.Contains(string(b), "useDefault = true") || !strings.Contains(string(b), "node_modules") {
+		t.Fatalf("default config:\n%s", b)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".gitleaks.toml"), []byte("title = \"own\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	p, _ = gitleaksConfig(c)
+	b, _ = os.ReadFile(p)
+	if strings.Contains(string(b), "useDefault") || !strings.Contains(string(b), filepath.Join(root, ".gitleaks.toml")) {
+		t.Fatalf("project config not extended:\n%s", b)
+	}
+}
+
+// With gitleaks installed, a secret in an excluded directory is never read.
+func TestGitleaksSkipsExcludedDirs(t *testing.T) {
+	if _, err := exec.LookPath("gitleaks"); err != nil {
+		t.Skip("gitleaks not installed")
+	}
+	root := t.TempDir()
+	token := "const k = 'gh" + "p_A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8'\n"
+	for _, p := range []string{"src/a.js", "node_modules/pkg/b.js", "src-tauri/target/debug/c.js"} {
+		full := filepath.Join(root, filepath.FromSlash(p))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(token), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	c := &Context{Root: root, RunDir: t.TempDir(), ToolHome: t.TempDir(), Timeout: time.Minute, Cfg: config.Default("x"), Inv: &inventory.Inventory{Root: root}}
+	res, run := gitleaks().Run(context.Background(), c)
+	if run.ExitClass != model.ExitOK {
+		t.Fatalf("gitleaks ended %s: %s", run.ExitClass, run.Detail)
+	}
+	var files []string
+	for _, s := range res.Signals {
+		files = append(files, filepath.ToSlash(relPath(root, s.File)))
+	}
+	if len(files) != 1 || files[0] != "src/a.js" {
+		t.Fatalf("signals in %v, want only src/a.js", files)
 	}
 }
