@@ -666,7 +666,12 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 			}
 			continue
 		}
-		if !ranOK[f.Collector] {
+		// A finding whose file the scan no longer covers (deleted, excluded or
+		// git-ignored) is closed even when its collector did not run: an
+		// adapter with no input files left is skipped, and its findings would
+		// otherwise stay open as STALE forever.
+		gone := e.outOfScope(f, inv)
+		if !ranOK[f.Collector] && !gone {
 			f.Stale = true
 			_ = e.St.UpsertFinding(e.ProjectID, f)
 			continue
@@ -676,7 +681,10 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 		f.Stale = false
 		f.AssessmentID = asmt.ID
 		why := "signal no longer observed by " + f.Collector + " in " + asmt.ID
-		if rule, ok := replacedBy[f.Fingerprint]; ok {
+		if gone {
+			f.Note = strings.TrimSpace(f.Note + " " + f.File + " is no longer scanned in " + asmt.ID + " (deleted, excluded or git-ignored).")
+			why = f.File + " no longer scanned in " + asmt.ID
+		} else if rule, ok := replacedBy[f.Fingerprint]; ok {
 			f.Note = strings.TrimSpace(f.Note + " Replaced in " + asmt.ID + " by the bundled rule " + rule + ", which decides this weakness for the file's language; the built-in heuristic is not reported while Semgrep or Opengrep completes.")
 			why = "built-in heuristic replaced by " + rule + " in " + asmt.ID
 		} else {
@@ -1165,6 +1173,28 @@ func edgeStatus(tests []string, byID map[string]model.ControlResult) (model.Stat
 // walk the tree themselves (gitleaks with --no-git scans everything), and
 // generated files there are not the project's code. The same holds for
 // directories git ignores and does not track, which the walk skipped.
+// outOfScope reports whether the file of finding f is no longer part of the
+// scanned tree: deleted, excluded by configuration, or in a git-ignored
+// directory the walk skipped. Gitleaks keeps listing secrets in ignored
+// directories (see dropExcluded), so those stay in scope.
+func (e *Engine) outOfScope(f model.Finding, inv *inventory.Inventory) bool {
+	rel := filepath.ToSlash(f.File)
+	if rel == "" || filepath.IsAbs(f.File) || strings.HasPrefix(rel, "../") {
+		return false
+	}
+	if inventory.Excluded(rel, e.Cfg.Inventory.Exclude) {
+		return true
+	}
+	if inv.InIgnoredDir(rel) && !(f.ControlID == "E-005" && f.Severity == model.SevInfo) {
+		return true
+	}
+	if inv.FileByPath(rel) != nil {
+		return false
+	}
+	_, err := os.Lstat(filepath.Join(e.Root, filepath.FromSlash(rel)))
+	return os.IsNotExist(err)
+}
+
 func (e *Engine) dropExcluded(out *adapters.Result, inv *inventory.Inventory) int {
 	kept := out.Signals[:0]
 	n := 0
