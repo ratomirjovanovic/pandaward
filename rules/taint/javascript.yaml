@@ -14,7 +14,7 @@ sources:
     # request only in a handler (exported as GET, POST, ... or handler, or
     # with a second parameter res, response, reply or h).
     weak_names: [request, event]
-    props: [query, body, params, url, originalUrl, path, headers, cookies, files, file, hostname, payload, queryStringParameters, pathParameters, rawBody]
+    props: [query, body, params, url, originalUrl, path, headers, cookies, files, file, hostname, payload, queryStringParameters, pathParameters, rawBody, urlBase, baseUrl, pathname, filename, filePath]
     methods: [get, header, param]
   # Route registration: the last function argument of
   # <receiver>.<method>('/path', ...) gets the request as its first
@@ -22,6 +22,21 @@ sources:
   handlers:
     receivers: [app, router, server, api, routes, route, r, fastify, express]
     methods: [get, post, put, patch, delete, del, all, use, options, head]
+    # Calls whose function argument handles requests: (req, res).
+    calls: [http.createServer, https.createServer, http2.createServer, http2.createSecureServer, connect, express]
+  # In a function that also takes the request and the response, these
+  # parameters carry a path derived from the request (serveStatic(req, res,
+  # path)).
+  helper_params: [path, pathname, file, filename, filePath, filepath, uri, url, relativePath, relPath, p]
+  # Event callbacks whose first parameter is attacker-controlled data, such
+  # as an entry of an archive being extracted (zip slip).
+  events: [entry]
+  # Message callbacks of these receivers (socket.on('chat', msg => ...))
+  # get data another client sent; connection events do not.
+  sockets: [socket, io, ws, client, conn, connection, channel]
+  # In a library, options a jQuery plugin reads from this (set by its
+  # caller or from data-* attributes).
+  plugin_options: [this.options, options, opts, settings, this.settings, this.opts]
   # Browser globals an attacker controls through the URL or window name.
   globals: [location.hash, location.search, location.href, location.pathname, document.URL, document.documentURI, document.referrer, document.baseURI, window.name, window.location.hash, window.location.search, window.location.href]
   # In a library, the parameters of exported functions come from the
@@ -97,6 +112,36 @@ sinks:
       - fs.renameSync
       - fs.copyFile
       - fs.copyFileSync
+      - fs.exists
+      - fs.existsSync
+      - fs.lstat
+      - fs.lstatSync
+      - fs.access
+      - fs.accessSync
+      - fs.link
+      - fs.linkSync
+      - fs.symlink
+      - fs.symlinkSync
+      - fs.realpath
+      - fs.realpathSync
+      - fs.readlink
+      - fs.chmod
+      - fs.chown
+      - fs.truncate
+      - fs.utimes
+      - graceful-fs.readFile
+      - graceful-fs.createReadStream
+      - graceful-fs.createWriteStream
+      - graceful-fs.link
+      - graceful-fs.symlink
+      - graceful-fs.writeFile
+      - send#1
+      - fstream.Writer
+      - mkdirp
+      - mkdirp.sync
+      - rimraf
+      - rimraf.sync
+      - serve-static
       - fs.promises.readFile
       - fs.promises.writeFile
       - fs.promises.unlink
@@ -129,8 +174,9 @@ sinks:
     title: Untrusted input written as HTML
     message: Input is written into the page as HTML, so a script in it runs in the user's browser.
     fix: Write it as text (textContent, a template that escapes) or sanitize it with DOMPurify first.
-    calls: [document.write, document.writeln]
-    methods: [send#0, write#0, end#0, insertAdjacentHTML#1, html#0, append#0, prepend#0, after#0, before#0, replaceWith#0]
+    # $(html) and jQuery(html) parse a string that starts with < as HTML.
+    calls: [document.write, document.writeln, $, jQuery]
+    methods: [send#0, write#0, end#0, insertAdjacentHTML#1, html#0, append#0, prepend#0, after#0, before#0, replaceWith#0, execCommand#2, createContextualFragment#0, parseFromString#0]
     # res.send/write/end only on a response object; the jQuery methods only
     # on a jQuery selection ("$"): the DOM's own append() inserts text.
     method_receivers:
@@ -168,6 +214,16 @@ sinks:
       redirect: [res, response, reply, ctx, this, Response, NextResponse]
     props: [location.href, window.location.href, location]
     request_only: true
+
+  # Structural: found by shape, not by a flow from a source (see
+  # internal/taint/jsflow/proto.go).
+  - id: taint.js-prototype-pollution
+    kind: proto
+    control: D-006
+    cwe: "CWE-1321"
+    title: Object keys from input written without skipping __proto__
+    message: A recursive merge or a walk along a path of keys writes a key taken from its input without skipping __proto__, constructor and prototype, so a key named __proto__ changes Object.prototype for the whole process.
+    fix: Skip the keys __proto__, constructor and prototype (or write only the target's own properties), or build the result with Object.create(null) or a Map.
 
 sanitizers:
   # Conversions that leave no characters of the input.

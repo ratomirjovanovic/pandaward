@@ -339,3 +339,150 @@ function b(x, n) { return a(x, n); }
 app.get('/r', (req, res) => { a(req.query.x, 3); });
 `, false, "command-injection:3")
 }
+
+func TestPathPatterns(t *testing.T) {
+	expect(t, "createServer handler and exists", `
+var fs = require('fs'), path = require('path');
+http.createServer(function (Request, Response) {
+  var p = path.join(root, Request.url);
+  if (fs.existsSync(p)) { fs.createReadStream(p).pipe(Response); }
+});`, false, "path-traversal:5")
+
+	expect(t, "helper next to the request", `
+import send from 'send';
+export function serveStatic(req, res, path) { return send(req, path).pipe(res); }
+`, false, "path-traversal:3")
+
+	expect(t, "zip slip", `
+var Writer = require('fstream').Writer;
+parser.on('entry', function (entry) {
+  entry.pipe(Writer({ path: path.join(opts.path, entry.path) }));
+});`, false, "path-traversal:4")
+
+	expect(t, "dot-dot checks and stripping", `
+const fs = require('fs');
+app.get('*', (req, res) => {
+  var a = root + req.url.replace(/\.\.\//g, '');
+  fs.readFile(a);
+  var b = root + req.path;
+  if (b.indexOf('..') !== -1) return res.status(403).end();
+  fs.readFile(b);
+  var c = req.params.p;
+  if (c.search(/(\/|^)\.\.(\/|$)/) != -1) { return res.sendStatus(404); }
+  fs.readFile(root + c);
+  fs.readFile(root + req.query.f);
+});`, false, "path-traversal:12")
+}
+
+func TestPrototypePollution(t *testing.T) {
+	expect(t, "recursive merge", `
+function merge(target, source) {
+  for (var key in source) {
+    if (typeof source[key] === 'object') {
+      target[key] = merge(target[key] || {}, source[key]);
+    } else {
+      target[key] = source[key];
+    }
+  }
+  return target;
+}`, false, "prototype-pollution:5", "prototype-pollution:7")
+
+	expect(t, "guarded merge", `
+function merge(target, source) {
+  for (var key in source) {
+    if (key === '__proto__' || key === 'constructor') continue;
+    if (isObject(source[key])) target[key] = merge(target[key] || {}, source[key]);
+    else target[key] = source[key];
+  }
+  return target;
+}`, false)
+
+	expect(t, "copy into a fresh object is not a merge", `
+function clone(src) {
+  var out = {};
+  Object.keys(src).forEach(function (k) { out[k] = typeof src[k] === 'object' ? clone(src[k]) : src[k]; });
+  return out;
+}`, false)
+
+	expect(t, "path walk", `
+function set(obj, path, value) {
+  var keys = path.split('.');
+  var o = obj;
+  for (var i = 0; i < keys.length - 1; i++) {
+    var k = keys[i];
+    o[k] = o[k] || {};
+    o = o[k];
+  }
+  o[keys[keys.length - 1]] = value;
+}`, false, "prototype-pollution:7")
+
+	expect(t, "merge into a copy", `
+function deepMerge(base, override) {
+  const out = { ...base };
+  for (const k of Object.keys(override)) {
+    out[k] = isObj(out[k]) ? deepMerge(out[k], override[k]) : override[k];
+  }
+  return out;
+}`, false)
+
+	expect(t, "path walk copying on write", `
+function setPath(obj, path, value) {
+  const keys = path.split('.'), result = { ...obj };
+  let current = result;
+  for (let i = 0; i < keys.length - 1; i++) {
+    const key = keys[i];
+    current[key] = { ...current[key] };
+    current = current[key];
+  }
+}`, false)
+
+	expect(t, "path walk with key check", `
+function set(obj, path, value) {
+  var keys = path.split('.'), o = obj;
+  for (var i = 0; i < keys.length - 1; i++) {
+    var k = keys[i];
+    if (k === '__proto__') return;
+    o[k] = o[k] || {};
+    o = o[k];
+  }
+}`, false)
+}
+
+func TestBrowserXSS(t *testing.T) {
+	expect(t, "socket message to jquery html", `
+socket.on('topic', function (data) {
+  $('#chan-' + data.chan).find('.topic').html(data.topic);
+});
+socket.on('connect', function () { $('#s').html('ok'); });`, false, "xss:3")
+
+	expect(t, "response chain", `
+app.get('/r', (request, response) => {
+  response.status(400).send('Cannot render ' + request.params.url);
+});`, false, "xss:3")
+
+	expect(t, "dom text reinterpreted as html in a library", `
+export function linkify(node) {
+  var s = node.nodeValue;
+  var dummy = document.createElement('div');
+  dummy.innerHTML = s.replace(/x/g, 'y');
+}`, true, "xss:5")
+
+	expect(t, "dom text in an application", `
+for (const el of document.querySelectorAll('[data-i18n-html]')) el.innerHTML = t(el.dataset.i18nHtml);
+`, false)
+
+	expect(t, "plugin option to a jquery selector", `
+var Collapse = function (element, options) { this.options = $.extend({}, Collapse.DEFAULTS, options); };
+Collapse.prototype.getParent = function () {
+  return $(this.options.parent).find('[data-parent="' + this.options.parent + '"]');
+};
+$.fn.collapse = Plugin;`, true, "xss:4")
+
+	expect(t, "multi-line argument range", `
+app.get('/a', (req, res) => {
+  res.send(
+    '<p>' +
+    req.query.q +
+    '</p>');
+});`, false, "xss:3")
+}

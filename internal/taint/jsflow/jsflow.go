@@ -48,6 +48,7 @@ func Analyze(f *js.File, spec *taint.Spec, opt Options) []taint.Finding {
 		p := a.pendingProto[i]
 		a.function(p.env, p.fn, a.exportName(p.fn, p.fn.Name), nil)
 	}
+	a.protoPollution(f)
 	sort.Slice(a.out, func(i, j int) bool {
 		if a.out[i].Line != a.out[j].Line {
 			return a.out[i].Line < a.out[j].Line
@@ -69,11 +70,17 @@ type analyzer struct {
 	reqNames, reqProps, reqMethods map[string]bool
 	weakNames                      map[string]bool
 	handlerRecv, handlerMethods    map[string]bool
+	handlerCalls, helperParams     map[string]bool
+	events, socketRecv             map[string]bool
+	pluginOptions                  map[string]bool
 	globals                        map[string]bool
 
 	exportedFns     map[*js.Func]string
 	exportedNames   map[string]bool
 	exportedClasses map[*js.Class]bool
+
+	// storeEnd is the last line of the value being assigned.
+	storeEnd int
 
 	// Summaries of the functions of the file, computed on first call.
 	sums map[*js.Func]*summary
@@ -147,6 +154,9 @@ func (a *analyzer) index() {
 	a.reqNames, a.reqProps, a.reqMethods = set(src.Request.Names), set(src.Request.Props), set(src.Request.Methods)
 	a.weakNames = set(src.Request.Weak)
 	a.handlerRecv, a.handlerMethods = set(src.Handlers.Receivers), set(src.Handlers.Methods)
+	a.handlerCalls, a.helperParams, a.events = set(src.Handlers.Calls), set(src.HelperParams), set(src.Events)
+	a.socketRecv = set(src.Sockets)
+	a.pluginOptions = set(src.PluginOptions)
 	a.globals = set(src.Globals)
 }
 
@@ -777,11 +787,11 @@ func guarded(test js.Expr) []string {
 					}
 					return
 				}
+				walk(x.L)
+				walk(x.R)
 				if isConst(x.R) {
-					walk(x.L)
 					add(x.L)
 				} else if isConst(x.L) {
-					walk(x.R)
 					add(x.R)
 				}
 			case "in", "instanceof":
@@ -791,7 +801,7 @@ func guarded(test js.Expr) []string {
 			name := exprText(x.Callee)
 			if m, ok := x.Callee.(*js.Member); ok {
 				name = m.Prop
-				if isValidatorName(name) {
+				if isValidatorName(name) || name == "search" {
 					add(m.Obj)
 				}
 			}
@@ -810,6 +820,8 @@ func isConst(x js.Expr) bool {
 	switch x := x.(type) {
 	case *js.Lit:
 		return true
+	case *js.Unary:
+		return x.Op == "-" && isConst(x.X)
 	case *js.Ident:
 		return x.Name == "undefined"
 	case *js.TemplateLit:
@@ -877,12 +889,15 @@ func (a *analyzer) function(outer *scope, fn *js.Func, exported string, params [
 		exported = cls
 	}
 	handler := isHandler(fn, exported)
+	helper := a.takesRequest(fn)
 	for i, p := range fn.Params {
 		var v val
 		name := patternName(p)
 		switch {
 		case i < len(params):
 			v = params[i]
+		case helper && a.helperParams[name]:
+			v = val{t: taint.NewSource(fn.Line, "parameter "+name+" next to the request", false)}
 		case a.weakNames[name] && !handler:
 			// fetch(request.url) in an HTTP client is not client input.
 			v = val{local: true}
@@ -937,12 +952,27 @@ func isHandler(fn *js.Func, exported string) bool {
 		return true
 	}
 	if len(fn.Params) >= 2 {
-		switch patternName(fn.Params[1]) {
+		switch strings.ToLower(patternName(fn.Params[1])) {
 		case "res", "response", "reply", "h":
 			return true
 		}
 	}
 	return false
+}
+
+// takesRequest reports a function with both a request and a response
+// parameter, such as serveStatic(req, res, path).
+func (a *analyzer) takesRequest(fn *js.Func) bool {
+	req, res := false, false
+	for _, p := range fn.Params {
+		switch n := strings.ToLower(patternName(p)); {
+		case n == "req" || n == "request":
+			req = true
+		case n == "res" || n == "response":
+			res = true
+		}
+	}
+	return req && res
 }
 
 // presetThis gives a constructor or method its this: the methods of its
@@ -1307,6 +1337,18 @@ func (a *analyzer) field(base val, prop string, line int, text string) val {
 	if text != "" && a.reqNames[text] {
 		return val{req: true}
 	}
+	if a.opt.Library && domText[prop] && base.t == nil && !base.req {
+		// Text of the page read back (node.textContent, el.getAttribute):
+		// written again as HTML it turns escaped text into markup. Only in
+		// libraries, which get pages they do not control; an application
+		// reads its own markup.
+		return val{t: taint.NewSource(line, "DOM text "+prop, true), safe: taint.All &^ taint.XSS}
+	}
+	if a.opt.Library && text != "" && a.pluginOptions[text] && base.t == nil {
+		// Options a jQuery plugin takes from its caller or from data-*
+		// attributes of the page.
+		return val{t: taint.NewSource(line, text, true)}
+	}
 	if base.req {
 		switch {
 		case a.reqProps[prop]:
@@ -1531,8 +1573,27 @@ func (a *analyzer) assignExpr(s *scope, x *js.Assign) val {
 		old := a.expr(s, x.Target)
 		v = join(old, v)
 	}
+	a.storeEnd = lastLine(x.Value)
 	a.bind(s, x.Target, v, false)
+	a.storeEnd = 0
 	return v
+}
+
+// lastLine is the last line an expression starts a node on: a finding
+// on a multi-line argument covers all of it.
+func lastLine(x js.Expr) int {
+	end := 0
+	if x == nil {
+		return 0
+	}
+	js.Inspect(x, func(n js.Node) bool {
+		if _, isFn := n.(*js.Func); isFn && n != js.Node(x) {
+			return false
+		}
+		end = max(end, n.Ln())
+		return true
+	})
+	return end
 }
 
 // store handles obj.prop = v: property sinks and fields of local objects.
@@ -1541,7 +1602,7 @@ func (a *analyzer) store(s *scope, m *js.Member, v val) {
 	for _, k := range a.spec.Sinks {
 		for _, p := range k.Props {
 			if m.Computed == nil && (p == m.Prop || p == text) {
-				a.report(k, v, m.Line, m.Line)
+				a.report(k, v, m.Line, max(m.Line, a.storeEnd))
 			}
 		}
 	}
@@ -1597,6 +1658,15 @@ func setPath(base val, path []string, v val) val {
 
 // --- calls ---------------------------------------------------------------
 
+// socketLifecycle events carry no message from a peer.
+var socketLifecycle = set([]string{"connect", "connection", "disconnect", "close", "open", "error", "end", "reconnect", "ready", "listening"})
+
+// domText properties hold text of the page.
+var domText = set([]string{"nodeValue", "textContent", "innerText", "dataset"})
+
+// responseChain methods return the response for chaining.
+var responseChain = set([]string{"status", "set", "type", "header", "append", "cookie", "vary", "location", "links", "contentType", "code", "headers"})
+
 // jqueryObject is the ref of a jQuery selection.
 const jqueryObject = "jQuery()"
 
@@ -1636,7 +1706,14 @@ func (a *analyzer) call(s *scope, c *js.Call) val {
 
 	// Callbacks: route handlers get request and response; iterator
 	// callbacks get the elements of a tainted receiver.
-	handler := a.handlerRecv[recvText] && a.handlerMethods[method]
+	handler := a.handlerRecv[recvText] && a.handlerMethods[method] || a.handlerCalls[name]
+	// emitter.on('entry', function (entry) {...}): attacker-chosen data.
+	event := ""
+	if (method == "on" || method == "once" || method == "addListener") && len(c.Args) > 0 {
+		if l, ok := c.Args[0].(*js.Lit); ok && l.Kind == js.TString && (a.events[l.Val] || a.socketRecv[shortName(recvText)] && !socketLifecycle[l.Val]) {
+			event = l.Val
+		}
+	}
 	for i, arg := range c.Args {
 		fn, ok := arg.(*js.Func)
 		if !ok {
@@ -1646,6 +1723,8 @@ func (a *analyzer) call(s *scope, c *js.Call) val {
 		switch {
 		case handler:
 			params = []val{{req: true}, {res: true}}
+		case event != "":
+			params = []val{{t: taint.NewSource(fn.Line, "'"+event+"' event data", false)}}
 		case recv.anyTaint() != nil && i == 0:
 			if idx, ok := iterators[method]; ok {
 				params = make([]val, idx+1)
@@ -1691,7 +1770,7 @@ func (a *analyzer) call(s *scope, c *js.Call) val {
 
 	// Functions named like sanitizers (safeNextPath, sanitizeName,
 	// escapeArg) return a checked value.
-	if n := shortName(exprText(c.Callee)); isSanitizerName(n) && a.spec.Sanitizes(name) == 0 {
+	if n := shortName(exprText(c.Callee)); callee.fn == nil && isSanitizerName(n) && a.spec.Sanitizes(name) == 0 {
 		return val{}
 	}
 
@@ -1721,9 +1800,17 @@ func (a *analyzer) call(s *scope, c *js.Call) val {
 		if len(c.Args) == 2 && stripsToSafe(c.Args[0], c.Args[1]) {
 			return val{}
 		}
+		if len(c.Args) == 2 && stripsDotDot(c.Args[0], c.Args[1]) {
+			out := recvTaint(recv, method)
+			out.safe |= taint.Path
+			return out
+		}
 	}
 	if booleanMethods[method] || method != "" && isValidatorName(method) && method != "match" && !strings.HasPrefix(method, "matchAll") {
 		return val{}
+	}
+	if a.opt.Library && method == "getAttribute" && recv.t == nil && !recv.req {
+		return val{t: taint.NewSource(c.Line, "DOM attribute", true), safe: taint.All &^ taint.XSS}
 	}
 	if req := recv.req; req && a.reqMethods[method] {
 		return val{t: taint.NewSource(c.Line, recvText+"."+method+"()", false)}
@@ -1741,6 +1828,9 @@ func (a *analyzer) call(s *scope, c *js.Call) val {
 	out = join(out, recvTaint(recv, method))
 	if name == "$" || name == "jQuery" || recv.ref == jqueryObject {
 		out.ref = jqueryObject
+	}
+	if recv.res && responseChain[method] {
+		out.res = true // res.status(400).send(x)
 	}
 	if out.t != nil && anyArg != nil && name != "" {
 		out.t = out.t.Add(c.Line, shortName(name)+"()")
@@ -1784,6 +1874,17 @@ func stripsToSafe(pattern, repl js.Expr) bool {
 	}
 	end := strings.LastIndexByte(re.Val, '/')
 	if end <= 0 || !strings.Contains(re.Val[end:], "g") || !strings.HasSuffix(re.Val[:end], "]") && !strings.HasSuffix(re.Val[:end], "]+") {
+		return false
+	}
+	r, ok := repl.(*js.Lit)
+	return ok && r.Kind == js.TString && r.Val == ""
+}
+
+// stripsDotDot reports x.replace(/\.\.\//g, ”): parent directory
+// segments removed from a path.
+func stripsDotDot(pattern, repl js.Expr) bool {
+	re, ok := pattern.(*js.Lit)
+	if !ok || re.Kind != js.TRegex || !strings.Contains(re.Val, `\.\.`) {
 		return false
 	}
 	r, ok := repl.(*js.Lit)
@@ -1862,8 +1963,8 @@ func (a *analyzer) reportArgs(k *taint.Sink, c *js.Call, args []val, idx int) {
 			continue
 		}
 		end := c.Line
-		if i < len(c.Args) && c.Args[i].Ln() > end {
-			end = c.Args[i].Ln()
+		if i < len(c.Args) {
+			end = max(end, lastLine(c.Args[i]))
 		}
 		a.report(k, v, c.Line, end)
 	}

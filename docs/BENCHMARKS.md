@@ -284,6 +284,14 @@ On seven real application repositories (about 5,000 JavaScript and TypeScript fi
 
 The built-in taint engine (#347, adapter `builtin-taint`, not enabled by default yet) follows data from a source to a sink within one file: request objects and route handler parameters, browser URL globals and, in a published npm package, the parameters of exported functions. The CVE benchmark measures it as the engine `taint` (`--engine taint`).
 
-`tools/taintcve` is the development check: it analyzes only the labelled files of each CVE, fetched beforehand at both commits, and scores them the same way. The engine follows calls between the functions of a file through per-function summaries (which parameters reach which sinks and the return value), including methods called on `this` and fields a constructor sets. It detects 38 of 220 CVEs (21 of 48 with CWE-78) and recognizes 23 fixes. Compared with the full benchmark of `main` (run 43019314306), it adds 2 CVEs to the 116 the built-in rules and Semgrep find together, and 23 to the 45 the built-in rules find alone, which is what a scan without Semgrep gets.
+`tools/taintcve` is the development check: it analyzes only the labelled files of each CVE, fetched beforehand at both commits, and scores them the same way. The engine follows calls between the functions of a file through per-function summaries (which parameters reach which sinks and the return value), including methods called on `this` and fields a constructor sets. Beyond flows from a source it checks the shape of prototype pollution (a recursive merge or a walk along a key path that writes a key without skipping `__proto__`).
 
-On 10,220 application files of 46 local repositories it reports 8 findings, all open redirects of the same shape, `${origin}${next}` with `next` from the query string in Supabase auth callbacks (`?next=@evil.example` leaves the site); reviewing them led to the rules that a parsed request URL, its `origin` and a path after literal text such as `/api/?` cannot choose another host.
+| | CVEs detected | fixes recognized |
+|---|---|---|
+| intraprocedural only | 32 | 20 |
+| with function summaries | 38 | 23 |
+| with path, prototype pollution and browser XSS patterns | 56 | 37 |
+
+Compared with the full benchmark of `main` (run 43019314306) it adds 3 CVEs to the 116 the built-in rules and Semgrep find together, and recognizes 5 fixes they do not. Most of what Semgrep still finds alone is ReDoS (found by the built-in check, not by taint), jQuery plugin options and HTML written from values the engine cannot trace to a source.
+
+On 10,220 application files of 46 local repositories it reports 12 findings: 8 open redirects, all real (`${origin}${next}` with `next` from the query string in Supabase auth callbacks, where `?next=@evil.example` leaves the site), and 4 prototype pollution shapes, two of them in a generated `.wrangler` directory and two in a message lookup whose keys come from the code. Each false positive seen while building it became a rule and a test.
