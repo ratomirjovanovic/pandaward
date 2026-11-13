@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ratomirjovanovic/pandaward/internal/adapters"
+	"github.com/ratomirjovanovic/pandaward/internal/config"
 	"github.com/ratomirjovanovic/pandaward/internal/evidence"
 	"github.com/ratomirjovanovic/pandaward/internal/model"
 	"github.com/ratomirjovanovic/pandaward/internal/testfixture"
@@ -270,6 +271,35 @@ func TestHypothesisValidation(t *testing.T) {
 
 // builtin-taint owns no control: its findings raise the controls of their
 // weakness, and a scan with it enabled keeps working.
+func TestTaintEngineDefault(t *testing.T) {
+	has := func(list []string, name string) bool {
+		for _, a := range list {
+			if a == name {
+				return true
+			}
+		}
+		return false
+	}
+	e := &Engine{Cfg: config.Default("x")}
+	if !has(e.Adapters(), "builtin-taint") {
+		t.Fatalf("a new config must run builtin-taint: %v", e.Adapters())
+	}
+	// A config written before builtin-taint was a default.
+	e.Cfg.Scan.Adapters = []string{"builtin-inventory", "builtin-code", "semgrep"}
+	if got := e.Adapters(); !has(got, "builtin-taint") || !has(got, "sarif-import") {
+		t.Fatalf("builtin-taint must run with builtin-code: %v", got)
+	}
+	e.Cfg.Scan.Adapters = []string{"builtin-inventory", "semgrep"}
+	if has(e.Adapters(), "builtin-taint") {
+		t.Fatal("builtin-taint must not run without builtin-code or an explicit entry")
+	}
+	e.Cfg.Scan.TaintEngine = false
+	e.Cfg.Scan.Adapters = []string{"builtin-code", "builtin-taint"}
+	if has(e.Adapters(), "builtin-taint") {
+		t.Fatal("scan.taint_engine: false must turn builtin-taint off")
+	}
+}
+
 func TestTaintAdapterRaisesControls(t *testing.T) {
 	root := testfixture.VulnerableRepo(t)
 	e, _, err := Init(root, false)

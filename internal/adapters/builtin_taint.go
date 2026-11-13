@@ -20,7 +20,10 @@ import (
 // scan.adapters to try it (#347).
 type taintAdapter struct{}
 
-func (taintAdapter) Name() string { return "builtin-taint" }
+// TaintAdapter is the name of the built-in taint engine adapter.
+const TaintAdapter = "builtin-taint"
+
+func (taintAdapter) Name() string { return TaintAdapter }
 
 // Controls is empty: the taint engine owns no control. Its findings carry
 // the controls of the weakness (D-001, D-002, D-003, D-006, H-001) and can

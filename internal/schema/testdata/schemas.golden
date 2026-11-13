@@ -251,6 +251,7 @@ scan.sarif_files[] string
 scan.semgrep_config string
 scan.semgrep_engine string
 scan.semgrep_include_tests bool
+scan.taint_engine bool
 schema_version int
 
 ## scope-yaml version 1

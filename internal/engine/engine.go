@@ -137,14 +137,27 @@ func (e *Engine) Inventory() (*inventory.Inventory, error) {
 
 // Adapters returns the enabled adapter names: scan.adapters plus
 // sarif-import, which is opted into by providing SARIF files instead.
+// builtin-taint runs with builtin-code unless scan.taint_engine is false,
+// so configs written before it was a default get it too.
 func (e *Engine) Adapters() []string {
-	out := append([]string{}, e.Cfg.Scan.Adapters...)
-	for _, a := range out {
-		if a == adapters.SARIFImport {
-			return out
+	var out []string
+	code, taint, sarif := false, false, false
+	for _, a := range e.Cfg.Scan.Adapters {
+		if a == adapters.TaintAdapter && !e.Cfg.Scan.TaintEngine {
+			continue
 		}
+		out = append(out, a)
+		code = code || a == "builtin-code"
+		taint = taint || a == adapters.TaintAdapter
+		sarif = sarif || a == adapters.SARIFImport
 	}
-	return append(out, adapters.SARIFImport)
+	if code && !taint && e.Cfg.Scan.TaintEngine {
+		out = append(out, adapters.TaintAdapter)
+	}
+	if !sarif {
+		out = append(out, adapters.SARIFImport)
+	}
+	return out
 }
 
 // PlanItem is one control decision before execution.

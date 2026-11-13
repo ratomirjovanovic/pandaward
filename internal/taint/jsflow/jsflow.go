@@ -1570,8 +1570,52 @@ func (a *analyzer) bind(s *scope, p js.Expr, v val, declare bool) {
 	}
 }
 
+// pageURL are the whole URL of the page: navigating to it again goes
+// nowhere new, while a part taken out of it (a split, a search parameter)
+// can still be a target an attacker chose.
+var pageURL = set([]string{"location", "window.location", "document.location", "location.href", "window.location.href", "document.location.href", "document.URL"})
+
+// dropPageURL replaces the branches of x || y, x ?? y and c ? x : y that
+// are the page URL unchanged with an empty string, or returns nil when x
+// is that URL.
+func dropPageURL(x js.Expr) js.Expr {
+	if pageURL[exprText(x)] {
+		return nil
+	}
+	empty := func(at js.Expr, e js.Expr) js.Expr {
+		if e == nil {
+			return &js.Lit{Pos: js.Pos{Line: at.Ln()}, Kind: js.TString}
+		}
+		return e
+	}
+	switch v := x.(type) {
+	case *js.Binary:
+		if v.Op == "||" || v.Op == "??" {
+			l, r := dropPageURL(v.L), dropPageURL(v.R)
+			if l != v.L || r != v.R {
+				return &js.Binary{Pos: v.Pos, Op: v.Op, L: empty(v.L, l), R: empty(v.R, r)}
+			}
+		}
+	case *js.Cond:
+		t, e := dropPageURL(v.Then), dropPageURL(v.Else)
+		if t != v.Then || e != v.Else {
+			return &js.Cond{Pos: v.Pos, Test: v.Test, Then: empty(v.Then, t), Else: empty(v.Else, e)}
+		}
+	}
+	return x
+}
+
 func (a *analyzer) assignExpr(s *scope, x *js.Assign) val {
-	v := a.expr(s, x.Value)
+	value := x.Value
+	if x.Op == "=" && pageURL[exprText(x.Target)] {
+		// location.href = x || location.href: staying on the page is no
+		// redirect.
+		value = dropPageURL(value)
+	}
+	var v val
+	if value != nil {
+		v = a.expr(s, value)
+	}
 	if fn, ok := x.Value.(*js.Func); ok {
 		v.fn = fn
 	}
