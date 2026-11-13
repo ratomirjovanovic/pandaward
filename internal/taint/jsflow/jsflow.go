@@ -11,6 +11,7 @@
 package jsflow
 
 import (
+	"math/bits"
 	"sort"
 	"strconv"
 	"strings"
@@ -31,13 +32,22 @@ const maxSteps = 200000
 // Analyze returns the source-to-sink flows in f.
 func Analyze(f *js.File, spec *taint.Spec, opt Options) []taint.Finding {
 	a := &analyzer{spec: spec, file: f.Path, opt: opt, seen: map[string]bool{}, done: map[*js.Func]bool{},
-		exportedFns: map[*js.Func]string{}, exportedNames: map[string]bool{}, exportedClasses: map[*js.Class]bool{}}
+		exportedFns: map[*js.Func]string{}, exportedNames: map[string]bool{}, exportedClasses: map[*js.Class]bool{},
+		sums: map[*js.Func]*summary{}, protos: map[string]map[string]*js.Func{}, ctorOf: map[*js.Func]string{},
+		methodOf: map[*js.Func]string{}, ctorThis: map[string]val{}, paramProps: map[*js.Func][]string{}}
 	a.index()
-	if opt.Library {
-		a.collectExports(f)
-	}
+	a.collectClasses(f)
+	// Export names also tell request handlers apart (GET, handler); their
+	// parameters are sources only in library mode.
+	a.collectExports(f)
 	top := newScope(nil)
 	a.body(top, f.Stmts)
+	// Prototype methods run after their constructors, so they see the
+	// fields a constructor sets on this.
+	for i := 0; i < len(a.pendingProto); i++ {
+		p := a.pendingProto[i]
+		a.function(p.env, p.fn, a.exportName(p.fn, p.fn.Name), nil)
+	}
 	sort.Slice(a.out, func(i, j int) bool {
 		if a.out[i].Line != a.out[j].Line {
 			return a.out[i].Line < a.out[j].Line
@@ -57,12 +67,71 @@ type analyzer struct {
 	steps int
 
 	reqNames, reqProps, reqMethods map[string]bool
+	weakNames                      map[string]bool
 	handlerRecv, handlerMethods    map[string]bool
 	globals                        map[string]bool
 
 	exportedFns     map[*js.Func]string
 	exportedNames   map[string]bool
 	exportedClasses map[*js.Class]bool
+
+	// Summaries of the functions of the file, computed on first call.
+	sums map[*js.Func]*summary
+	cur  *sumRun
+	// fnNest counts the functions being interpreted, to tell a return of
+	// the summarized function from one of a callback inside it.
+	fnNest int
+
+	// Prototype classes: methods by class, the class of each constructor
+	// and prototype method, and the this fields constructors set.
+	protos       map[string]map[string]*js.Func
+	ctorOf       map[*js.Func]string
+	methodOf     map[*js.Func]string
+	ctorThis     map[string]val
+	pendingProto []pendingFn
+	// paramProps are the TypeScript parameter properties of constructors.
+	paramProps map[*js.Func][]string
+}
+
+type pendingFn struct {
+	fn  *js.Func
+	env *scope
+}
+
+// summary says, for each parameter of a function, where its data goes: to
+// the return value (with the kinds it was sanitized for on the way) and to
+// which sinks inside the function.
+type summary struct {
+	ret   []retFlow
+	sinks [][]sinkHit
+	// other is what the function returns from sources of its own, such as
+	// fields of this a constructor filled with caller data.
+	other val
+	// rest is the index of a rest parameter (...args), or -1.
+	rest int
+}
+
+type retFlow struct {
+	ok    bool
+	safe  taint.Kind
+	steps []taint.Step
+}
+
+type sinkHit struct {
+	sink      *taint.Sink
+	line, end int
+	steps     []taint.Step
+}
+
+// sumRun is the state of one summary computation: the placeholder trace
+// of the parameter followed and what reached a return or a sink.
+type sumRun struct {
+	marker  *taint.Trace
+	nest    int
+	hits    []sinkHit
+	hitSeen map[string]bool
+	ret     retFlow
+	other   val
 }
 
 func set(list []string) map[string]bool {
@@ -76,6 +145,7 @@ func set(list []string) map[string]bool {
 func (a *analyzer) index() {
 	src := a.spec.Sources
 	a.reqNames, a.reqProps, a.reqMethods = set(src.Request.Names), set(src.Request.Props), set(src.Request.Methods)
+	a.weakNames = set(src.Request.Weak)
 	a.handlerRecv, a.handlerMethods = set(src.Handlers.Receivers), set(src.Handlers.Methods)
 	a.globals = set(src.Globals)
 }
@@ -91,6 +161,10 @@ type val struct {
 	req, res bool
 	// shell marks an options object with shell: true.
 	shell bool
+	// env is the scope a function value was defined in.
+	env *scope
+	// ownURL marks the URL of the incoming request.
+	ownURL bool
 	// local marks a variable bound to a value computed here: a variable
 	// named request that holds a call result is not the HTTP request.
 	local bool
@@ -140,7 +214,14 @@ func join(x, y val) val {
 	case ty == nil:
 		return val{t: tx, safe: safeOf(x)}
 	}
-	return val{t: tx, safe: safeOf(x) & safeOf(y)}
+	// Keep the trace of the part that is safe for fewer kinds: it is the
+	// one a finding is about.
+	sx, sy := safeOf(x), safeOf(y)
+	t := tx
+	if bits.OnesCount16(uint16(sy)) < bits.OnesCount16(uint16(sx)) {
+		t = ty
+	}
+	return val{t: t, safe: sx & sy}
 }
 
 // safeOf is the kinds a value is safe for, counting its fields.
@@ -366,15 +447,26 @@ func (a *analyzer) body(s *scope, list []js.Stmt) bool {
 	var decls []*js.Func
 	var classes []*js.Class
 	exits := false
+	// Function declarations are hoisted: calls above them reach them.
 	for _, st := range list {
 		switch d := st.(type) {
 		case *js.FuncDecl:
-			s.vars[d.Func.Name] = val{fn: d.Func}
+			s.vars[d.Func.Name] = val{fn: d.Func, env: s}
+		case *js.Export:
+			if fd, ok := d.Decl.(*js.FuncDecl); ok {
+				s.vars[fd.Func.Name] = val{fn: fd.Func, env: s}
+			}
+		}
+	}
+	for _, st := range list {
+		switch d := st.(type) {
+		case *js.FuncDecl:
+			s.vars[d.Func.Name] = val{fn: d.Func, env: s}
 			decls = append(decls, d.Func)
 			continue
 		case *js.Export:
 			if fd, ok := d.Decl.(*js.FuncDecl); ok {
-				s.vars[fd.Func.Name] = val{fn: fd.Func}
+				s.vars[fd.Func.Name] = val{fn: fd.Func, env: s}
 				decls = append(decls, fd.Func)
 				continue
 			}
@@ -436,7 +528,7 @@ func (a *analyzer) stmt(s *scope, st js.Stmt, classes *[]*js.Class) bool {
 		}
 	case *js.Return:
 		if st.X != nil {
-			a.expr(s, st.X)
+			a.returned(a.expr(s, st.X))
 		}
 		return true
 	case *js.Throw:
@@ -514,7 +606,7 @@ func (a *analyzer) stmt(s *scope, st js.Stmt, classes *[]*js.Class) bool {
 	case *js.Labeled:
 		return a.stmt(s, st.Body, classes)
 	case *js.FuncDecl:
-		s.vars[st.Func.Name] = val{fn: st.Func}
+		s.vars[st.Func.Name] = val{fn: st.Func, env: s}
 		a.function(s, st.Func, a.exportName(st.Func, st.Func.Name), nil)
 	case *js.ClassDecl:
 		if st.Class.Name != "" {
@@ -546,7 +638,7 @@ func (a *analyzer) stmt(s *scope, st js.Stmt, classes *[]*js.Class) bool {
 func (a *analyzer) block(s *scope, list []js.Stmt, classes *[]*js.Class) bool {
 	for _, st := range list {
 		if fd, ok := st.(*js.FuncDecl); ok {
-			s.vars[fd.Func.Name] = val{fn: fd.Func}
+			s.vars[fd.Func.Name] = val{fn: fd.Func, env: s}
 		}
 	}
 	for _, st := range list {
@@ -579,6 +671,13 @@ func (a *analyzer) ifStmt(s *scope, st *js.If, classes *[]*js.Class) bool {
 	}
 	thenExits := a.stmt(ts, st.Then, classes)
 	es := s.clone()
+	// if (bad(x)) { x = fallback } replaces what failed the check: the
+	// other path keeps x only when it passed.
+	for _, p := range checked {
+		if assigns(st.Then, p) {
+			sanitize(es, p)
+		}
+	}
 	elseExits := false
 	if st.Else != nil {
 		elseExits = a.stmt(es, st.Else, classes)
@@ -600,6 +699,19 @@ func (a *analyzer) ifStmt(s *scope, st *js.If, classes *[]*js.Class) bool {
 	return false
 }
 
+// assigns reports whether st assigns to the dotted path p.
+func assigns(st js.Stmt, p string) bool {
+	found := false
+	js.Inspect(st, func(n js.Node) bool {
+		if as, ok := n.(*js.Assign); ok && as.Op == "=" && exprText(as.Target) == p {
+			found = true
+		}
+		_, isFn := n.(*js.Func)
+		return !found && !isFn
+	})
+	return found
+}
+
 // isExit reports a call that ends the process.
 func isExit(x js.Expr) bool {
 	c, ok := x.(*js.Call)
@@ -617,13 +729,19 @@ func negated(x js.Expr) bool {
 }
 
 // validators are method and function names that check a value.
-var validatorPrefixes = []string{"is", "has", "valid", "check", "verify", "match", "test", "includes", "startsWith", "endsWith", "indexOf", "contains", "exists", "allow", "safe", "assert"}
+var validatorPrefixes = []string{"is", "has", "valid", "check", "verify", "match", "test", "includes", "startsWith", "endsWith", "indexOf", "contains", "allow", "safe", "assert"}
+
+// typeChecks test a value's type, not its content.
+var typeChecks = set([]string{"isarray", "isstring", "isobject", "isplainobject", "isfunction", "isbuffer", "isundefined", "isnull", "isnil", "isdefined", "isempty", "isregexp", "isdate", "isarraylike", "hasownproperty", "has"})
 
 func isValidatorName(name string) bool {
 	if i := strings.LastIndexByte(name, '.'); i >= 0 {
 		name = name[i+1:]
 	}
 	l := strings.ToLower(name)
+	if typeChecks[l] {
+		return false
+	}
 	for _, p := range validatorPrefixes {
 		if strings.HasPrefix(l, strings.ToLower(p)) {
 			return true
@@ -645,10 +763,6 @@ func guarded(test js.Expr) []string {
 	walk = func(x js.Expr) {
 		switch x := x.(type) {
 		case *js.Unary:
-			if x.Op == "typeof" {
-				add(x.X)
-				return
-			}
 			walk(x.X)
 		case *js.Binary:
 			switch x.Op {
@@ -656,6 +770,13 @@ func guarded(test js.Expr) []string {
 				walk(x.L)
 				walk(x.R)
 			case "===", "!==", "==", "!=":
+				// typeof x === 'number' leaves no text; 'string' checks nothing.
+				if u, ok := x.L.(*js.Unary); ok && u.Op == "typeof" {
+					if l, ok := x.R.(*js.Lit); ok && (l.Val == "number" || l.Val == "boolean" || l.Val == "bigint") {
+						add(u.X)
+					}
+					return
+				}
 				if isConst(x.R) {
 					walk(x.L)
 					add(x.L)
@@ -746,14 +867,26 @@ func (a *analyzer) function(outer *scope, fn *js.Func, exported string, params [
 		return
 	}
 	a.done[fn] = true
+	a.fnNest++
+	defer func() { a.fnNest-- }()
 	s := newScope(outer)
+	a.presetThis(s, fn)
+	if cls := a.ctorOf[fn]; cls != "" && exported == "" && a.opt.Library && len(a.protos[cls]) > 0 && a.anyExported(cls) {
+		// A class whose prototype methods are exported is public: its
+		// constructor arguments come from the caller too.
+		exported = cls
+	}
+	handler := isHandler(fn, exported)
 	for i, p := range fn.Params {
 		var v val
+		name := patternName(p)
 		switch {
 		case i < len(params):
 			v = params[i]
+		case a.weakNames[name] && !handler:
+			// fetch(request.url) in an HTTP client is not client input.
+			v = val{local: true}
 		case exported != "" && a.opt.Library:
-			name := patternName(p)
 			if a.reqNames[name] {
 				v = val{req: true}
 				break
@@ -762,11 +895,157 @@ func (a *analyzer) function(outer *scope, fn *js.Func, exported string, params [
 		}
 		a.bindParam(s, p, v)
 	}
+	a.setParamProps(s, fn)
 	if fn.ExprBody != nil {
-		a.expr(s, fn.ExprBody)
+		a.returned(a.expr(s, fn.ExprBody))
 		return
 	}
 	a.body(s, fn.Body)
+	if cls := a.ctorOf[fn]; cls != "" {
+		a.ctorThis[cls] = s.vars["this"]
+	}
+}
+
+// setParamProps copies constructor(public x) parameters into this.x.
+func (a *analyzer) setParamProps(s *scope, fn *js.Func) {
+	for _, name := range a.paramProps[fn] {
+		v, _, _ := s.lookup(name)
+		this := s.vars["this"]
+		s.vars["this"] = setPath(this, []string{name}, v)
+	}
+}
+
+// isSanitizerName reports a function named as a sanitizer or validator of
+// its argument.
+func isSanitizerName(n string) bool {
+	l := strings.ToLower(n)
+	for _, p := range []string{"safe", "sanitize", "escape", "encode", "quote", "clean", "validate", "allowlist", "whitelist"} {
+		if strings.HasPrefix(l, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// handlerExports are export names of request handlers (Next.js route
+// handlers, serverless handlers).
+var handlerExports = set([]string{"GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS", "handler", "default", "middleware", "loader", "action"})
+
+// isHandler reports a function that looks like it handles a request.
+func isHandler(fn *js.Func, exported string) bool {
+	if handlerExports[exported] {
+		return true
+	}
+	if len(fn.Params) >= 2 {
+		switch patternName(fn.Params[1]) {
+		case "res", "response", "reply", "h":
+			return true
+		}
+	}
+	return false
+}
+
+// presetThis gives a constructor or method its this: the methods of its
+// class, and for methods the fields the constructor set.
+func (a *analyzer) presetThis(s *scope, fn *js.Func) {
+	cls := a.ctorOf[fn]
+	if cls == "" {
+		cls = a.methodOf[fn]
+	}
+	if cls == "" {
+		return
+	}
+	this := val{fields: map[string]val{}}
+	for name, m := range a.protos[cls] {
+		this.fields[name] = val{fn: m, env: s.parent}
+	}
+	if a.methodOf[fn] != "" {
+		for k, v := range a.ctorThis[cls].fields {
+			if _, isMethod := this.fields[k]; !isMethod {
+				this.fields[k] = v
+			}
+		}
+	}
+	s.vars["this"] = this
+}
+
+func (a *analyzer) anyExported(cls string) bool {
+	for _, m := range a.protos[cls] {
+		if _, ok := a.exportedFns[m]; ok {
+			return true
+		}
+	}
+	return a.exportedNames[cls]
+}
+
+// collectClasses finds prototype classes, X.prototype.m = function and
+// X.prototype = {...}, and ES classes, so this.m() can be resolved.
+func (a *analyzer) collectClasses(f *js.File) {
+	addMethod := func(cls, name string, x js.Expr) {
+		fn, ok := x.(*js.Func)
+		if !ok {
+			return
+		}
+		if a.protos[cls] == nil {
+			a.protos[cls] = map[string]*js.Func{}
+		}
+		a.protos[cls][name] = fn
+		a.methodOf[fn] = cls
+	}
+	ctors := map[string]*js.Func{}
+	for _, st := range f.Stmts {
+		js.Inspect(st, func(n js.Node) bool {
+			switch n := n.(type) {
+			case *js.Assign:
+				t := exprText(n.Target)
+				if i := strings.Index(t, ".prototype."); i > 0 && !strings.Contains(t[i+11:], ".") {
+					addMethod(t[:i], t[i+11:], n.Value)
+				} else if strings.HasSuffix(t, ".prototype") {
+					if o, ok := n.Value.(*js.ObjectLit); ok {
+						for _, p := range o.Props {
+							addMethod(strings.TrimSuffix(t, ".prototype"), p.Key, p.Value)
+						}
+					}
+				} else if fn, ok := n.Value.(*js.Func); ok && !strings.Contains(t, ".") && t != "" {
+					ctors[t] = fn
+				}
+			case *js.Class:
+				// An ES class: its methods and constructor share this.
+				cls := classKey(n)
+				for _, m := range n.Members {
+					fn, ok := m.Value.(*js.Func)
+					if !ok || m.Kind == "field" || m.Static {
+						continue
+					}
+					if m.Kind == "constructor" {
+						a.ctorOf[fn] = cls
+						a.paramProps[fn] = m.ParamProps
+						if a.protos[cls] == nil {
+							a.protos[cls] = map[string]*js.Func{}
+						}
+						continue
+					}
+					addMethod(cls, m.Key, fn)
+				}
+			case *js.FuncDecl:
+				ctors[n.Func.Name] = n.Func
+			case *js.VarDecl:
+				for _, d := range n.Decls {
+					if id, ok := d.Target.(*js.Ident); ok {
+						if fn, ok := d.Init.(*js.Func); ok {
+							ctors[id.Name] = fn
+						}
+					}
+				}
+			}
+			return true
+		})
+	}
+	for cls := range a.protos {
+		if fn := ctors[cls]; fn != nil {
+			a.ctorOf[fn] = cls
+		}
+	}
 }
 
 func (a *analyzer) bindParam(s *scope, p js.Expr, v val) {
@@ -799,12 +1078,23 @@ func patternName(p js.Expr) string {
 	return "?"
 }
 
-// classBodies analyzes the methods of a class; in an exported class their
+// classKey names an ES class for the method tables.
+func classKey(c *js.Class) string {
+	if c.Name != "" {
+		return c.Name
+	}
+	return "class@" + strconv.Itoa(c.Line)
+}
+
+// classBodies analyzes the methods of a class, the constructor first so
+// the others see the fields it sets on this; in an exported class their
 // parameters are sources in library mode.
 func (a *analyzer) classBodies(s *scope, c *js.Class) {
 	exported := a.exportedClasses[c] || c.Name != "" && a.exportedNames[c.Name]
 	cs := newScope(s)
-	for _, m := range c.Members {
+	members := append([]*js.ClassMember{}, c.Members...)
+	sort.SliceStable(members, func(i, j int) bool { return members[i].Kind == "constructor" && members[j].Kind != "constructor" })
+	for _, m := range members {
 		switch m.Kind {
 		case "block":
 			var nested []*js.Class
@@ -880,9 +1170,18 @@ func (a *analyzer) expr(s *scope, x js.Expr) val {
 			}
 			return out
 		}
+		parts := make([]part, 0, 2*len(x.Exprs)+1)
 		out := val{}
-		for _, e := range x.Exprs {
-			out = join(out, a.expr(s, e))
+		for i, q := range x.Quasis {
+			parts = append(parts, part{lit: q, isLit: true})
+			if i < len(x.Exprs) {
+				v := a.expr(s, x.Exprs[i])
+				parts = append(parts, part{v: v})
+				out = join(out, v)
+			}
+		}
+		if out.t != nil && hostFixed(parts) {
+			out.safe |= offsite
 		}
 		return out
 	case *js.Member:
@@ -890,6 +1189,9 @@ func (a *analyzer) expr(s *scope, x js.Expr) val {
 	case *js.Call:
 		return a.call(s, x)
 	case *js.Binary:
+		if x.Op == "+" {
+			return a.concat(s, x)
+		}
 		l, r := a.expr(s, x.L), a.expr(s, x.R)
 		switch x.Op {
 		case "+", "||", "&&", "??":
@@ -910,7 +1212,19 @@ func (a *analyzer) expr(s *scope, x js.Expr) val {
 		return a.assignExpr(s, x)
 	case *js.Cond:
 		a.expr(s, x.Test)
-		return merge(a.expr(s, x.Then), a.expr(s, x.Else))
+		// cond ? x : fallback checks x for the branch that uses it.
+		branch := func(e js.Expr, checked bool) val {
+			if !checked {
+				return a.expr(s, e)
+			}
+			cs := s.clone()
+			for _, p := range guarded(x.Test) {
+				sanitize(cs, p)
+			}
+			return a.expr(cs, e)
+		}
+		neg := negated(x.Test)
+		return merge(branch(x.Then, !neg), branch(x.Else, neg))
 	case *js.Seq:
 		var v val
 		for _, e := range x.List {
@@ -930,8 +1244,12 @@ func (a *analyzer) expr(s *scope, x js.Expr) val {
 	case *js.Yield:
 		return a.expr(s, x.X)
 	case *js.Func:
-		a.function(s, x, a.exportName(x, x.Name), nil)
-		return val{fn: x}
+		if a.methodOf[x] != "" && a.cur == nil {
+			a.pendingProto = append(a.pendingProto, pendingFn{x, s})
+		} else {
+			a.function(s, x, a.exportName(x, x.Name), nil)
+		}
+		return val{fn: x, env: s}
 	case *js.Class:
 		a.classBodies(s, x)
 		return val{}
@@ -996,7 +1314,12 @@ func (a *analyzer) field(base val, prop string, line int, text string) val {
 			if what == "" {
 				what = "request " + prop
 			}
-			return val{t: taint.NewSource(line, what, false)}
+			v := val{t: taint.NewSource(line, what, false)}
+			// The request's own URL. As a string it can be a path such as
+			// //evil.example; parsed alone with new URL() it has this
+			// server's origin (see call).
+			v.ownURL = urlOwnOrigin[prop]
+			return v
 		case a.reqNames[prop] || prop == "request" || prop == "req":
 			return val{req: true}
 		}
@@ -1010,9 +1333,97 @@ func (a *analyzer) field(base val, prop string, line int, text string) val {
 	}
 	if t := base.anyTaint(); t != nil && prop != "length" {
 		out.t, out.safe = t, safeOf(base)
+		switch {
+		case urlClientParts[prop]:
+			out.safe &^= offsite
+		case urlOriginParts[prop]:
+			out.safe |= offsite
+		}
 	}
 	return out
 }
+
+// part is one piece of a string concatenation or template.
+type part struct {
+	lit   string
+	isLit bool
+	v     val
+}
+
+// concat evaluates a + b + c, flattening the chain.
+func (a *analyzer) concat(s *scope, x *js.Binary) val {
+	var leaves []js.Expr
+	var flatten func(e js.Expr)
+	flatten = func(e js.Expr) {
+		if b, ok := e.(*js.Binary); ok && b.Op == "+" {
+			flatten(b.L)
+			flatten(b.R)
+			return
+		}
+		leaves = append(leaves, e)
+	}
+	flatten(x)
+	parts := make([]part, 0, len(leaves))
+	out := val{}
+	for _, e := range leaves {
+		if l, ok := e.(*js.Lit); ok && l.Kind == js.TString {
+			parts = append(parts, part{lit: l.Val, isLit: true})
+			continue
+		}
+		v := a.expr(s, e)
+		parts = append(parts, part{v: v})
+		out = join(out, v)
+	}
+	if out.t != nil {
+		out.t = out.t.Add(x.Line, "concatenation")
+		if hostFixed(parts) {
+			out.safe |= offsite
+		}
+	}
+	return out
+}
+
+// hostFixed reports a concatenation in which no client-chosen part can
+// pick the host of a URL: each such part follows literal text that ends a
+// host or starts a path, such as "/api/" or "?q=". A part at the start,
+// right after another value (origin + next, where next = "@evil"), after a
+// lone leading "/" or after "//" or ":" can still change the host.
+func hostFixed(parts []part) bool {
+	lit := ""
+	before := false // anything precedes lit
+	for _, p := range parts {
+		if p.isLit {
+			lit += p.lit
+			continue
+		}
+		if t := p.v.t; t != nil && p.v.safe&offsite != offsite || len(p.v.fields) > 0 && p.v.taintFor(offsite, 0) != nil {
+			switch {
+			case lit == "",
+				!before && (lit == "/" || lit == "\\"),
+				strings.HasSuffix(lit, "//"), strings.HasSuffix(lit, ":"), strings.HasSuffix(lit, "\\"), strings.HasSuffix(lit, "@"):
+				return false
+			}
+			return true
+		}
+		before = true
+		lit = ""
+	}
+	return true
+}
+
+// offsite are the kinds that need the client to choose another host.
+const offsite = taint.Redirect | taint.SSRF
+
+var (
+	// urlOwnOrigin are request properties holding this server's own URL.
+	urlOwnOrigin = set([]string{"url", "originalUrl"})
+	// urlClientParts of a URL are chosen by the client.
+	urlClientParts = set([]string{"searchParams", "search", "hash", "query"})
+	// urlOriginParts of a URL name its host.
+	urlOriginParts = set([]string{"origin", "host", "hostname", "protocol", "port"})
+	// urlPathParts can be assigned on a URL without changing its host.
+	urlPathParts = set([]string{"search", "hash", "pathname", "searchParams"})
+)
 
 func (a *analyzer) object(s *scope, x *js.ObjectLit) val {
 	out := val{fields: map[string]val{}}
@@ -1138,6 +1549,9 @@ func (a *analyzer) store(s *scope, m *js.Member, v val) {
 	if m.Computed != nil {
 		a.expr(s, m.Computed)
 	}
+	if m.Computed == nil && urlPathParts[m.Prop] && v.t != nil {
+		v.safe |= offsite // url.search = x keeps url's host
+	}
 	root := m.Obj
 	var path []string
 	if m.Computed == nil {
@@ -1239,7 +1653,7 @@ func (a *analyzer) call(s *scope, c *js.Call) val {
 			}
 		}
 		a.function(s, fn, a.exportName(fn, fn.Name), params)
-		args[i] = val{fn: fn}
+		args[i] = val{fn: fn, env: s}
 	}
 
 	if name == "require" || name == "import" {
@@ -1257,7 +1671,39 @@ func (a *analyzer) call(s *scope, c *js.Call) val {
 		return val{ref: recv.ref}
 	}
 
+	// new URL(path, base): the base only sets scheme and host, which the
+	// path replaces when it is absolute; with a relative path the result
+	// stays on the base's origin, so a request URL as base does not make
+	// it an open redirect or a request to another host.
+	// new URL(request.url) succeeds only for an absolute URL, which for
+	// the request's own URL is this server's origin.
+	if name == "new URL" && len(args) == 1 && args[0].ownURL {
+		v := args[0]
+		return val{t: v.t, safe: safeOf(v) | offsite}
+	}
+	if name == "new URL" && len(args) >= 2 {
+		base := args[1]
+		args = append([]val{}, args...)
+		args[1] = val{t: base.anyTaint(), safe: safeOf(base) | taint.Redirect | taint.SSRF}
+	}
+
 	a.sinks(c, name, method, recvText, recv, args)
+
+	// Functions named like sanitizers (safeNextPath, sanitizeName,
+	// escapeArg) return a checked value.
+	if n := shortName(exprText(c.Callee)); isSanitizerName(n) && a.spec.Sanitizes(name) == 0 {
+		return val{}
+	}
+
+	// A function of this file: follow it through its summary.
+	if callee.fn != nil && !c.New {
+		if out, ok := a.applySummary(c, callee, args); ok {
+			return out
+		}
+	}
+	if callee.fn != nil && c.New {
+		a.applySummary(c, callee, args)
+	}
 
 	// The result.
 	if k := a.sanitizes(name); k != 0 {
@@ -1285,6 +1731,12 @@ func (a *analyzer) call(s *scope, c *js.Call) val {
 	out := val{}
 	for _, v := range args {
 		out = join(out, v)
+	}
+	if method == "" && name != "" && name != "new URL" {
+		// A function from another module: a value it derives is usually
+		// checked or mapped (localizedPath(locale)), so it no longer
+		// chooses a host. Text built from it is still followed.
+		out.safe |= offsite
 	}
 	out = join(out, recvTaint(recv, method))
 	if name == "$" || name == "jQuery" || recv.ref == jqueryObject {
@@ -1418,8 +1870,27 @@ func (a *analyzer) reportArgs(k *taint.Sink, c *js.Call, args []val, idx int) {
 }
 
 func (a *analyzer) report(k *taint.Sink, v val, line, end int) {
-	t := v.taintFor(k.Kind, 0)
+	a.reportTrace(k, v.taintFor(k.Kind, 0), nil, line, end)
+}
+
+// reportTrace reports trace t reaching sink k at line, after the steps in
+// tail (inside a called function). A placeholder trace of the function
+// being summarized becomes part of its summary instead.
+func (a *analyzer) reportTrace(k *taint.Sink, t *taint.Trace, tail []taint.Step, line, end int) {
 	if t == nil || k.RequestOnly && t.Library {
+		return
+	}
+	if t.Param > 0 {
+		run := a.cur
+		if run == nil || t.Root() != run.marker {
+			return // a placeholder of another summary
+		}
+		steps := append(append([]taint.Step{}, t.Steps()[1:]...), tail...)
+		key := k.ID + "|" + strconv.Itoa(line)
+		if !run.hitSeen[key] {
+			run.hitSeen[key] = true
+			run.hits = append(run.hits, sinkHit{sink: k, line: line, end: end, steps: steps})
+		}
 		return
 	}
 	key := k.ID + "|" + strconv.Itoa(line)
@@ -1427,7 +1898,136 @@ func (a *analyzer) report(k *taint.Sink, v val, line, end int) {
 		return
 	}
 	a.seen[key] = true
-	steps := t.Steps()
+	steps := append(t.Steps(), tail...)
 	steps = append(steps, taint.Step{Line: line, What: k.Title})
 	a.out = append(a.out, taint.Finding{Sink: k, File: a.file, Line: line, EndLine: end, Steps: steps, Library: t.Library})
+}
+
+// returned records a return of the function being summarized.
+func (a *analyzer) returned(v val) {
+	run := a.cur
+	if run == nil || a.fnNest != run.nest {
+		return
+	}
+	t := v.anyTaint()
+	if t == nil {
+		return
+	}
+	if t.Param == 0 {
+		run.other = join(run.other, v)
+		return
+	}
+	if t.Root() != run.marker {
+		return
+	}
+	if !run.ret.ok {
+		run.ret.ok, run.ret.safe, run.ret.steps = true, safeOf(v), t.Steps()[1:]
+		return
+	}
+	run.ret.safe &= safeOf(v)
+}
+
+// maxSummaryParams bounds the parameters followed per function.
+const maxSummaryParams = 8
+
+// summarize computes the summary of fn, defined in env, once per function:
+// each parameter in turn carries a placeholder trace through the body. It
+// returns nil for a function whose summary is being computed (recursion).
+func (a *analyzer) summarize(fn *js.Func, env *scope) *summary {
+	if sum, ok := a.sums[fn]; ok {
+		return sum
+	}
+	a.sums[fn] = nil
+	n := len(fn.Params)
+	if n > maxSummaryParams {
+		n = maxSummaryParams
+	}
+	sum := &summary{ret: make([]retFlow, n), sinks: make([][]sinkHit, n), rest: -1}
+	if n > 0 {
+		if _, ok := fn.Params[len(fn.Params)-1].(*js.Spread); ok && len(fn.Params) <= maxSummaryParams {
+			sum.rest = len(fn.Params) - 1
+		}
+	}
+	saveCur, saveDone, saveNest := a.cur, a.done, a.fnNest
+	runs := n
+	if runs == 0 {
+		runs = 1 // still learn what it returns from its own sources
+	}
+	for i := 0; i < runs; i++ {
+		run := &sumRun{marker: taint.NewMarker(fn.Line, i), hitSeen: map[string]bool{}}
+		a.cur, a.done = run, map[*js.Func]bool{fn: true}
+		a.fnNest++
+		run.nest = a.fnNest
+		s := newScope(env)
+		a.presetThis(s, fn)
+		for j, p := range fn.Params {
+			v := val{}
+			if j == i {
+				v = val{t: run.marker}
+			}
+			a.bindParam(s, p, v)
+		}
+		if fn.ExprBody != nil {
+			a.returned(a.expr(s, fn.ExprBody))
+		} else {
+			a.body(s, fn.Body)
+		}
+		a.fnNest = saveNest
+		if i < n {
+			sum.ret[i], sum.sinks[i] = run.ret, run.hits
+		}
+		if i == 0 {
+			sum.other = run.other
+		}
+	}
+	a.cur, a.done = saveCur, saveDone
+	a.sums[fn] = sum
+	return sum
+}
+
+// applySummary follows a call of a function of the file: arguments reach
+// the sinks inside it and, where it returns them, the result.
+func (a *analyzer) applySummary(c *js.Call, callee val, args []val) (val, bool) {
+	sum := a.summarize(callee.fn, callee.env)
+	if sum == nil {
+		return val{}, false
+	}
+	name := callee.fn.Name
+	if m, ok := c.Callee.(*js.Member); ok && m.Computed == nil {
+		name = m.Prop
+	}
+	if name == "" {
+		name = "function"
+	}
+	out := val{}
+	if t := sum.other.anyTaint(); t != nil {
+		out = val{t: t.Add(c.Line, name+"()"), safe: safeOf(sum.other)}
+	}
+	for j, v := range args {
+		i := j
+		if sum.rest >= 0 && i > sum.rest {
+			i = sum.rest
+		}
+		if i >= len(sum.ret) {
+			break
+		}
+		t := v.anyTaint()
+		if t == nil {
+			continue
+		}
+		via := t.Add(c.Line, name+"()")
+		for _, h := range sum.sinks[i] {
+			if tk := v.taintFor(h.sink.Kind, 0); tk != nil {
+				a.reportTrace(h.sink, tk.Add(c.Line, name+"()"), h.steps, h.line, h.end)
+			}
+		}
+		if r := sum.ret[i]; r.ok {
+			rt := via
+			for _, st := range r.steps {
+				rt = rt.Add(st.Line, st.What)
+			}
+			out = join(out, val{t: rt, safe: safeOf(v) | r.safe})
+		}
+	}
+	return out, true
 }

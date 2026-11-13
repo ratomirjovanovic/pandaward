@@ -155,6 +155,69 @@ export async function send(config) {
   response.send(request.body);
 }`, false)
 
+	expect(t, "next.js route handler", `
+import { redirect } from 'next/navigation';
+export async function GET(request: Request) {
+  const u = new URL(request.url);
+  return Response.redirect(u.searchParams.get('next'));
+}`, false, "open-redirect:5")
+
+	expect(t, "same-origin redirect", `
+import { NextResponse } from 'next/server';
+export async function GET(req) {
+  const next = safeNextPath(new URL(req.url).searchParams.get('next'));
+  NextResponse.redirect(new URL('/login', req.url));
+  NextResponse.redirect(new URL(next, req.url));
+  NextResponse.redirect(new URL(new URL(req.url).searchParams.get('to'), req.url));
+}`, false, "open-redirect:7")
+
+	expect(t, "express path as redirect target", `
+app.get('*', (req, res) => { res.redirect(req.url + '/'); });
+`, false, "open-redirect:2")
+
+	expect(t, "own origin and request url", `
+import { NextResponse } from 'next/server';
+export async function GET(request) {
+  const { origin } = new URL(request.url);
+  const url = new URL(request.url);
+  url.pathname = '/done';
+  NextResponse.redirect(origin + '/dashboard');
+  NextResponse.redirect(url);
+  NextResponse.redirect(localizedPath(request.cookies.get('locale')));
+  NextResponse.redirect(url.searchParams.get('next'));
+}`, false, "open-redirect:10")
+
+	expect(t, "redirect host stays fixed", `
+import { NextResponse } from 'next/server';
+export async function GET(request) {
+  const { searchParams, origin } = new URL(request.url);
+  const next = searchParams.get('next') ?? '/';
+  const q = searchParams.toString();
+  NextResponse.redirect(new URL('/api/authorize?' + q, request.url));
+  NextResponse.redirect(new URL(`+"`${TYPES[searchParams.get('t')]}/${searchParams.get('slug')}`"+`, request.url));
+  const target = new URL('/unsubscribe', SITE);
+  target.search = new URL(request.url).search;
+  NextResponse.redirect(target);
+  const safe = next.startsWith('/') && !next.startsWith('//') ? next : '/home';
+  NextResponse.redirect(new URL(safe, request.url));
+  NextResponse.redirect(`+"`${origin}${next}`"+`);
+}`, false, "open-redirect:14")
+
+	expect(t, "fallback on failed check", `
+export async function GET(request) {
+  const { searchParams, origin } = new URL(request.url);
+  let next = searchParams.get('next') || '/';
+  if (!next.startsWith('/') || next.startsWith('//')) {
+    next = '/';
+  }
+  return Response.redirect(origin + next);
+}`, false)
+
+	expect(t, "http client parameter named request", `
+export const transport = async (request) => {
+  return fetch(request.url, { method: request.method });
+};`, false)
+
 	expect(t, "dom append inserts text", `
 document.body.append(location.hash);
 $('#x').append(location.hash);
@@ -228,4 +291,51 @@ app.get('/a', (req, res) => {
 	if fmt.Sprint(lines) != "[3 3 4 4 5]" || fs[0].Steps[0].What != "req.query" {
 		t.Fatalf("steps %+v", fs[0].Steps)
 	}
+}
+
+func TestSummaries(t *testing.T) {
+	expect(t, "helper with the sink", `
+const { exec } = require('child_process');
+function run(cmd) { exec('sh -c ' + cmd); }
+app.get('/a', (req, res) => { run(req.query.c); });
+run('constant');
+`, false, "command-injection:3")
+
+	expect(t, "helper returning its argument", `
+const fs = require('fs');
+const join = (a, b) => a + '/' + b;
+function clean(x) { return x.replace(/[^a-z]/g, ''); }
+app.get('/f', (req, res) => {
+  fs.readFile(join('/srv', req.params.f));
+  fs.readFile(join('/srv', clean(req.params.g)));
+});`, false, "path-traversal:6")
+
+	expect(t, "helper declared below the exported function", `
+import { execSync } from 'child_process';
+export default function install(name: string) { return addLinux(name); }
+async function addLinux(name: string) {
+  [1].forEach(() => { execSync('certutil -n ' + name); });
+}`, true, "command-injection:5")
+
+	expect(t, "method on this with constructor fields", `
+const cp = require('child_process');
+export class Repo {
+  constructor(public dir: string) {}
+  log() { return cp.exec(this.cmd('log')); }
+  cmd(...args: string[]) { return 'git -C ' + this.dir + ' ' + args.join(' '); }
+}`, true, "command-injection:5")
+
+	expect(t, "prototype class", `
+var execSync = require('child_process').execSync;
+function Pdf(file) { this.file = file; }
+Pdf.prototype.info = function () { return execSync('pdfinfo ' + this.file); };
+module.exports = function (f) { return new Pdf(f); };
+`, true, "command-injection:4")
+
+	expect(t, "recursion terminates", `
+const { exec } = require('child_process');
+function a(x, n) { return n ? b(x, n - 1) : exec(x); }
+function b(x, n) { return a(x, n); }
+app.get('/r', (req, res) => { a(req.query.x, 3); });
+`, false, "command-injection:3")
 }

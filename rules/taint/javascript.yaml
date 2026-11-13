@@ -10,6 +10,10 @@ sources:
   # parameter of a route handler (see handlers).
   request:
     names: [req, request, ctx, ctx.request, this.request, event]
+    # Names too common to trust alone: a parameter with one of them is a
+    # request only in a handler (exported as GET, POST, ... or handler, or
+    # with a second parameter res, response, reply or h).
+    weak_names: [request, event]
     props: [query, body, params, url, originalUrl, path, headers, cookies, files, file, hostname, payload, queryStringParameters, pathParameters, rawBody]
     methods: [get, header, param]
   # Route registration: the last function argument of
@@ -161,7 +165,7 @@ sinks:
     fix: Redirect only to relative paths or to an allowlist of hosts.
     methods: [redirect#0]
     method_receivers:
-      redirect: [res, response, reply, ctx]
+      redirect: [res, response, reply, ctx, this, Response, NextResponse]
     props: [location.href, window.location.href, location]
     request_only: true
 
