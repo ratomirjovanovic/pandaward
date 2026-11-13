@@ -125,6 +125,48 @@ func TestRemediationAndReopen(t *testing.T) {
 	}
 }
 
+// Findings in files that are gone close even when their collector is skipped
+// because no input files are left; they must not stay open as STALE.
+func TestFindingsCloseWhenFileGone(t *testing.T) {
+	root := testfixture.VulnerableRepo(t)
+	e, _ := scan(t, root)
+	fs, err := e.St.Findings(e.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	infra := map[string]bool{}
+	for _, f := range fs {
+		if f.Collector == "builtin-infra" && f.Status.Active() {
+			infra[f.File] = true
+		}
+	}
+	e.Close()
+	if len(infra) == 0 {
+		t.Fatal("fixture has no infra findings")
+	}
+	for p := range infra {
+		if err := os.Remove(filepath.Join(root, filepath.FromSlash(p))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e, res := scan(t, root)
+	defer e.Close()
+	for _, r := range res.Runs {
+		if r.Adapter == "builtin-infra" && r.ExitClass == model.ExitOK {
+			t.Log("builtin-infra still ran; the test does not exercise the skipped-adapter path")
+		}
+	}
+	fs, err = e.St.Findings(e.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range fs {
+		if infra[f.File] && f.Collector == "builtin-infra" && (f.Status != model.FindingRemediated || f.Stale) {
+			t.Errorf("%s %s in deleted %s: status %s stale %v", f.ID, f.RuleID, f.File, f.Status, f.Stale)
+		}
+	}
+}
+
 func TestStaleAfterEdit(t *testing.T) {
 	root := testfixture.VulnerableRepo(t)
 	e, _ := scan(t, root)
