@@ -130,7 +130,7 @@ func ApplyStale(cs []model.ControlResult, es []model.Edge, affected map[string]b
 		case model.StatusBlocked, model.StatusUnsupported:
 			// Undecided before and after; nothing to invalidate.
 		default:
-			outC[i].Reason = "was " + string(c.Status) + ": " + why
+			outC[i].Reason = "was " + string(c.Status) + ", because " + why
 			outC[i].Status = model.StatusStale
 			stale[c.ID] = true
 		}

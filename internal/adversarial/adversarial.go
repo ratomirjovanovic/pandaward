@@ -176,11 +176,12 @@ func Run(ctx context.Context) (*Result, error) {
 		return nil, err
 	}
 	md := report.Markdown(rep)
-	// The evidence of the finding on the hostile line carries its snippet.
+	// The evidence of the finding on the hostile line carries its snippet:
+	// the built-in heuristic, or the taint finding that replaces it.
 	var evidenceIDs []string
 	if fs, err := e.St.Findings(e.ProjectID); err == nil {
 		for _, f := range fs {
-			if f.RuleID == "code.html-sink" {
+			if f.ControlID == "H-001" && f.Status.Active() {
 				evidenceIDs = append(evidenceIDs, f.EvidenceIDs...)
 			}
 		}

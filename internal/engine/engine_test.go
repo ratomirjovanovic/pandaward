@@ -50,12 +50,16 @@ func TestVulnerableFixture(t *testing.T) {
 	for _, f := range fs {
 		rules[f.RuleID] = true
 	}
+	// On JavaScript lines with a flow from the request, the taint finding
+	// replaces the heuristic.
+	byTaint := map[string]string{"code.js-eval": "taint.js-code-injection", "code.js-shell": "taint.js-command-injection",
+		"code.sql-concat": "taint.js-sql-injection", "code.html-sink": "taint.js-xss"}
 	for _, want := range []string{"secret.stripe-live-key", "secret.github-token", "code.js-eval", "code.py-eval", "code.js-shell", "code.py-shell", "code.sql-concat",
 		"code.py-deserialize", "code.tls-verify-off", "code.jwt-decode-no-verify", "code.html-sink", "code.cors-wildcard-credentials", "code.webhook-no-signature",
 		"code.llm-output-exec", "cicd.unpinned-action", "cicd.script-injection", "cicd.prt-untrusted-checkout", "cicd.no-permissions", "infra.container-root",
 		"infra.unpinned-base-image", "infra.public-storage", "infra.world-open-admin-port", "supply.missing-lockfile", "mobile.android-debuggable",
 		"mobile.android-allow-backup", "mobile.android-exported-component", "inventory.undeclared-route"} {
-		if !rules[want] {
+		if !rules[want] && !rules[byTaint[want]] {
 			t.Errorf("expected rule %s to fire", want)
 		}
 	}
@@ -328,5 +332,51 @@ func TestTaintAdapterRaisesControls(t *testing.T) {
 	cm := controlMap(t, e, res.AssessmentID)
 	if st := cm["D-002"].Status; st != model.StatusFail && st != model.StatusSuspected {
 		t.Fatalf("D-002 is %s after a command injection flow", st)
+	} // A heuristic finding on the line of a taint finding for the same
+	// control is replaced by it.
+	type at struct {
+		control, file string
+		line          int
+	}
+	byTaint := map[at]bool{}
+	for _, f := range fs {
+		if f.Collector == "builtin-taint" {
+			byTaint[at{f.ControlID, f.File, f.StartLine}] = true
+		}
+	}
+	for _, f := range fs {
+		if f.Collector == "builtin-code" && f.Status.Active() && byTaint[at{f.ControlID, f.File, f.StartLine}] {
+			t.Errorf("builtin-code finding %s %s:%d duplicates a taint finding", f.RuleID, f.File, f.StartLine)
+		}
+	}
+}
+
+func TestSupersededByTaint(t *testing.T) {
+	sig := func(collector, rule, control, file string, line int) model.Signal {
+		return model.Signal{Collector: collector, RuleID: rule, ControlID: control, File: file, StartLine: line, EndLine: line}
+	}
+	sigs := []model.Signal{
+		sig("builtin-code", "code.js-shell", "D-002", "a.js", 2),
+		sig("semgrep", "semgrep.pandaward-js-shell-exec", "D-002", "a.js", 2),
+		sig("semgrep", "semgrep.my-own-rule", "D-002", "a.js", 2),
+		sig("builtin-code", "code.js-shell", "D-002", "a.js", 9),
+		sig("builtin-code", "code.js-eval", "D-001", "a.js", 2),
+		sig("builtin-taint", "taint.js-command-injection", "D-002", "a.js", 2),
+	}
+	got, _ := supersededByTaint(sigs, nil, nil)
+	if len(got) != 2 || got[0] != "taint:taint.js-command-injection" || got[1] == "" {
+		t.Fatalf("superseded: %v", got)
+	}
+	// Taint carried over from the last assessment still replaces them.
+	carriedTaint := []model.Signal{sig("builtin-taint", "taint.js-command-injection", "D-002", "a.js", 9)}
+	got, hidden := supersededByTaint(sigs[:5], carriedTaint, nil)
+	if _, ok := hidden[3]; !ok || len(hidden) != 1 || len(got) != 0 {
+		t.Fatalf("carried taint must hide, not supersede: %v %v", got, hidden)
+	}
+	// The taint signal takes over a stronger confidence.
+	sigs[0].Confidence, sigs[5].Confidence = model.Confirmed, model.StronglySupported
+	supersededByTaint(sigs, nil, nil)
+	if sigs[5].Confidence != model.Confirmed {
+		t.Fatalf("taint signal confidence %s, want CONFIRMED", sigs[5].Confidence)
 	}
 }

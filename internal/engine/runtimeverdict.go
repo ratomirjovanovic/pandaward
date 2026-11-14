@@ -262,7 +262,7 @@ func (e *Engine) runtimeStaleView(cs []model.ControlResult, es []model.Edge, cha
 		outC[i] = c
 		if w, ok := why[c.ID]; ok {
 			outC[i].Status = model.StatusStale
-			outC[i].Reason = "was " + string(c.Status) + ": " + w + "; run `pandaward test --profile " + vs[c.ID].Profile + "` again"
+			outC[i].Reason = "was " + string(c.Status) + ", because " + w + "; run `pandaward test --profile " + vs[c.ID].Profile + "` again"
 		}
 	}
 	outE := make([]model.Edge, len(es))

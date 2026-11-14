@@ -96,7 +96,8 @@ func taintSignal(fd taint.Finding, f *inventory.File, collector string) model.Si
 	return model.Signal{
 		RuleID: k.ID, ControlID: k.Control, Title: k.Title, Severity: sev, Confidence: conf, CWE: k.CWE,
 		File: f.Path, StartLine: fd.Line, EndLine: fd.EndLine, Snippet: snippet,
-		Message: k.Message + " Flow: " + strings.Join(steps, " -> ") + ".", Fix: k.Fix, Collector: collector,
+		// The steps quote code, which may hold secrets.
+		Message: redact.Line(k.Message + " Flow: " + strings.Join(steps, " -> ") + "."), Fix: k.Fix, Collector: collector,
 	}
 }
 
