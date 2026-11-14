@@ -379,6 +379,9 @@ func walkFiles(ctx context.Context, absRoot string, opt Options, withLines bool,
 		if lang == "" {
 			lang = agentLang(rel)
 		}
+		if lang == "" && nodeScript(p, rel) {
+			lang = "javascript"
+		}
 		if lang == "" {
 			return nil // not a type we analyze; not a coverage gap
 		}
@@ -411,6 +414,24 @@ func walkFiles(ctx context.Context, absRoot string, opt Options, withLines bool,
 		add(f)
 		return nil
 	})
+}
+
+// nodeScript reports a Node.js script without an extension in a bin
+// directory, such as bin/serve starting with #!/usr/bin/env node: package
+// commands are often written so, and they are code like any other.
+func nodeScript(p, rel string) bool {
+	if path.Ext(rel) != "" || path.Base(path.Dir(rel)) != "bin" {
+		return false
+	}
+	fh, err := os.Open(p)
+	if err != nil {
+		return false
+	}
+	defer fh.Close()
+	head := make([]byte, 128)
+	n, _ := io.ReadFull(fh, head)
+	line, _, _ := strings.Cut(string(head[:n]), "\n")
+	return strings.HasPrefix(line, "#!") && strings.Contains(line, "node")
 }
 
 // LangOf returns the analysis language for a file name, or "" when PandaWard does

@@ -24,6 +24,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -148,7 +149,11 @@ func measure(ctx context.Context, bench, work string, selected []string, only st
 	out := &Output{Benchmark: "OpenSSF CVE Benchmark", BenchmarkCommit: gitHead(bench), PandawardVersion: version.Version, SemgrepRulesHash: hash, CVEs: len(cves), SkippedEntries: skipped}
 	sums := map[string]*Summary{}
 	if sg := combinedSemgrep(selected); sg != "" {
-		sums[Combined] = &Summary{Engine: Combined, Version: "built-in + " + sg}
+		label := "built-in + " + sg
+		if slices.Contains(selected, "taint") {
+			label = "built-in + taint + " + sg
+		}
+		sums[Combined] = &Summary{Engine: Combined, Version: label}
 		out.Engines = append(out.Engines, sums[Combined])
 	}
 	for _, e := range selected {
@@ -328,7 +333,9 @@ func measureCVE(ctx context.Context, c CVE, work string, selected []string) ([]O
 		_, okB := pre1["builtin"]
 		_, okS := pre1[sg]
 		if okB && okS {
-			outcomes = append(outcomes, Score(c, Combined, merge(pre1["builtin"], pre1[sg]), merge(post1["builtin"], post1[sg])))
+			// The taint engine runs in every scan since #381; with it
+			// selected, it counts too.
+			outcomes = append(outcomes, Score(c, Combined, merge(pre1["builtin"], pre1[sg], pre1["taint"]), merge(post1["builtin"], post1[sg], post1["taint"])))
 		} else {
 			notRun[Combined] = "needs the built-in engine and " + sg
 		}
@@ -336,16 +343,21 @@ func measureCVE(ctx context.Context, c CVE, work string, selected []string) ([]O
 	return outcomes, notRun, versions, nil
 }
 
-// Combined is the engine name of PandaWard as a whole: the built-in rules
-// plus the Semgrep rules, as a scan runs them. JavaScript findings of the
-// built-in rules are not superseded by Semgrep, so both count.
+// Combined is the engine name of PandaWard as a whole: the built-in rules,
+// the Semgrep rules and, when selected, the taint engine, as a scan runs
+// them. A scan replaces a heuristic or Semgrep finding by a taint finding
+// on the same line; counting all of them finds the same lines.
 const Combined = "pandaward"
 
-// merge returns the findings of two engines as one list. Rule ids of the
-// built-in rules (code.*) and of Semgrep (semgrep.*) never collide, so a
-// fix is still judged per rule.
-func merge(a, b []engines.Finding) []engines.Finding {
-	return append(append(make([]engines.Finding, 0, len(a)+len(b)), a...), b...)
+// merge returns the findings of engines as one list. Rule ids of the
+// built-in rules (code.*), Semgrep (semgrep.*) and the taint engine
+// (taint.*) never collide, so a fix is still judged per rule.
+func merge(lists ...[]engines.Finding) []engines.Finding {
+	var out []engines.Finding
+	for _, l := range lists {
+		out = append(out, l...)
+	}
+	return out
 }
 
 func hasEngine(outs []Outcome, engine string) bool {

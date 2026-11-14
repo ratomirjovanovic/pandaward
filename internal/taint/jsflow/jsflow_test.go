@@ -551,3 +551,23 @@ app.get('/p', (req, res) => {
   const name = req.query.name.replace("'", "\'");
 });`, false, "incomplete-sanitization:5")
 }
+
+func TestArrayPush(t *testing.T) {
+	expect(t, "markup built in a list", `
+function render(p) { var h = []; h.push('<h1>' + p + '</h1>'); return h.join(''); }
+app.get('/', (req, res) => { res.send(render(req.query.x)); });`, false, "xss:3")
+
+	expect(t, "bound parameters collected in a list", `
+app.get('/', async (req, res) => {
+  const params = [];
+  params.push(req.query.id);
+  await db.query('SELECT * FROM t WHERE id = $1', params);
+});`, false)
+
+	expect(t, "constants pushed", `
+app.get('/', (req, res) => {
+  const h = [];
+  h.push('<p>hello</p>');
+  res.send(h.join(''));
+});`, false)
+}

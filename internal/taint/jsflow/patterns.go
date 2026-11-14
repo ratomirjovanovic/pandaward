@@ -132,7 +132,7 @@ func (a *analyzer) shapeOnTainted(c *js.Call, recv val) {
 	}
 	for _, k := range a.spec.Sinks {
 		if k.ID == "taint.js-incomplete-sanitization" {
-			a.reportTrace(k, t, []taint.Step{{Line: c.Line, What: what}}, c.Line, c.Line)
+			a.reportTrace(k, t, []taint.Step{{Line: c.Line, What: what}}, "", c.Line, c.Line)
 		}
 	}
 }

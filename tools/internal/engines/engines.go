@@ -87,7 +87,7 @@ func builtin(ctx context.Context, inv *inventory.Inventory) (Run, error) {
 	actx := &adapters.Context{Root: inv.Root, Inv: inv, Cfg: config.Default("benchmark")}
 	for _, a := range adapters.Registry() {
 		// Only the built-in adapters; the Semgrep rules and the taint
-		// engine (not enabled by default yet) are their own engines.
+		// engine are measured as engines of their own.
 		if !strings.HasPrefix(a.Name(), "builtin-") || a.Name() == "builtin-taint" {
 			continue
 		}

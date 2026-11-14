@@ -198,6 +198,8 @@ func (s *Spec) Sanitizes(name string) Kind { return s.sanitizeCall[name] }
 type Step struct {
 	Line int    `json:"line"`
 	What string `json:"what"`
+	// File is set on a step in another file than the finding's.
+	File string `json:"file,omitempty"`
 }
 
 // Trace is a source and the steps that carried its data, newest first. A
@@ -217,7 +219,7 @@ type Trace struct {
 // NewMarker starts the placeholder trace of parameter i of a function
 // being summarized.
 func NewMarker(line, i int) *Trace {
-	return &Trace{Step: Step{line, "parameter"}, Param: i + 1, n: 1}
+	return &Trace{Step: Step{Line: line, What: "parameter"}, Param: i + 1, n: 1}
 }
 
 // Root returns the source of the trace.
@@ -233,19 +235,37 @@ const maxTrace = 16
 
 // NewSource starts a trace.
 func NewSource(line int, what string, library bool) *Trace {
-	return &Trace{Step: Step{line, what}, Library: library, n: 1}
+	return &Trace{Step: Step{Line: line, What: what}, Library: library, n: 1}
 }
 
 // Add returns t extended by a step; t itself is unchanged. Steps on the line
 // of the previous one replace nothing but are skipped when identical.
 func (t *Trace) Add(line int, what string) *Trace {
+	return t.AddStep(Step{Line: line, What: what})
+}
+
+// AddStep is Add for a step that may be in another file.
+func (t *Trace) AddStep(s Step) *Trace {
 	if t == nil {
 		return nil
 	}
-	if t.Line == line && t.What == what || t.n >= maxTrace {
+	if t.Step == s || t.n >= maxTrace {
 		return t
 	}
-	return &Trace{Step: Step{line, what}, Prev: t, Library: t.Library, Param: t.Param, n: t.n + 1}
+	return &Trace{Step: s, Prev: t, Library: t.Library, Param: t.Param, n: t.n + 1}
+}
+
+// FromSteps builds a trace from its steps, source first.
+func FromSteps(steps []Step, library bool) *Trace {
+	var t *Trace
+	for _, s := range steps {
+		if t == nil {
+			t = &Trace{Step: s, Library: library, n: 1}
+			continue
+		}
+		t = t.AddStep(s)
+	}
+	return t
 }
 
 // Steps returns the trace from source to the newest step.
