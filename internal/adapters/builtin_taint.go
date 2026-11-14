@@ -16,8 +16,8 @@ import (
 )
 
 // taintAdapter runs the built-in taint engine on JavaScript and TypeScript.
-// It is not in the default adapter list yet: add builtin-taint to
-// scan.adapters to try it (#347).
+// It runs by default next to builtin-code; scan.taint_engine: false turns
+// it off (#381).
 type taintAdapter struct{}
 
 // TaintAdapter is the name of the built-in taint engine adapter.
