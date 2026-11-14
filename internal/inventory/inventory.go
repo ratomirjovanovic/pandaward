@@ -268,10 +268,11 @@ var stateDirs = map[string]bool{".pandaward": true, ".pensec": true}
 type excluder struct {
 	names map[string]bool
 	globs []string
+	root  string // absolute project root; "" when files cannot be checked
 }
 
-func newExcluder(exclude []string) excluder {
-	x := excluder{names: map[string]bool{}}
+func newExcluder(root string, exclude []string) excluder {
+	x := excluder{names: map[string]bool{}, root: root}
 	for _, e := range exclude {
 		if strings.Contains(e, "*") {
 			x.globs = append(x.globs, e)
@@ -296,16 +297,33 @@ func (x excluder) dir(rel, name string) bool {
 	return false
 }
 
+// packageBin reports a bin directory, at project-relative path rel, that
+// inventory.exclude skips by the name bin while its parent directory holds a
+// package.json. For .NET and Go, bin is build output; in a Node.js package
+// it holds the package's commands (bin/www, bin/cli.js), which are source.
+// The files directly inside it are read; its subdirectories, where .NET
+// writes Debug and Release, stay skipped.
+func (x excluder) packageBin(rel, name string) bool {
+	if name != "bin" || x.root == "" || !x.names["bin"] || stateDirs[rel] {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(x.root, filepath.FromSlash(path.Dir(rel)), "package.json"))
+	return err == nil
+}
+
 // Excluded reports whether the project-relative file path rel (slash or
 // OS separated) lies in a directory the inventory skips. Adapters that walk
 // the tree themselves, such as gitleaks, can report files there; the engine
-// drops those signals so every adapter honours inventory.exclude.
-func Excluded(rel string, exclude []string) bool {
+// drops those signals so every adapter honours inventory.exclude. root, the
+// project root, lets it read a package's bin directory as the walk does
+// (see packageBin); with root "" every excluded directory counts.
+func Excluded(root, rel string, exclude []string) bool {
 	rel = path.Clean(filepath.ToSlash(rel))
-	x := newExcluder(exclude)
+	x := newExcluder(root, exclude)
 	dirs := strings.Split(rel, "/")
 	for i := 1; i < len(dirs); i++ {
-		if x.dir(strings.Join(dirs[:i], "/"), dirs[i-1]) {
+		d := strings.Join(dirs[:i], "/")
+		if x.dir(d, dirs[i-1]) && !(i == len(dirs)-1 && x.packageBin(d, dirs[i-1])) {
 			return true
 		}
 	}
@@ -316,8 +334,16 @@ func Excluded(rel string, exclude []string) bool {
 // names by name only, size cap, text files of known types) and reports each
 // analyzable file to add. Lines are read only when withLines is set.
 func walkFiles(ctx context.Context, absRoot string, opt Options, withLines bool, add func(*File), skip func(rel, why string), sensitive func(rel string)) error {
-	x := newExcluder(opt.Exclude)
-	skipDir := func(rel, name string) bool { return opt.skipDirs[rel] || x.dir(rel, name) }
+	x := newExcluder(absRoot, opt.Exclude)
+	skipDir := func(rel, name string) bool {
+		if opt.skipDirs[rel] {
+			return true
+		}
+		if parent := path.Dir(rel); path.Base(parent) == "bin" && x.packageBin(parent, "bin") {
+			return true
+		}
+		return x.dir(rel, name) && !x.packageBin(rel, name)
+	}
 	count := 0
 	deadline, hasDeadline := ctx.Deadline()
 	return filepath.WalkDir(absRoot, func(p string, d fs.DirEntry, werr error) error {
@@ -571,7 +597,7 @@ func ignoredDirs(ignored, exclude []string) []string {
 			continue
 		}
 		d := strings.TrimSuffix(p, "/")
-		if d == "" || Excluded(d+"/x", exclude) {
+		if d == "" || Excluded("", d+"/x", exclude) {
 			continue
 		}
 		out = append(out, d)

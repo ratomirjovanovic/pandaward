@@ -571,3 +571,72 @@ app.get('/', (req, res) => {
   res.send(h.join(''));
 });`, false)
 }
+
+func TestBranchInClosure(t *testing.T) {
+	expect(t, "one path of a callback replaces a captured variable", `
+const fs = require('fs');
+app.get('/', (req, res) => {
+  var p = req.query.p;
+  wait().then(function (e) {
+    if (e) {
+      p = 'index.html';
+    }
+    fs.readFile(p, done);
+  });
+});`, false, "path-traversal:9")
+
+	expect(t, "both paths of a callback replace a captured variable", `
+const fs = require('fs');
+app.get('/', (req, res) => {
+  var p = req.query.p;
+  wait().then(function (e) {
+    if (e) {
+      p = 'index.html';
+    } else {
+      p = 'other.html';
+    }
+    fs.readFile(p, done);
+  });
+});`, false)
+
+	expect(t, "a loop in a callback assigns a captured variable", `
+app.get('/', (req, res) => {
+  var html = '';
+  rows().then(function (list) {
+    for (const r of list) { html = req.query.x; }
+    res.send(html);
+  });
+});`, false, "xss:6")
+}
+
+func TestEqualityIsNoCheckOnTheOtherPath(t *testing.T) {
+	expect(t, "x === '/' replaced, other values kept", `
+const fs = require('fs');
+app.get('/', (req, res) => {
+  var p = req.path;
+  if (p === '/') {
+    p = '/index.html';
+  }
+  fs.readFile(__dirname + p, done);
+});`, false, "path-traversal:8")
+
+	expect(t, "x !== 'a' replaced: the other path has x === 'a'", `
+const fs = require('fs');
+app.get('/', (req, res) => {
+  var p = req.query.p;
+  if (p !== 'a.txt' && p !== 'b.txt') {
+    p = 'a.txt';
+  }
+  fs.readFile(p, done);
+});`, false)
+
+	expect(t, "failed validation replaced", `
+const fs = require('fs');
+app.get('/', (req, res) => {
+  var p = req.query.p;
+  if (!isSafeName(p)) {
+    p = 'a.txt';
+  }
+  fs.readFile(p, done);
+});`, false)
+}
