@@ -31,7 +31,7 @@ const page = `<!doctype html>
   {{range .Latest.Suites}}
   <section>
     <h2>{{.Title}}</h2>
-    <p class="sub">Benchmark commit <code>{{short .Commit}}</code>{{if .Asset}}, <a href="{{.Asset}}">raw results</a>{{end}}. Semgrep and Opengrep run PandaWard's bundled rules. "-" means no rule of that engine covers the category.</p>
+    <p class="sub">Benchmark commit <code>{{short .Commit}}</code>{{if .Asset}}, <a href="{{.Asset}}">raw results</a>{{end}}. Semgrep and Opengrep run PandaWard's bundled rules. PandaWard is the built-in rules plus Opengrep, as a scan runs them when Opengrep is installed. "-" means no rule of that engine covers the category.</p>
     <div class="tablewrap"><table>
       <tr><th>Engine</th><th class="num">Average, covered</th><th class="num">Covered</th>{{range .Categories}}<th class="num">{{.}}</th>{{end}}</tr>
       {{$s := .}}{{range .Engines}}

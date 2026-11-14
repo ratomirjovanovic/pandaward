@@ -16,6 +16,9 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 - The CVE benchmark counts the taint engine in the combined `pandaward` score when it is selected, since a scan runs it by default.
 - Node.js scripts without an extension in a `bin` directory (`#!/usr/bin/env node`) are inventoried as JavaScript, so the code rules and the taint engine read package commands such as `bin/serve`. A package with a name and version but no `main` counts as a library when it has a root `index.js`, which npm then loads.
 
+### Changed
+- With both installed, Opengrep now runs the bundled Semgrep rules instead of Semgrep, because it follows taint through functions in the same file: on the OWASP Benchmark the bundled rules score 0.723 with Opengrep and 0.467 with Semgrep in Java, 0.530 and 0.433 in Python. `scan.semgrep_engine: semgrep` keeps Semgrep. Findings keep their identity, as the adapter is still `semgrep`. The OWASP benchmark tool reports the engine `pandaward` (built-in rules and the engine a scan picks) instead of `all`, which merged both Semgrep engines as no scan does (#387).
+
 ### Fixed
 - The reason of a control that went stale or was raised by another collector no longer reads `was PASS: ...`, which the secret redaction took for a password assignment: reports showed `[REDACTED]` in it and a bundle export was refused. It now reads `was PASS, because ...`. The flow text of taint findings is redacted like other finding text (#381); each step is redacted on its own, so a long flow is no longer cut off at 240 characters.
 - The taint engine no longer reports a loop that rewrites the keys an object already owns (`for (k of Object.keys(a)) a[k] = f(a[k])`) or a key path walk over a constant list of string paths as prototype pollution, nor `location.href = x || location.href` as an open redirect; a value taken out of the page URL, such as `location.href.split("next=")[1]`, is still reported (#381).
