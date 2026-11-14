@@ -459,6 +459,102 @@ function setPath(obj, path, value) {
   }
 }`, false)
 
+	expect(t, "merge through a helper", `
+function mixinDeep(target, ...rest) {
+  for (let obj of rest) {
+    for (let key in obj) {
+      if (key !== '__proto__') mixin(target, obj[key], key);
+    }
+  }
+  return target;
+}
+function mixin(target, val, key) {
+  let obj = target[key];
+  if (isObject(val) && isObject(obj)) mixinDeep(obj, val);
+  else target[key] = val;
+}`, false, "prototype-pollution:13")
+
+	expect(t, "merge through a callback helper", `
+function mixinDeep(target, objects) {
+  for (var i = 1; i < arguments.length; i++) forIn(arguments[i], copy, target);
+  return target;
+}
+function copy(val, key) {
+  var obj = this[key];
+  if (isObject(val) && isObject(obj)) mixinDeep(obj, val);
+  else this[key] = val;
+}`, false, "prototype-pollution:9")
+
+	expect(t, "merge through a helper with full key check", `
+function mixinDeep(target, ...rest) {
+  for (let obj of rest) {
+    for (let key in obj) {
+      if (key !== '__proto__' && key !== 'constructor') mixin(target, obj[key], key);
+    }
+  }
+}
+function mixin(target, val, key) {
+  let obj = target[key];
+  if (isObject(val) && isObject(obj)) mixinDeep(obj, val);
+  else target[key] = val;
+}`, false)
+
+	expect(t, "index loop over Object.keys", `
+exports.merge = function (target, source) {
+  const keys = Object.keys(source);
+  for (let i = 0; i < keys.length; ++i) {
+    const key = keys[i];
+    const value = source[key];
+    if (value && typeof value === 'object' && target[key]) exports.merge(target[key], value);
+    else target[key] = value;
+  }
+  return target;
+};`, false, "prototype-pollution:8")
+
+	expect(t, "index loop over Object.keys skipping __proto__", `
+exports.merge = function (target, source) {
+  const keys = Object.keys(source);
+  for (let i = 0; i < keys.length; ++i) {
+    const key = keys[i];
+    if (key === '__proto__') continue;
+    const value = source[key];
+    if (value && typeof value === 'object' && target[key]) exports.merge(target[key], value);
+    else target[key] = value;
+  }
+  return target;
+};`, false)
+
+	expect(t, "a value check is not a key check", `
+function set(target, keys, value) {
+  for (let i = 0; i < keys.length; i++) {
+    let prop = keys[i];
+    if (!isObject(target[prop])) target[prop] = {};
+    if (i === keys.length - 1) { target[prop] = value; break; }
+    target = target[prop];
+  }
+}`, false, "prototype-pollution:5", "prototype-pollution:6")
+
+	expect(t, "write after a walk", `
+function setDeepProperty(obj, propertyPath, value) {
+  const a = propertyPath.split('.');
+  for (let i = 0; i < a.length - 1; i++) {
+    const k = a[i];
+    obj = obj[k];
+  }
+  obj[a[a.length - 1]] = value;
+}`, false, "prototype-pollution:6")
+
+	expect(t, "write after a walk with key check", `
+function setDeepProperty(obj, propertyPath, value) {
+  const a = propertyPath.split('.');
+  for (let i = 0; i < a.length - 1; i++) {
+    const k = a[i];
+    if (isUnsafeKey(k)) return;
+    obj = obj[k];
+  }
+  obj[a[a.length - 1]] = value;
+}`, false)
+
 	expect(t, "path walk with key check", `
 function set(obj, path, value) {
   var keys = path.split('.'), o = obj;
