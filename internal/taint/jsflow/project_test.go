@@ -296,3 +296,19 @@ export async function providerBySlug(slug: string) {
 }`,
 	}, "route.ts:ssrf:6")
 }
+
+func TestCrossFileSelfReference(t *testing.T) {
+	// module.exports = api; module.exports.api = api must not make the
+	// exported object contain itself.
+	expectProject(t, "exports that refer to themselves", map[string]string{
+		"x.js": `
+const api = { run: function (c) { require('child_process').exec(c); } };
+module.exports = api;
+module.exports.api = api;`,
+		"a.js": `
+const { api } = require('./x');
+app.get('/', (req, res) => {
+  if (isValid(api)) { api.run(req.query.c); }
+});`,
+	}, "x.js:command-injection:2")
+}

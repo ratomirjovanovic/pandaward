@@ -1761,9 +1761,18 @@ func (a *analyzer) assignExpr(s *scope, x *js.Assign) val {
 			strings.HasPrefix(t, "exports.") && strings.Count(t, ".") == 1:
 			name := t[strings.LastIndexByte(t, '.')+1:]
 			a.exportVals[name] = v
-			// module.exports = {...}; module.exports.extra = fn
+			// module.exports = {...}; module.exports.extra = fn. A copy:
+			// the map may be shared with v itself (module.exports = api;
+			// module.exports.api = api), and writing into it would make
+			// the object contain itself.
 			if d, ok := a.exportVals["default"]; ok && d.fields != nil {
-				d.fields[name] = v
+				f := make(map[string]val, len(d.fields)+1)
+				for k, fv := range d.fields {
+					f[k] = fv
+				}
+				f[name] = v
+				d.fields = f
+				a.exportVals["default"] = d
 			}
 		}
 	}
