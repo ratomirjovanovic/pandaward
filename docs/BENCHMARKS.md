@@ -280,9 +280,9 @@ The three misses report the regex where it is used, not where it is written (`CH
 
 On seven real application repositories (about 5,000 JavaScript and TypeScript files) the check lists about 110 polynomial patterns, such as `/\/+$/` and the common `^[^\s@]+@[^\s@]+\.[^\s@]+$` email check, and one exponential pattern, in a test file that the built-in rules skip.
 
-### Built-in taint engine (preview)
+### Built-in taint engine
 
-The built-in taint engine (#347, adapter `builtin-taint`, not enabled by default yet) follows data from a source to a sink within one file: request objects and route handler parameters, browser URL globals and, in a published npm package, the parameters of exported functions. The CVE benchmark measures it as the engine `taint` (`--engine taint`).
+The built-in taint engine (#347, adapter `builtin-taint`, enabled by default since #381; `scan.taint_engine: false` turns it off) follows data from a source to a sink within one file: request objects and route handler parameters, browser URL globals and, in a published npm package, the parameters of exported functions. The CVE benchmark measures it as the engine `taint` (`--engine taint`).
 
 `tools/taintcve` is the development check: it analyzes only the labelled files of each CVE, fetched beforehand at both commits, and scores them the same way. The engine follows calls between the functions of a file through per-function summaries (which parameters reach which sinks and the return value), including methods called on `this` and fields a constructor sets. Beyond flows from a source it checks the shape of prototype pollution (a recursive merge or a walk along a key path that writes a key without skipping `__proto__`).
 
@@ -295,4 +295,6 @@ The built-in taint engine (#347, adapter `builtin-taint`, not enabled by default
 
 Compared with the full benchmark of `main` (run 43019314306) it adds 4 CVEs to the 116 the built-in rules and Semgrep find together, and recognizes 6 fixes they do not. Most of what Semgrep still finds alone is ReDoS (found by the built-in check, not by taint), jQuery plugin options and HTML written from values the engine cannot trace to a source.
 
-On 10,220 application files of 46 local repositories it reports 12 findings: 8 open redirects, all real (`${origin}${next}` with `next` from the query string in Supabase auth callbacks, where `?next=@evil.example` leaves the site), and 4 prototype pollution shapes, two of them in a generated `.wrangler` directory and two in a message lookup whose keys come from the code. Each false positive seen while building it became a rule and a test.
+On 10,220 application files of 46 local repositories it reports 12 findings: 8 open redirects, all real (`${origin}${next}` with `next` from the query string in Supabase auth callbacks, where `?next=@evil.example` leaves the site), and 4 prototype pollution shapes, two of them in a generated `.wrangler` directory and two in a message lookup whose keys come from the code. Each false positive seen while building it became a rule and a test. Since #381 `.wrangler` is excluded by default and walks over constant key paths are not reported, which leaves the 8 open redirects.
+
+On third-party code checked out next to them (medusa, ollama, stripe-node and others) the first run reported 65 findings; 14 were loops rewriting an object's own keys in generated converters and 2 were redirects to the page's own URL, both fixed in #381. Those left are mostly real shapes (recursive merges and key path walks into shared objects, `res.send` of route parameters), some in internal utilities whose input the code controls.

@@ -37,9 +37,15 @@ func (a *analyzer) protoPollution(f *js.File) {
 		a.out = append(a.out, taint.Finding{Sink: sink, File: a.file, Line: line, EndLine: line, Library: true,
 			Steps: []taint.Step{{Line: line, What: what}, {Line: line, What: sink.Title}}})
 	}
+	fixed := constStrings(f)
 	for _, st := range f.Stmts {
 		js.Inspect(st, func(n js.Node) bool {
 			switch n := n.(type) {
+			case *js.ForIn:
+				if fixed[exprText(n.Right)] {
+					return false // for (p of ['a', 'b.c']): the keys are the code's own
+				}
+				a.pathWalk(n, report)
 			case *js.FuncDecl:
 				a.recursiveMerge(n.Func, n.Func.Name, report)
 			case *js.VarDecl:
@@ -53,7 +59,7 @@ func (a *analyzer) protoPollution(f *js.File) {
 					name := exprText(n.Target)
 					a.recursiveMerge(fn, shortName(name), report)
 				}
-			case *js.For, *js.While, *js.ForIn:
+			case *js.For, *js.While:
 				a.pathWalk(n, report)
 			}
 			return true
@@ -78,6 +84,36 @@ func (a *analyzer) protoPollution(f *js.File) {
 			return true
 		})
 	}
+}
+
+// constStrings names the top-level constants that are arrays of string
+// literals.
+func constStrings(f *js.File) map[string]bool {
+	out := map[string]bool{}
+	for _, st := range f.Stmts {
+		if ex, ok := st.(*js.Export); ok && ex.Decl != nil {
+			st = ex.Decl
+		}
+		d, ok := st.(*js.VarDecl)
+		if !ok || d.Kind != "const" {
+			continue
+		}
+		for _, dc := range d.Decls {
+			arr, ok := dc.Init.(*js.ArrayLit)
+			if !ok || len(arr.Elems) == 0 {
+				continue
+			}
+			all := true
+			for _, e := range arr.Elems {
+				l, isLit := e.(*js.Lit)
+				all = all && isLit && l.Kind == js.TString
+			}
+			if all {
+				out[patternName(dc.Target)] = true
+			}
+		}
+	}
+	return out
 }
 
 // innerFunc unwraps a = b = function () {}.
@@ -142,7 +178,20 @@ func inspectBody(fn *js.Func, f func(js.Node) bool) {
 // variable: for (k in src), for (k of keys), keys.forEach(k => ...).
 type keyLoop struct {
 	key  string
+	of   string // the object whose keys are walked, when known
 	body js.Node
+}
+
+// keysOf names the object of Object.keys(x), Object.entries(x) or x.
+func keysOf(x js.Expr) string {
+	if c, ok := x.(*js.Call); ok && len(c.Args) == 1 {
+		switch exprText(c.Callee) {
+		case "Object.keys", "Object.entries", "Object.getOwnPropertyNames", "Reflect.ownKeys":
+			return exprText(c.Args[0])
+		}
+		return ""
+	}
+	return exprText(x)
 }
 
 func keyLoops(fn *js.Func) []keyLoop {
@@ -160,12 +209,12 @@ func keyLoops(fn *js.Func) []keyLoop {
 				k = exprText(l.X)
 			}
 			if k != "" {
-				out = append(out, keyLoop{k, n.Body})
+				out = append(out, keyLoop{k, keysOf(n.Right), n.Body})
 			}
 		case *js.Call:
 			if m, ok := n.Callee.(*js.Member); ok && m.Prop == "forEach" && len(n.Args) > 0 {
 				if cb, ok := n.Args[0].(*js.Func); ok && len(cb.Params) > 0 {
-					out = append(out, keyLoop{patternName(cb.Params[0]), cb})
+					out = append(out, keyLoop{patternName(cb.Params[0]), keysOf(m.Obj), cb})
 				}
 			}
 		}
@@ -189,7 +238,10 @@ func (a *analyzer) recursiveMerge(fn *js.Func, name string, report func(int, str
 				return true
 			}
 			target := exprText(m.Obj)
-			if target == "" || freshObject(fn, target) || !readsKey(fn, target, l.key, as) || keyChecked(fn, target, l.key) {
+			// for (k of Object.keys(a)) a[k] = f(a[k]) rewrites keys a
+			// already owns: a key __proto__ there only reaches a's own
+			// prototype slot.
+			if target == "" || target == l.of || freshObject(fn, target) || !readsKey(fn, target, l.key, as) || keyChecked(fn, target, l.key) {
 				return true
 			}
 			report(as.Line, "recursive merge writes "+target+"["+l.key+"]")

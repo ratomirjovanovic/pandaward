@@ -397,6 +397,29 @@ function merge(target, source) {
   return target;
 }`, false)
 
+	expect(t, "rewriting the keys an object owns", `
+function convert(a, Cls) {
+  if (Array.isArray(a)) return a.map(e => convert(e, Cls));
+  for (const key of Object.keys(a)) {
+    a[key] = new Cls(a[key]);
+  }
+  return a;
+}`, false)
+
+	expect(t, "path walk over constant key paths", `
+const NAMES = ['common', 'contact.form'] as const;
+export function pick(messages) {
+  const picked = {};
+  for (const path of NAMES) {
+    let target = picked;
+    for (const segment of path.split('.')) {
+      if (typeof target[segment] !== 'object') target[segment] = {};
+      target = target[segment];
+    }
+  }
+  return picked;
+}`, false)
+
 	expect(t, "copy into a fresh object is not a merge", `
 function clone(src) {
   var out = {};
@@ -466,6 +489,14 @@ export function linkify(node) {
   var dummy = document.createElement('div');
   dummy.innerHTML = s.replace(/x/g, 'y');
 }`, true, "xss:5")
+
+	expect(t, "navigating to the page itself", `
+function onClick(e) {
+  window.location.href = e.target.getAttribute("href") || window.location.href;
+}
+function reload() { location.href = location.href; }
+function next() { window.location.href = location.href.split("next=")[1]; }
+function hash() { location.href = flag ? location.hash.slice(1) : location.href; }`, false, "open-redirect:6", "open-redirect:7")
 
 	expect(t, "dom text in an application", `
 for (const el of document.querySelectorAll('[data-i18n-html]')) el.innerHTML = t(el.dataset.i18nHtml);

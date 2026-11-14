@@ -24,6 +24,9 @@ func adapterWatches(adapter, p string) bool {
 	switch adapter {
 	case "builtin-code":
 		return isCodeLang(lang) || inventory.IsAgentInstructions(p) || inventory.IsMCPConfig(p)
+	case "builtin-taint":
+		// package.json decides whether the project is a library.
+		return lang == "javascript" || lang == "typescript" || base == "package.json"
 	case "builtin-cicd":
 		return strings.Contains(p, ".github/workflows/")
 	case "builtin-infra":
@@ -127,7 +130,7 @@ func ApplyStale(cs []model.ControlResult, es []model.Edge, affected map[string]b
 		case model.StatusBlocked, model.StatusUnsupported:
 			// Undecided before and after; nothing to invalidate.
 		default:
-			outC[i].Reason = "was " + string(c.Status) + ": " + why
+			outC[i].Reason = "was " + string(c.Status) + ", because " + why
 			outC[i].Status = model.StatusStale
 			stale[c.ID] = true
 		}

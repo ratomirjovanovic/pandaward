@@ -137,14 +137,27 @@ func (e *Engine) Inventory() (*inventory.Inventory, error) {
 
 // Adapters returns the enabled adapter names: scan.adapters plus
 // sarif-import, which is opted into by providing SARIF files instead.
+// builtin-taint runs with builtin-code unless scan.taint_engine is false,
+// so configs written before it was a default get it too.
 func (e *Engine) Adapters() []string {
-	out := append([]string{}, e.Cfg.Scan.Adapters...)
-	for _, a := range out {
-		if a == adapters.SARIFImport {
-			return out
+	var out []string
+	code, taint, sarif := false, false, false
+	for _, a := range e.Cfg.Scan.Adapters {
+		if a == adapters.TaintAdapter && !e.Cfg.Scan.TaintEngine {
+			continue
 		}
+		out = append(out, a)
+		code = code || a == "builtin-code"
+		taint = taint || a == adapters.TaintAdapter
+		sarif = sarif || a == adapters.SARIFImport
 	}
-	return append(out, adapters.SARIFImport)
+	if code && !taint && e.Cfg.Scan.TaintEngine {
+		out = append(out, adapters.TaintAdapter)
+	}
+	if !sarif {
+		out = append(out, adapters.SARIFImport)
+	}
+	return out
 }
 
 // PlanItem is one control decision before execution.
@@ -607,11 +620,32 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 	// semgrep adapter (Semgrep or Opengrep) did not complete. A retest that
 	// carries the semgrep results over keeps the replacement.
 	var superseded map[int]string
+	// hidden are duplicates of carried taint findings: not reported again,
+	// but still counted for their control, which the carried run did not
+	// decide in this assessment.
+	var hidden map[int]string
 	if ranOK["semgrep"] || carried["semgrep"] {
 		superseded = supersededSignals(allSignals, inv)
 	}
+	// A taint finding shows where the data comes from; the heuristic for
+	// the same control on the same line adds nothing.
+	if ranOK[adapters.TaintAdapter] || carried[adapters.TaintAdapter] {
+		var kept []model.Signal
+		if carried[adapters.TaintAdapter] {
+			// Its signals are not in this run; its open findings are.
+			for _, f := range ledger {
+				if f.Collector == adapters.TaintAdapter && f.Status.Active() {
+					kept = append(kept, model.Signal{Collector: f.Collector, ControlID: f.ControlID, RuleID: f.RuleID, File: f.File, StartLine: f.StartLine, EndLine: f.EndLine})
+				}
+			}
+		}
+		superseded, hidden = supersededByTaint(allSignals, kept, superseded)
+	}
 	replacedBy := map[string]string{} // fingerprint -> bundled rule
 	for i, rule := range superseded {
+		replacedBy[ids.FP[i]] = rule
+	}
+	for i, rule := range hidden {
 		replacedBy[ids.FP[i]] = rule
 	}
 	redecide(results, allSignals, decided, gone, superseded)
@@ -619,6 +653,9 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 	for i, s := range allSignals {
 		fp := ids.FP[i]
 		if _, ok := superseded[i]; ok || seen[fp] {
+			continue
+		}
+		if _, ok := hidden[i]; ok {
 			continue
 		}
 		seen[fp] = true
@@ -688,7 +725,10 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 		if gone {
 			f.Note = strings.TrimSpace(f.Note + " " + f.File + " is no longer scanned in " + asmt.ID + " (deleted, excluded or git-ignored).")
 			why = f.File + " no longer scanned in " + asmt.ID
-		} else if rule, ok := replacedBy[f.Fingerprint]; ok {
+		} else if rule, ok := replacedBy[f.Fingerprint]; ok && strings.HasPrefix(rule, taintPrefix) {
+			f.Note = strings.TrimSpace(f.Note + " Replaced in " + asmt.ID + " by the taint engine finding " + strings.TrimPrefix(rule, taintPrefix) + " on the same line, which shows where the data comes from; this finding is not reported while the taint engine completes.")
+			why = f.Collector + " finding replaced by " + strings.TrimPrefix(rule, taintPrefix) + " in " + asmt.ID
+		} else if ok {
 			f.Note = strings.TrimSpace(f.Note + " Replaced in " + asmt.ID + " by the bundled rule " + rule + ", which decides this weakness for the file's language; the built-in heuristic is not reported while Semgrep or Opengrep completes.")
 			why = "built-in heuristic replaced by " + rule + " in " + asmt.ID
 		} else {
@@ -836,7 +876,7 @@ func raise(results map[string]*model.ControlResult, sigs []model.Signal, foreign
 		if sigs := by[cid]; len(sigs) > 0 {
 			st, why := decide(sigs, cid, "")
 			if rank[st] > rank[r.Status] {
-				r.Status, r.Reason = st, why+" from "+sigs[0].Collector+" (was "+string(r.Status)+": "+r.Reason+")"
+				r.Status, r.Reason = st, why+" from "+sigs[0].Collector+" (was "+string(r.Status)+", because "+r.Reason+")"
 			}
 		}
 		if fs := dismissed[cid]; len(fs) > 0 {
@@ -941,13 +981,16 @@ func redecide(results map[string]*model.ControlResult, sigs []model.Signal, deci
 		}
 		var kept []model.Signal
 		var dismissed []model.Finding
-		replaced := 0
+		replaced, byTaint := 0, 0
 		for i := rg.from; i < rg.to; i++ {
 			if sigs[i].ControlID != cid {
 				continue
 			}
-			if _, ok := superseded[i]; ok {
+			if rule, ok := superseded[i]; ok {
 				replaced++
+				if strings.HasPrefix(rule, taintPrefix) {
+					byTaint++
+				}
 			} else if f, ok := gone[i]; ok {
 				dismissed = append(dismissed, f)
 			} else {
@@ -961,8 +1004,11 @@ func redecide(results map[string]*model.ControlResult, sigs []model.Signal, deci
 		if len(dismissed) > 0 {
 			notes = append(notes, dismissedNote(dismissed))
 		}
-		if replaced > 0 {
-			notes = append(notes, fmt.Sprintf("%d built-in heuristic signal(s) replaced by bundled Semgrep rules", replaced))
+		if n := replaced - byTaint; n > 0 {
+			notes = append(notes, fmt.Sprintf("%d built-in heuristic signal(s) replaced by bundled Semgrep rules", n))
+		}
+		if byTaint > 0 {
+			notes = append(notes, fmt.Sprintf("%d heuristic or bundled rule signal(s) replaced by taint engine findings", byTaint))
 		}
 		note := strings.Join(notes, "; ")
 		if len(kept) == 0 {
@@ -993,6 +1039,86 @@ func supersededSignals(sigs []model.Signal, inv *inventory.Inventory) map[int]st
 		}
 	}
 	return out
+}
+
+// taintPrefix marks a supersession by a builtin-taint signal.
+const taintPrefix = "taint:"
+
+// supersededByTaint adds to superseded the builtin-code signals, and those
+// of bundled Semgrep rules, that a builtin-taint signal of the same control
+// covers in the same file and lines, each with that signal's rule. Rules a
+// project adds itself are kept. The taint signal takes over the severity
+// and confidence of what it replaces: the flow is no weaker evidence than a
+// pattern on the same line. Matches with carriedTaint, findings of a taint
+// run carried over from the last assessment, are returned in hidden.
+func supersededByTaint(sigs, carriedTaint []model.Signal, superseded map[int]string) (map[int]string, map[int]string) {
+	type at struct{ control, file string }
+	type ref struct {
+		i int // index in sigs, or -1 for a carried finding
+		s model.Signal
+	}
+	taint := map[at][]ref{}
+	for _, s := range carriedTaint {
+		k := at{s.ControlID, s.File}
+		taint[k] = append(taint[k], ref{-1, s})
+	}
+	for i, s := range sigs {
+		if s.Collector == adapters.TaintAdapter && s.File != "" {
+			k := at{s.ControlID, s.File}
+			taint[k] = append(taint[k], ref{i, s})
+		}
+	}
+	if len(taint) == 0 {
+		return superseded, nil
+	}
+	var hidden map[int]string
+	for i, s := range sigs {
+		bundled := s.Collector == "semgrep" && strings.Contains(s.RuleID, "pandaward-")
+		if s.Collector != "builtin-code" && !bundled || s.StartLine == 0 {
+			continue
+		}
+		if _, ok := superseded[i]; ok {
+			continue
+		}
+		end := max(s.EndLine, s.StartLine)
+		for _, t := range taint[at{s.ControlID, s.File}] {
+			if t.s.StartLine > end || s.StartLine > max(t.s.EndLine, t.s.StartLine) {
+				continue
+			}
+			if t.i < 0 {
+				if hidden == nil {
+					hidden = map[int]string{}
+				}
+				hidden[i] = taintPrefix + t.s.RuleID
+				break
+			}
+			if superseded == nil {
+				superseded = map[int]string{}
+			}
+			superseded[i] = taintPrefix + t.s.RuleID
+			ts := &sigs[t.i]
+			if model.SeverityRank(s.Severity) > model.SeverityRank(ts.Severity) {
+				ts.Severity = s.Severity
+			}
+			if confidenceRank(s.Confidence) > confidenceRank(ts.Confidence) {
+				ts.Confidence = s.Confidence
+			}
+			break
+		}
+	}
+	return superseded, hidden
+}
+
+func confidenceRank(c model.Confidence) int {
+	switch c {
+	case model.Confirmed:
+		return 3
+	case model.StronglySupported:
+		return 2
+	case model.Hypothesis:
+		return 1
+	}
+	return 0
 }
 
 // dismissedNote says how many signals were dismissed and by whom.
