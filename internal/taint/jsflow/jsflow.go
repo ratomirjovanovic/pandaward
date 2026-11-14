@@ -332,6 +332,10 @@ func merge(x, y val) val {
 type scope struct {
 	vars   map[string]val
 	parent *scope
+	// branch marks a copy made for one path of an if, loop or switch. It
+	// shares its parents, so it records writes to their variables locally;
+	// mergeFrom joins them with the other path before they reach the parent.
+	branch bool
 }
 
 func newScope(parent *scope) *scope { return &scope{vars: map[string]val{}, parent: parent} }
@@ -346,8 +350,9 @@ func (s *scope) lookup(name string) (val, *scope, bool) {
 }
 
 // assign updates the variable where it is declared, or declares it here.
+// A branch keeps its own copy of a parent's variable.
 func (s *scope) assign(name string, v val) {
-	if _, owner, ok := s.lookup(name); ok {
+	if _, owner, ok := s.lookup(name); ok && (owner == s || !s.branch) {
 		owner.vars[name] = v
 		return
 	}
@@ -355,7 +360,7 @@ func (s *scope) assign(name string, v val) {
 }
 
 func (s *scope) clone() *scope {
-	c := &scope{vars: make(map[string]val, len(s.vars)), parent: s.parent}
+	c := &scope{vars: make(map[string]val, len(s.vars)), parent: s.parent, branch: true}
 	for k, v := range s.vars {
 		c.vars[k] = v
 	}
@@ -372,16 +377,25 @@ func (s *scope) mergeFrom(x, y *scope) {
 		keys[k] = true
 	}
 	for k := range keys {
-		vx, okx := x.vars[k]
-		vy, oky := y.vars[k]
+		// A parent's variable that only one path assigned keeps, on the
+		// other path, the parent's value.
+		vx, _, okx := x.lookup(k)
+		vy, _, oky := y.lookup(k)
 		switch {
 		case okx && oky:
-			s.vars[k] = merge(vx, vy)
+			s.assign(k, merge(vx, vy))
 		case okx:
-			s.vars[k] = vx
+			s.assign(k, vx)
 		default:
-			s.vars[k] = vy
+			s.assign(k, vy)
 		}
+	}
+}
+
+// adopt makes the state of path x, a clone of s, the state of s.
+func (s *scope) adopt(x *scope) {
+	for k, v := range x.vars {
+		s.assign(k, v)
 	}
 }
 
@@ -668,7 +682,7 @@ func (a *analyzer) stmt(s *scope, st js.Stmt, classes *[]*js.Class) bool {
 			a.block(cs, c.Body, classes)
 			acc.mergeFrom(acc.clone(), cs)
 		}
-		s.vars = acc.vars
+		s.adopt(acc)
 	case *js.Labeled:
 		return a.stmt(s, st.Body, classes)
 	case *js.FuncDecl:
@@ -800,9 +814,10 @@ func (a *analyzer) ifStmt(s *scope, st *js.If, classes *[]*js.Class) bool {
 	thenExits := a.stmt(ts, st.Then, classes)
 	es := s.clone()
 	// if (bad(x)) { x = fallback } replaces what failed the check: the
-	// other path keeps x only when it passed.
+	// other path keeps x only when it passed. if (x === '/') { x = ... }
+	// checks nothing on the other path.
 	for _, p := range checked {
-		if assigns(st.Then, p) {
+		if assigns(st.Then, p) && !equalsConst(st.Test, p) {
 			sanitize(es, p)
 		}
 	}
@@ -818,9 +833,9 @@ func (a *analyzer) ifStmt(s *scope, st *js.If, classes *[]*js.Class) bool {
 		for _, p := range checked {
 			sanitize(es, p)
 		}
-		s.vars = es.vars
+		s.adopt(es)
 	case elseExits:
-		s.vars = ts.vars
+		s.adopt(ts)
 	default:
 		s.mergeFrom(ts, es)
 	}
@@ -934,6 +949,21 @@ func guarded(test js.Expr) []string {
 	return out
 }
 
+// equalsConst reports a test that holds when p equals a constant, such as
+// x === '/' or x == 'a' || x == 'b'. When it fails, p can be anything.
+func equalsConst(test js.Expr, p string) bool {
+	switch x := test.(type) {
+	case *js.Binary:
+		switch x.Op {
+		case "&&", "||":
+			return equalsConst(x.L, p) || equalsConst(x.R, p)
+		case "===", "==":
+			return isConst(x.R) && exprText(x.L) == p || isConst(x.L) && exprText(x.R) == p
+		}
+	}
+	return false
+}
+
 func isConst(x js.Expr) bool {
 	switch x := x.(type) {
 	case *js.Lit:
@@ -951,15 +981,11 @@ func isConst(x js.Expr) bool {
 // sanitize marks the variable or field at a dotted path as checked.
 func sanitize(s *scope, p string) {
 	parts := strings.Split(p, ".")
-	v, owner, ok := s.lookup(parts[0])
+	v, _, ok := s.lookup(parts[0])
 	if !ok {
 		return
 	}
-	owner.vars[parts[0]] = sanitizePath(v, parts[1:])
-	if owner != s {
-		// A clone shares its parents; record the checked value locally.
-		s.vars[parts[0]] = owner.vars[parts[0]]
-	}
+	s.assign(parts[0], sanitizePath(v, parts[1:]))
 }
 
 func sanitizePath(v val, rest []string) val {

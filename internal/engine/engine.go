@@ -1312,7 +1312,7 @@ func (e *Engine) outOfScope(f model.Finding, inv *inventory.Inventory) bool {
 	if rel == "" || filepath.IsAbs(f.File) || strings.HasPrefix(rel, "../") {
 		return false
 	}
-	if inventory.Excluded(rel, e.Cfg.Inventory.Exclude) {
+	if inventory.Excluded(e.Root, rel, e.Cfg.Inventory.Exclude) {
 		return true
 	}
 	if inv.InIgnoredDir(rel) && !(f.ControlID == "E-005" && f.Severity == model.SevInfo) {
@@ -1341,7 +1341,7 @@ func (e *Engine) dropExcluded(out *adapters.Result, inv *inventory.Inventory) in
 		// A secret on disk matters wherever it is, so gitleaks keeps listing
 		// it in a git-ignored directory (as info, see IgnoredLocal).
 		ignored := inv.InIgnoredDir(rel) && !(s.ControlID == "E-005" && s.Severity == model.SevInfo)
-		if rel != "" && (inventory.Excluded(rel, e.Cfg.Inventory.Exclude) || ignored) {
+		if rel != "" && (inventory.Excluded(e.Root, rel, e.Cfg.Inventory.Exclude) || ignored) {
 			n++
 			continue
 		}
