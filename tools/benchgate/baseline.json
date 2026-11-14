@@ -6,28 +6,20 @@
       "fix_recognized": 28
     },
     "cve/opengrep": {
-      "detected": 66,
-      "fix_recognized": 32
+      "detected": 87,
+      "fix_recognized": 53
+    },
+    "cve/pandaward": {
+      "detected": 117,
+      "fix_recognized": 82
     },
     "cve/semgrep": {
-      "detected": 66,
-      "fix_recognized": 32
+      "detected": 88,
+      "fix_recognized": 54
     },
-    "owasp/java/all": {
-      "average_score_covered": 0.4858758800793883,
-      "categories": {
-        "cmdi": 0.3286984126984127,
-        "crypto": 0.7461538461538462,
-        "hash": 0.689922480620155,
-        "ldapi": 0.32638888888888884,
-        "pathtraver": 0.18351434140907819,
-        "securecookie": 1,
-        "sqli": 0.2823275862068966,
-        "trustbound": 0.16979546091342113,
-        "weakrand": 1,
-        "xpathi": 0.2833333333333333,
-        "xss": 0.33450033064923945
-      }
+    "cve/taint": {
+      "detected": 59,
+      "fix_recognized": 44
     },
     "owasp/java/builtin": {
       "average_score_covered": -0.00031693711967547183,
@@ -41,6 +33,22 @@
       }
     },
     "owasp/java/opengrep": {
+      "average_score_covered": 0.7232309331734178,
+      "categories": {
+        "cmdi": 0.6726984126984127,
+        "crypto": 0.7461538461538462,
+        "hash": 0.689922480620155,
+        "ldapi": 0.6701388888888888,
+        "pathtraver": 0.561292119186856,
+        "securecookie": 1,
+        "sqli": 0.6788793103448276,
+        "trustbound": 0.40235360044830487,
+        "weakrand": 1,
+        "xpathi": 0.7833333333333333,
+        "xss": 0.7507682732329716
+      }
+    },
+    "owasp/java/pandaward": {
       "average_score_covered": 0.7232309331734178,
       "categories": {
         "cmdi": 0.6726984126984127,
@@ -72,25 +80,6 @@
         "xss": 0.3043917998988602
       }
     },
-    "owasp/python/all": {
-      "average_score_covered": 0.5202491110468854,
-      "categories": {
-        "cmdi": 0.6263736263736264,
-        "codeinj": 0.3878787878787878,
-        "deserialization": 0.6666666666666667,
-        "hash": 1,
-        "ldapi": 0.5961538461538461,
-        "pathtraver": 0.22613890963405525,
-        "redirect": 0.10256410256410264,
-        "securecookie": 1,
-        "sqli": 0.6,
-        "trustbound": 0.08187134502923982,
-        "weakrand": 1,
-        "xpathi": 0.21655773420479305,
-        "xss": 0.3542825361512792,
-        "xxe": 0.425
-      }
-    },
     "owasp/python/builtin": {
       "average_score_covered": 0.025641025641025647,
       "categories": {
@@ -109,6 +98,25 @@
       "categories": {
         "cmdi": 0.6263736263736264,
         "codeinj": 0.4484848484848485,
+        "deserialization": 0.6666666666666667,
+        "hash": 1,
+        "ldapi": 0.6730769230769231,
+        "pathtraver": 0.3038088125466766,
+        "redirect": 0.19780219780219788,
+        "securecookie": 1,
+        "sqli": 0.6,
+        "trustbound": 0.13450292397660824,
+        "weakrand": 1,
+        "xpathi": 0.2684095860566449,
+        "xss": 0.44048943270300334,
+        "xxe": 0.425
+      }
+    },
+    "owasp/python/pandaward": {
+      "average_score_covered": 0.5300699038607737,
+      "categories": {
+        "cmdi": 0.6263736263736264,
+        "codeinj": 0.08484848484848484,
         "deserialization": 0.6666666666666667,
         "hash": 1,
         "ldapi": 0.6730769230769231,
