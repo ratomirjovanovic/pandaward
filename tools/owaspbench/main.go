@@ -141,9 +141,10 @@ func measure(ctx context.Context, suite *Suite, repo, expectedPath string, selec
 	if err != nil {
 		return nil, err
 	}
-	var all, builtinFindings []Finding
-	allCovered := map[string][]string{}
-	ran, semgrepRan := 0, false
+	var builtinFindings []Finding
+	builtinRan := false
+	semgrepFindings := map[string][]Finding{}
+	var builtinCovered map[string][]string
 	for _, eng := range selected {
 		run, err := engines.Measure(ctx, inv, eng)
 		if err != nil {
@@ -162,35 +163,49 @@ func measure(ctx context.Context, suite *Suite, repo, expectedPath string, selec
 		if r.NotRun == "" {
 			r.Score = suite.Compute(expected, findings, covered)
 			if eng == "builtin" {
-				builtinFindings = findings
+				builtinFindings, builtinRan, builtinCovered = findings, true, covered
 			} else {
-				semgrepRan = true
-				all = append(all, findings...)
+				semgrepFindings[eng] = findings
 			}
-			for c, rs := range covered {
-				for _, r := range rs {
-					if !slices.Contains(allCovered[c], r) {
-						allCovered[c] = append(allCovered[c], r)
-					}
-				}
-			}
-			ran++
 		}
 		out.Engines = append(out.Engines, r)
 	}
-	if ran > 1 {
-		// As in a scan: built-in heuristics a bundled rule replaces do not
-		// count once a semgrep engine has run.
-		if semgrepRan {
-			builtinFindings, err = withoutSuperseded(builtinFindings, inv)
-			if err != nil {
-				return nil, err
+	if eng := scanSemgrep(semgrepFindings); builtinRan && eng != "" {
+		// As in a scan: the built-in rules and one Semgrep engine, Opengrep
+		// when it is installed; built-in heuristics a bundled rule replaces
+		// do not count once it has run.
+		builtinFindings, err = withoutSuperseded(builtinFindings, inv)
+		if err != nil {
+			return nil, err
+		}
+		combined := append(append([]Finding{}, semgrepFindings[eng]...), builtinFindings...)
+		covered := map[string][]string{}
+		for _, m := range []map[string][]string{builtinCovered, semgrepCovered} {
+			for c, rs := range m {
+				for _, r := range rs {
+					if !slices.Contains(covered[c], r) {
+						covered[c] = append(covered[c], r)
+					}
+				}
 			}
 		}
-		all = append(all, builtinFindings...)
-		out.Engines = append(out.Engines, EngineResult{Engine: "all", Score: suite.Compute(expected, all, allCovered)})
+		out.Engines = append(out.Engines, EngineResult{Engine: Combined, Version: "built-in + " + eng, Score: suite.Compute(expected, combined, covered)})
 	}
 	return out, nil
+}
+
+// Combined is the engine name of PandaWard as a scan runs it.
+const Combined = "pandaward"
+
+// scanSemgrep names the Semgrep engine a scan would run among those that
+// ran: opengrep, the default, or semgrep.
+func scanSemgrep(ran map[string][]Finding) string {
+	for _, e := range []string{"opengrep", "semgrep"} {
+		if _, ok := ran[e]; ok {
+			return e
+		}
+	}
+	return ""
 }
 
 func printTable(o *Output) {
@@ -213,8 +228,8 @@ func printTable(o *Output) {
 		} else if e.Version != "" {
 			name = e.Version
 		}
-		if e.Engine == "all" {
-			name = "all engines merged (a test case counts once)"
+		if e.Engine == Combined {
+			name = "PandaWard (" + e.Version + ", as a scan runs them)"
 		}
 		fmt.Printf("== %s\n", name)
 		fmt.Printf("%d labelled test cases; %d findings: %d in test cases (%d of another category), %d elsewhere\n\n", e.TestCases, e.Findings, e.FindingsInTests, e.OffCategory, e.FindingsElsewhere+e.UnknownTestCases)

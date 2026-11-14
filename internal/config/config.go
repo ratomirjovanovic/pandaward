@@ -41,8 +41,9 @@ type Config struct {
 		AllowToolNetwork bool   `yaml:"allow_tool_network"`
 		SemgrepConfig    string `yaml:"semgrep_config"`
 		// SemgrepEngine picks the engine that runs the Semgrep rules:
-		// "semgrep", "opengrep", or empty for semgrep and, when it is not
-		// installed, opengrep.
+		// "semgrep", "opengrep", or empty for opengrep and, when it is not
+		// installed, semgrep. Opengrep follows taint through functions in
+		// the same file, which Semgrep CE does not.
 		SemgrepEngine string `yaml:"semgrep_engine"`
 		// SemgrepIncludeTests keeps results of non-bundled semgrep rules in
 		// test and fixture code, which are skipped by default.

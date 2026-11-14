@@ -44,7 +44,7 @@ sh tools/owaspbench/run.sh --engine semgrep --json              # JSON
 1. walks the checkout with the same inventory settings as `pandaward scan` (default excludes and size limits);
 2. runs each selected engine in process: `builtin` runs the built-in adapters; `semgrep` and `opengrep` run PandaWard's bundled Semgrep rules (`rules/semgrep`) through the same adapter a scan uses, offline, with no project or registry rules. Opengrep runs with `--taint-intrafile`. An engine that is not installed is reported as not run, never as a score of zero;
 3. maps each finding to a test case by its file name, and to a Benchmark category by rule (explicit table for built-in rules) or by the rule's CWE;
-4. counts a test case as flagged when a finding of the test case's own category is in its file, as the OWASP scorecard does. Findings of another category in the same file are reported separately and do not change the matrix. In the merged `all` result a test case counts once, however many engines flag it;
+4. counts a test case as flagged when a finding of the test case's own category is in its file, as the OWASP scorecard does. Findings of another category in the same file are reported separately and do not change the matrix. The `pandaward` result scores PandaWard as a scan runs it: the built-in findings, without the heuristics a bundled rule replaces, plus those of one Semgrep engine, Opengrep when it was measured and Semgrep otherwise; a test case counts once, however many rules flag it;
 5. prints TP, FP, FN, TN, the true positive rate (TPR), the false positive rate (FPR) and the Benchmark score, TPR - FPR (Youden's index), per category and engine, with each engine's version and the SHA-256 of the bundled Semgrep rule set.
 
 A category with no rule for an engine is shown as "not covered" rather than as a score of zero. The test case directory, `src/main/java/org/owasp/benchmark/testcode/`, is not treated as a test or fixture path, so every test case file is analyzed (the tool checks and reports this).
@@ -168,7 +168,7 @@ sh tools/cvebench/run.sh --engine builtin --json                     # JSON
 - **CWE match**: one of those findings carries one of the CVE's CWEs;
 - **fix recognized**: a detecting rule reports fewer findings in the vulnerable files after the fix. Otherwise the CVE is **still flagged after the fix**, the fixed-commit false positive;
 - **unavailable**: a commit could not be fetched or checked out (repository gone). Such CVEs are not scored.
-- **PandaWard**: when the built-in engine and Semgrep or Opengrep are measured together, the built-in findings and the Semgrep findings (Opengrep's when Semgrep was not measured) are scored as one engine, `pandaward`, as a scan runs both. A CVE counts once when either finds it; the fix is recognized when one of the detecting rules reports fewer findings after it.
+- **PandaWard**: when the built-in engine and Semgrep or Opengrep are measured together, the built-in findings, the taint engine's and the Opengrep findings (Semgrep's when Opengrep was not measured, as a scan falls back to Semgrep) are scored as one engine, `pandaward`, as a scan runs them all. A CVE counts once when either finds it; the fix is recognized when one of the detecting rules reports fewer findings after it.
 
 Each CVE's result is written to a journal in the work directory as soon as it is measured, so an interrupted run continues where it stopped.
 
