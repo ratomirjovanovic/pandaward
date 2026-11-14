@@ -35,6 +35,28 @@ def evaluate():
     return "done"
 
 
+@app.route("/literal")
+def evaluate_literal():
+    expr = request.form.get("expr")
+    # ruleid: pandaward-py-eval
+    eval("1 + " + expr)
+    if not expr.startswith("'") or not expr.endswith("'") or "'" in expr[1:-1]:
+        return "must be a plain string literal"
+    # ok: pandaward-py-eval
+    eval(expr)
+    return "done"
+
+
+@app.route("/literal-no-return")
+def evaluate_literal_unchecked():
+    expr = request.form.get("expr")
+    if not expr.startswith("'") or not expr.endswith("'") or "'" in expr[1:-1]:
+        print("not a literal")
+    # ruleid: pandaward-py-eval
+    eval(expr)
+    return "done"
+
+
 def run_tool_call(client):
     completion = client.chat.completions.create(model="m", messages=[])
     # ruleid: pandaward-py-eval
