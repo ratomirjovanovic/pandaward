@@ -30,18 +30,42 @@ type Options struct {
 const maxSteps = 200000
 
 // Analyze returns the source-to-sink flows in f.
+// Imports of other files are not followed; Project does that.
 func Analyze(f *js.File, spec *taint.Spec, opt Options) []taint.Finding {
-	a := &analyzer{spec: spec, file: f.Path, opt: opt, seen: map[string]bool{}, done: map[*js.Func]bool{},
+	a := newAnalyzer(f, spec, opt, nil)
+	a.run(f)
+	return a.out
+}
+
+func newAnalyzer(f *js.File, spec *taint.Spec, opt Options, proj *Project) *analyzer {
+	a := &analyzer{spec: spec, file: f.Path, opt: opt, proj: proj, seen: map[string]bool{}, done: map[*js.Func]bool{},
 		exportedFns: map[*js.Func]string{}, exportedNames: map[string]bool{}, exportedClasses: map[*js.Class]bool{},
 		sums: map[*js.Func]*summary{}, protos: map[string]map[string]*js.Func{}, ctorOf: map[*js.Func]string{},
-		methodOf: map[*js.Func]string{}, ctorThis: map[string]val{}, paramProps: map[*js.Func][]string{}}
+		methodOf: map[*js.Func]string{}, ctorThis: map[string]val{}, paramProps: map[*js.Func][]string{},
+		exportVals: map[string]val{}}
+	if proj != nil {
+		// One finding per sink across the project: a sink reached from
+		// two importers is one weakness.
+		a.seen = proj.seen
+	}
+	return a
+}
+
+// run analyzes the file and leaves the flows in a.out.
+func (a *analyzer) run(f *js.File) {
 	a.index()
 	a.collectClasses(f)
 	// Export names also tell request handlers apart (GET, handler); their
 	// parameters are sources only in library mode.
 	a.collectExports(f)
 	top := newScope(nil)
+	a.top = top
 	a.body(top, f.Stmts)
+	for _, name := range a.exportLocal {
+		if v, _, ok := top.lookup(name[0]); ok {
+			a.exportVals[name[1]] = v
+		}
+	}
 	// Prototype methods run after their constructors, so they see the
 	// fields a constructor sets on this.
 	for i := 0; i < len(a.pendingProto); i++ {
@@ -49,29 +73,39 @@ func Analyze(f *js.File, spec *taint.Spec, opt Options) []taint.Finding {
 		a.function(p.env, p.fn, a.exportName(p.fn, p.fn.Name), nil)
 	}
 	a.protoPollution(f)
-	if opt.Library {
+	if a.opt.Library {
 		// A library cannot know its input: any incomplete escaping counts.
 		// An application's own content is not attacker input; there only
 		// tainted values count (see call).
 		a.shapes(f)
 	}
 	sort.Slice(a.out, func(i, j int) bool {
+		if a.out[i].File != a.out[j].File {
+			return a.out[i].File < a.out[j].File
+		}
 		if a.out[i].Line != a.out[j].Line {
 			return a.out[i].Line < a.out[j].Line
 		}
 		return a.out[i].Sink.ID < a.out[j].Sink.ID
 	})
-	return a.out
 }
 
 type analyzer struct {
-	spec  *taint.Spec
-	file  string
-	opt   Options
-	out   []taint.Finding
-	seen  map[string]bool
-	done  map[*js.Func]bool
-	steps int
+	spec *taint.Spec
+	file string
+	opt  Options
+	proj *Project
+	top  *scope
+	// exportVals are the values the module exports by name ("default"
+	// for module.exports and export default); exportLocal the local names
+	// of export { a as b } (local, exported), bound after the file runs.
+	exportVals  map[string]val
+	exportLocal [][2]string
+	reexports   []reexport
+	out         []taint.Finding
+	seen        map[string]bool
+	done        map[*js.Func]bool
+	steps       int
 
 	reqNames, reqProps, reqMethods map[string]bool
 	weakNames                      map[string]bool
@@ -134,6 +168,8 @@ type sinkHit struct {
 	sink      *taint.Sink
 	line, end int
 	steps     []taint.Step
+	// file is set for a sink in another file of the project.
+	file string
 }
 
 // sumRun is the state of one summary computation: the placeholder trace
@@ -185,6 +221,11 @@ type val struct {
 	// named request that holds a call result is not the HTTP request.
 	local bool
 	fn    *js.Func
+	// mod is the project file of a module object (require('./x')).
+	mod string
+	// owner is the analysis of the file that defines fn, when that is
+	// another file of the project.
+	owner *analyzer
 }
 
 func (v val) tainted() bool { return v.t != nil }
@@ -263,7 +304,13 @@ func merge(x, y val) val {
 	}
 	out.req, out.res, out.shell = x.req || y.req, x.res || y.res, x.shell || y.shell
 	if x.fn == y.fn {
-		out.fn = x.fn
+		out.fn, out.env = x.fn, x.env
+	}
+	if x.mod == y.mod {
+		out.mod = x.mod
+	}
+	if x.owner == y.owner {
+		out.owner = x.owner
 	}
 	if len(x.fields) > 0 || len(y.fields) > 0 {
 		out.fields = map[string]val{}
@@ -471,6 +518,9 @@ func (a *analyzer) body(s *scope, list []js.Stmt) bool {
 		case *js.Export:
 			if fd, ok := d.Decl.(*js.FuncDecl); ok {
 				s.vars[fd.Func.Name] = val{fn: fd.Func, env: s}
+				if s == a.top {
+					a.exportVals[fd.Func.Name] = s.vars[fd.Func.Name]
+				}
 			}
 		}
 	}
@@ -631,23 +681,85 @@ func (a *analyzer) stmt(s *scope, st js.Stmt, classes *[]*js.Class) bool {
 		*classes = append(*classes, st.Class)
 	case *js.Import:
 		mod := moduleName(st.Source)
+		file := a.importFile(st.Source)
 		for _, sp := range st.Specs {
 			switch sp.Imported {
-			case "default", "*":
-				s.vars[sp.Local] = val{ref: mod}
+			case "*":
+				s.vars[sp.Local] = val{ref: mod, mod: file}
+			case "default":
+				v := val{ref: mod}
+				if file != "" {
+					v = a.proj.moduleVal(st.Source, file)
+				}
+				s.vars[sp.Local] = v
 			default:
-				s.vars[sp.Local] = val{ref: mod + "." + sp.Imported}
+				v := val{ref: mod + "." + sp.Imported}
+				if file != "" {
+					if ev, ok := a.proj.export(file, sp.Imported, 0); ok {
+						ev.ref = v.ref
+						v = ev
+					}
+				}
+				s.vars[sp.Local] = v
 			}
 		}
 	case *js.Export:
 		if st.Decl != nil {
-			return a.stmt(s, st.Decl, classes)
+			exits := a.stmt(s, st.Decl, classes)
+			if s == a.top {
+				a.exportDecl(s, st.Decl)
+			}
+			return exits
 		}
 		if st.Default != nil {
-			a.expr(s, st.Default)
+			v := a.expr(s, st.Default)
+			if s == a.top {
+				a.exportVals["default"] = v
+			}
+		}
+		if s == a.top {
+			a.exportSpecs(st)
 		}
 	}
 	return false
+}
+
+// importFile is the project file an import names, or "".
+func (a *analyzer) importFile(spec string) string {
+	if a.proj == nil {
+		return ""
+	}
+	return a.proj.resolve(a.file, spec)
+}
+
+// exportDecl records the names `export <declaration>` exports.
+func (a *analyzer) exportDecl(s *scope, d js.Stmt) {
+	switch d := d.(type) {
+	case *js.FuncDecl:
+		a.exportVals[d.Func.Name] = s.vars[d.Func.Name]
+	case *js.VarDecl:
+		for _, dc := range d.Decls {
+			if id, ok := dc.Target.(*js.Ident); ok {
+				a.exportVals[id.Name] = s.vars[id.Name]
+			}
+		}
+	}
+}
+
+// exportSpecs records export { a as b } and the re-exports of other files.
+func (a *analyzer) exportSpecs(st *js.Export) {
+	if st.From != "" {
+		if st.All && len(st.Specs) == 0 {
+			a.reexports = append(a.reexports, reexport{from: st.From, all: true})
+		}
+		for _, sp := range st.Specs {
+			a.reexports = append(a.reexports, reexport{name: sp.Exported, imported: sp.Local, from: st.From})
+		}
+		return
+	}
+	for _, sp := range st.Specs {
+		a.exportLocal = append(a.exportLocal, [2]string{sp.Local, sp.Exported})
+	}
 }
 
 // block interprets a nested block in the same function scope.
@@ -1200,9 +1312,11 @@ func (a *analyzer) expr(s *scope, x js.Expr) val {
 			for _, e := range x.Exprs {
 				out = join(out, a.expr(s, e))
 			}
-			// sql`...` binds its substitutions as parameters.
-			if t := exprText(x.Tag); t == "sql" || strings.HasSuffix(t, ".sql") || tag.ref == "sql" {
-				out.safe |= taint.SQL
+			// sql`...` binds its substitutions as parameters, and what it
+			// returns is the rows the database holds: a row found by a key
+			// from the request does not hold that request's data.
+			if isSQLTag(x.Tag, tag) {
+				return val{}
 			}
 			return out
 		}
@@ -1372,7 +1486,20 @@ func (a *analyzer) field(base val, prop string, line int, text string) val {
 			return val{req: true}
 		}
 	}
+	if base.mod != "" && a.proj != nil {
+		if v, ok := a.proj.export(base.mod, prop, 0); ok {
+			if base.ref != "" {
+				v.ref = base.ref + "." + prop
+			}
+			return v
+		}
+	}
 	if f, ok := base.fields[prop]; ok {
+		if f.owner == nil {
+			// A function in an object another file exports is that
+			// file's to analyze.
+			f.owner = base.owner
+		}
 		return f
 	}
 	out := val{}
@@ -1626,6 +1753,29 @@ func (a *analyzer) assignExpr(s *scope, x *js.Assign) val {
 	a.storeEnd = lastLine(x.Value)
 	a.bind(s, x.Target, v, false)
 	a.storeEnd = 0
+	if x.Op == "=" {
+		switch t := exprText(x.Target); {
+		case t == "module.exports" || t == "exports":
+			a.exportVals["default"] = v
+		case strings.HasPrefix(t, "module.exports.") && strings.Count(t, ".") == 2,
+			strings.HasPrefix(t, "exports.") && strings.Count(t, ".") == 1:
+			name := t[strings.LastIndexByte(t, '.')+1:]
+			a.exportVals[name] = v
+			// module.exports = {...}; module.exports.extra = fn. A copy:
+			// the map may be shared with v itself (module.exports = api;
+			// module.exports.api = api), and writing into it would make
+			// the object contain itself.
+			if d, ok := a.exportVals["default"]; ok && d.fields != nil {
+				f := make(map[string]val, len(d.fields)+1)
+				for k, fv := range d.fields {
+					f[k] = fv
+				}
+				f[name] = v
+				d.fields = f
+				a.exportVals["default"] = d
+			}
+		}
+	}
 	return v
 }
 
@@ -1788,6 +1938,9 @@ func (a *analyzer) call(s *scope, c *js.Call) val {
 	if name == "require" || name == "import" {
 		if len(c.Args) > 0 {
 			if l, ok := c.Args[0].(*js.Lit); ok && l.Kind == js.TString {
+				if file := a.importFile(l.Val); file != "" {
+					return a.proj.moduleVal(l.Val, file)
+				}
 				return val{ref: moduleName(l.Val)}
 			}
 		}
@@ -2024,13 +2177,14 @@ func (a *analyzer) reportArgs(k *taint.Sink, c *js.Call, args []val, idx int) {
 }
 
 func (a *analyzer) report(k *taint.Sink, v val, line, end int) {
-	a.reportTrace(k, v.taintFor(k.Kind, 0), nil, line, end)
+	a.reportTrace(k, v.taintFor(k.Kind, 0), nil, "", line, end)
 }
 
 // reportTrace reports trace t reaching sink k at line, after the steps in
 // tail (inside a called function). A placeholder trace of the function
 // being summarized becomes part of its summary instead.
-func (a *analyzer) reportTrace(k *taint.Sink, t *taint.Trace, tail []taint.Step, line, end int) {
+// file is the file of the sink when it is in another file of the project.
+func (a *analyzer) reportTrace(k *taint.Sink, t *taint.Trace, tail []taint.Step, file string, line, end int) {
 	if t == nil || k.RequestOnly && t.Library {
 		return
 	}
@@ -2040,21 +2194,53 @@ func (a *analyzer) reportTrace(k *taint.Sink, t *taint.Trace, tail []taint.Step,
 			return // a placeholder of another summary
 		}
 		steps := append(append([]taint.Step{}, t.Steps()[1:]...), tail...)
-		key := k.ID + "|" + strconv.Itoa(line)
+		key := file + "|" + k.ID + "|" + strconv.Itoa(line)
 		if !run.hitSeen[key] {
 			run.hitSeen[key] = true
-			run.hits = append(run.hits, sinkHit{sink: k, line: line, end: end, steps: steps})
+			run.hits = append(run.hits, sinkHit{sink: k, line: line, end: end, steps: steps, file: file})
 		}
 		return
 	}
-	key := k.ID + "|" + strconv.Itoa(line)
+	if file == "" || file == a.file {
+		file = ""
+	}
+	at := a.file
+	if file != "" {
+		at = file
+	}
+	key := at + "|" + k.ID + "|" + strconv.Itoa(line)
 	if a.seen[key] {
 		return
 	}
 	a.seen[key] = true
 	steps := append(t.Steps(), tail...)
+	if file != "" {
+		// The steps of this file name it: the finding is in the other.
+		for i := range steps {
+			if steps[i].File == "" {
+				steps[i].File = a.file
+			} else if steps[i].File == file {
+				steps[i].File = ""
+			}
+		}
+	}
 	steps = append(steps, taint.Step{Line: line, What: k.Title})
-	a.out = append(a.out, taint.Finding{Sink: k, File: a.file, Line: line, EndLine: end, Steps: steps, Library: t.Library})
+	a.out = append(a.out, taint.Finding{Sink: k, File: at, Line: line, EndLine: end, Steps: steps, Library: t.Library})
+}
+
+// inFile marks steps of another module m with its file.
+func inFile(steps []taint.Step, m *analyzer) []taint.Step {
+	if m == nil {
+		return steps
+	}
+	out := make([]taint.Step, len(steps))
+	for i, st := range steps {
+		if st.File == "" {
+			st.File = m.file
+		}
+		out[i] = st
+	}
+	return out
 }
 
 // returned records a return of the function being summarized.
@@ -2142,7 +2328,13 @@ func (a *analyzer) summarize(fn *js.Func, env *scope) *summary {
 // applySummary follows a call of a function of the file: arguments reach
 // the sinks inside it and, where it returns them, the result.
 func (a *analyzer) applySummary(c *js.Call, callee val, args []val) (val, bool) {
-	sum := a.summarize(callee.fn, callee.env)
+	// A function of another file is summarized by that file's analysis;
+	// its steps and sinks are then marked with that file.
+	owner, foreign := a, (*analyzer)(nil)
+	if callee.owner != nil && callee.owner != a {
+		owner, foreign = callee.owner, callee.owner
+	}
+	sum := owner.summarize(callee.fn, callee.env)
 	if sum == nil {
 		return val{}, false
 	}
@@ -2155,6 +2347,9 @@ func (a *analyzer) applySummary(c *js.Call, callee val, args []val) (val, bool) 
 	}
 	out := val{}
 	if t := sum.other.anyTaint(); t != nil {
+		if foreign != nil {
+			t = taint.FromSteps(inFile(t.Steps(), foreign), t.Library)
+		}
 		out = val{t: t.Add(c.Line, name+"()"), safe: safeOf(sum.other)}
 	}
 	for j, v := range args {
@@ -2172,16 +2367,30 @@ func (a *analyzer) applySummary(c *js.Call, callee val, args []val) (val, bool) 
 		via := t.Add(c.Line, name+"()")
 		for _, h := range sum.sinks[i] {
 			if tk := v.taintFor(h.sink.Kind, 0); tk != nil {
-				a.reportTrace(h.sink, tk.Add(c.Line, name+"()"), h.steps, h.line, h.end)
+				file := h.file
+				if file == "" && foreign != nil {
+					file = foreign.file
+				}
+				a.reportTrace(h.sink, tk.Add(c.Line, name+"()"), inFile(h.steps, foreign), file, h.line, h.end)
 			}
 		}
 		if r := sum.ret[i]; r.ok {
 			rt := via
-			for _, st := range r.steps {
-				rt = rt.Add(st.Line, st.What)
+			for _, st := range inFile(r.steps, foreign) {
+				rt = rt.AddStep(st)
 			}
 			out = join(out, val{t: rt, safe: safeOf(v) | r.safe})
 		}
 	}
 	return out, true
+}
+
+// isSQLTag reports a template tag that builds a parameterized query: sql,
+// db.sql, or a call returning the tag, as in sql()`...`.
+func isSQLTag(x js.Expr, v val) bool {
+	if c, ok := x.(*js.Call); ok {
+		x = c.Callee
+	}
+	t := exprText(x)
+	return t == "sql" || strings.HasSuffix(t, ".sql") || v.ref == "sql"
 }

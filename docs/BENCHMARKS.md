@@ -282,7 +282,7 @@ On seven real application repositories (about 5,000 JavaScript and TypeScript fi
 
 ### Built-in taint engine
 
-The built-in taint engine (#347, adapter `builtin-taint`, enabled by default since #381; `scan.taint_engine: false` turns it off) follows data from a source to a sink within one file: request objects and route handler parameters, browser URL globals and, in a published npm package, the parameters of exported functions. The CVE benchmark measures it as the engine `taint` (`--engine taint`).
+The built-in taint engine (#347, adapter `builtin-taint`, enabled by default since #381; `scan.taint_engine: false` turns it off) follows data from a source to a sink, across the files of the project since M2 of #347: request objects and route handler parameters, browser URL globals and, in a published npm package, the parameters of exported functions. The CVE benchmark measures it as the engine `taint` (`--engine taint`).
 
 `tools/taintcve` is the development check: it analyzes only the labelled files of each CVE, fetched beforehand at both commits, and scores them the same way. The engine follows calls between the functions of a file through per-function summaries (which parameters reach which sinks and the return value), including methods called on `this` and fields a constructor sets. Beyond flows from a source it checks the shape of prototype pollution (a recursive merge or a walk along a key path that writes a key without skipping `__proto__`).
 

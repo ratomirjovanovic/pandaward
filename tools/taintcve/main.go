@@ -12,14 +12,19 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime/pprof"
 	"sort"
 	"strings"
 
+	"github.com/ratomirjovanovic/pandaward/internal/adapters"
+	"github.com/ratomirjovanovic/pandaward/internal/config"
+	"github.com/ratomirjovanovic/pandaward/internal/inventory"
 	"github.com/ratomirjovanovic/pandaward/internal/taint"
 	"github.com/ratomirjovanovic/pandaward/internal/taint/js"
 	"github.com/ratomirjovanovic/pandaward/internal/taint/jsflow"
@@ -45,7 +50,14 @@ func main() {
 	verbose := flag.Bool("v", false, "print every CVE")
 	only := flag.String("cve", "", "comma-separated CVE ids")
 	scan := flag.Bool("scan", false, "instead: print the findings in application code under the directories given as arguments (no library mode)")
+	cpu := flag.String("cpuprofile", "", "write a CPU profile to this file")
 	flag.Parse()
+	if *cpu != "" {
+		f, err := os.Create(*cpu)
+		if err == nil && pprof.StartCPUProfile(f) == nil {
+			defer pprof.StopCPUProfile()
+		}
+	}
 	if *scan {
 		scanApps(flag.Args())
 		return
@@ -188,47 +200,27 @@ func count(m map[string][]taint.Finding, rule string) int {
 }
 
 // scanApps prints every finding in the application code under dirs, for
-// reviewing precision by hand.
+// reviewing precision by hand. It runs the builtin-taint adapter on an
+// inventory of each directory, as a scan does.
 func scanApps(dirs []string) {
-	spec, err := taint.Load("javascript")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
-	}
-	skip := map[string]bool{"node_modules": true, ".next": true, "dist": true, "build": true, "out": true, "coverage": true, "target": true, ".claude": true, ".git": true, ".pandaward": true, "vendor": true}
-	exts := map[string]bool{".js": true, ".jsx": true, ".mjs": true, ".cjs": true, ".ts": true, ".tsx": true}
 	files, total := 0, 0
 	for _, root := range dirs {
-		_ = filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
-			if err != nil {
-				return nil
-			}
-			if d.IsDir() {
-				if skip[d.Name()] {
-					return filepath.SkipDir
-				}
-				return nil
-			}
-			name := d.Name()
-			if !exts[strings.ToLower(filepath.Ext(name))] || strings.Contains(name, ".min.") || strings.HasSuffix(name, ".d.ts") || strings.Contains(p, "test") || strings.Contains(p, "spec") {
-				return nil
-			}
-			b, err := os.ReadFile(p)
-			if err != nil || len(b) > 1<<20 {
-				return nil
-			}
-			files++
-			f := js.Parse(p, string(b), js.OptionsFor(p))
-			for _, fd := range jsflow.Analyze(f, spec, jsflow.Options{}) {
-				total++
-				var steps []string
-				for _, st := range fd.Steps {
-					steps = append(steps, fmt.Sprintf("%s@%d", st.What, st.Line))
-				}
-				fmt.Printf("%s:%d %s\n    %s\n", p, fd.Line, fd.Sink.ID, strings.Join(steps, " -> "))
-			}
-			return nil
-		})
+		cfg := config.Default("scan")
+		inv, err := inventory.Walk(root, inventory.Options{Exclude: cfg.Inventory.Exclude, MaxFileBytes: cfg.Inventory.MaxFileBytes, MaxFiles: cfg.Inventory.MaxFiles})
+		if err != nil {
+			fmt.Fprintln(os.Stderr, root, err)
+			continue
+		}
+		res, run := adapters.ByName(adapters.TaintAdapter).Run(context.Background(), &adapters.Context{Root: root, Inv: inv, Cfg: cfg})
+		fmt.Fprintln(os.Stderr, root+":", run.Detail)
+		var k int
+		if _, err := fmt.Sscanf(run.Detail, "%d", &k); err == nil {
+			files += k
+		}
+		for _, sg := range res.Signals {
+			total++
+			fmt.Printf("%s:%d %s\n    %s\n", filepath.Join(root, filepath.FromSlash(sg.File)), sg.StartLine, sg.RuleID, sg.Message)
+		}
 	}
 	fmt.Printf("%d files, %d findings\n", files, total)
 }

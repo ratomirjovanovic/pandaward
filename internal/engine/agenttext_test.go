@@ -86,3 +86,12 @@ func TestP004NotApplicableWithoutAgentText(t *testing.T) {
 		t.Errorf("P-004 = %s, want NOT_APPLICABLE", st)
 	}
 }
+
+// A Node.js script without an extension in bin/ is JavaScript to the
+// inventory, so changing it re-runs the code adapters.
+func TestBinScriptChangesRerunCodeAdapters(t *testing.T) {
+	got := AffectedAdapters([]string{"builtin-code", "builtin-taint", "builtin-cicd"}, []string{"bin/serve"})
+	if !got["builtin-code"] || !got["builtin-taint"] || got["builtin-cicd"] {
+		t.Errorf("bin/serve re-runs %v", got)
+	}
+}
