@@ -4,13 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path"
 	"strings"
 
 	"github.com/ratomirjovanovic/pandaward/internal/inventory"
 	"github.com/ratomirjovanovic/pandaward/internal/model"
 	"github.com/ratomirjovanovic/pandaward/internal/redact"
 	"github.com/ratomirjovanovic/pandaward/internal/taint"
-	"github.com/ratomirjovanovic/pandaward/internal/taint/js"
 	"github.com/ratomirjovanovic/pandaward/internal/taint/jsflow"
 	"github.com/ratomirjovanovic/pandaward/internal/version"
 )
@@ -46,26 +46,53 @@ func (a taintAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 		return res, finish(run, model.ExitError, err.Error(), 0)
 	}
 	library := isLibrary(c.Inv)
-	files, parseErrors := 0, 0
+	var paths []string
 	for _, f := range c.Inv.Files {
-		if ctx.Err() != nil {
-			return res, finish(run, model.ExitTimeout, "cancelled", len(res.Signals))
-		}
 		if f.Lang != "javascript" && f.Lang != "typescript" || IsTestPath(f.Path) || strings.Contains(f.Path, ".min.") || strings.HasSuffix(f.Path, ".d.ts") {
 			continue
 		}
 		if len(f.Lines) > 0 && len(f.Lines) < 5 && len(f.Lines[0]) > 2000 {
 			continue // minified
 		}
-		files++
-		parsed := js.Parse(f.Path, strings.Join(f.Lines, "\n"), js.OptionsFor(f.Path))
-		if len(parsed.Errors) > 0 {
-			parseErrors++
+		paths = append(paths, f.Path)
+	}
+	// The files are analyzed as one project: a call of a function another
+	// file exports follows that function, so a flow through a helper
+	// module is found at its sink.
+	src := func(p string) (string, bool) {
+		f := c.Inv.FileByPath(p)
+		if f == nil {
+			return "", false
 		}
-		for _, fd := range jsflow.Analyze(parsed, spec, jsflow.Options{Library: library}) {
-			res.Signals = append(res.Signals, taintSignal(fd, f, a.Name()))
+		return strings.Join(f.Lines, "\n"), true
+	}
+	// Resolution depends on the directory of the importing file only;
+	// aliases read the nearest tsconfig.json, so remember the answers.
+	resolved := map[[2]string]string{}
+	resolve := func(from, spec string) string {
+		key := [2]string{path.Dir(from), spec}
+		if r, ok := resolved[key]; ok {
+			return r
+		}
+		r := ""
+		if f := resolveLocal(c.Inv, from, spec); f != nil {
+			r = f.Path
+		}
+		resolved[key] = r
+		return r
+	}
+	proj := jsflow.NewProject(spec, jsflow.Options{Library: library}, paths, src, resolve)
+	for _, p := range paths {
+		if ctx.Err() != nil {
+			return res, finish(run, model.ExitTimeout, "cancelled", len(res.Signals))
+		}
+		for _, fd := range proj.Analyze(p) {
+			if f := c.Inv.FileByPath(fd.File); f != nil {
+				res.Signals = append(res.Signals, taintSignal(fd, f, a.Name()))
+			}
 		}
 	}
+	files, parseErrors := len(paths), proj.ParseErrors
 	detail := fmt.Sprintf("%d JavaScript/TypeScript files", files)
 	if library {
 		detail += "; library mode: parameters of exported functions are sources"
@@ -85,9 +112,17 @@ func taintSignal(fd taint.Finding, f *inventory.File, collector string) model.Si
 		// that is attacker input depends on the application using it.
 		sev, conf = model.SevMedium, model.Hypothesis
 	}
+	// Each step is redacted on its own: the steps quote code, which may
+	// hold secrets, and redacting the whole message would cut a long flow
+	// across files short.
 	var steps []string
 	for _, s := range fd.Steps {
-		steps = append(steps, fmt.Sprintf("%s (line %d)", s.What, s.Line))
+		what := redact.Line(s.What)
+		if s.File != "" && s.File != f.Path {
+			steps = append(steps, fmt.Sprintf("%s (%s line %d)", what, redact.Sanitize(s.File), s.Line))
+			continue
+		}
+		steps = append(steps, fmt.Sprintf("%s (line %d)", what, s.Line))
 	}
 	snippet := ""
 	if fd.Line >= 1 && fd.Line <= len(f.Lines) {
@@ -96,8 +131,7 @@ func taintSignal(fd taint.Finding, f *inventory.File, collector string) model.Si
 	return model.Signal{
 		RuleID: k.ID, ControlID: k.Control, Title: k.Title, Severity: sev, Confidence: conf, CWE: k.CWE,
 		File: f.Path, StartLine: fd.Line, EndLine: fd.EndLine, Snippet: snippet,
-		// The steps quote code, which may hold secrets.
-		Message: redact.Line(k.Message + " Flow: " + strings.Join(steps, " -> ") + "."), Fix: k.Fix, Collector: collector,
+		Message: k.Message + " Flow: " + strings.Join(steps, " -> ") + ".", Fix: k.Fix, Collector: collector,
 	}
 }
 
