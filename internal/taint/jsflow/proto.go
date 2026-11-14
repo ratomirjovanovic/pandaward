@@ -370,8 +370,9 @@ func readsKey(fn *js.Func, target, key string, write *js.Assign) bool {
 		if found {
 			return false
 		}
-		if as, ok := n.(*js.Assign); ok && as == write {
-			// The written member itself is not a read; its value may be.
+		if as, ok := n.(*js.Assign); ok && (as == write || as.Op == "=" && isKeyRead(as.Target, target, key)) {
+			// A written member is not a read, this write or another one;
+			// the value may be.
 			js.Inspect(as.Value, func(m js.Node) bool {
 				found = found || isKeyRead(m, target, key)
 				return !found

@@ -524,6 +524,17 @@ exports.merge = function (target, source) {
   return target;
 };`, false)
 
+	expect(t, "writes into a result that is never read back", `
+function unwrap(input, parentRef) {
+  const keys = Object.keys(input);
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    if (typeof input[key] !== 'object') { parentRef[key] = input[key]; continue; }
+    parentRef[key] = unwrap(input[key], {});
+  }
+  return parentRef;
+}`, false)
+
 	expect(t, "a value check is not a key check", `
 function set(target, keys, value) {
   for (let i = 0; i < keys.length; i++) {
