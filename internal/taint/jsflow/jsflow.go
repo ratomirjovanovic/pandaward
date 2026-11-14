@@ -2044,7 +2044,7 @@ func (a *analyzer) call(s *scope, c *js.Call) val {
 	for _, v := range args {
 		out = join(out, v)
 	}
-	if method == "" && name != "" && name != "new URL" {
+	if method == "" && name != "" && name != "new URL" && !decoders[name] {
 		// A function from another module: a value it derives is usually
 		// checked or mapped (localizedPath(locale)), so it no longer
 		// chooses a host. Text built from it is still followed.
@@ -2061,6 +2061,16 @@ func (a *analyzer) call(s *scope, c *js.Call) val {
 		out.t = out.t.Add(c.Line, shortName(name)+"()")
 	}
 	return out
+}
+
+// decoders return their input decoded or parsed, not mapped to a value of
+// the code's choosing: a URL read from the query string by them still
+// chooses the host.
+var decoders = map[string]bool{
+	"decodeURIComponent": true, "decodeURI": true, "unescape": true, "atob": true,
+	"querystring.parse": true, "querystring.decode": true, "querystring.unescape": true,
+	"qs.parse": true, "query-string.parse": true, "query-string.parseUrl": true,
+	"url.parse": true,
 }
 
 func recvTaint(recv val, method string) val {
