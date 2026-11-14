@@ -312,3 +312,22 @@ app.get('/', (req, res) => {
 });`,
 	}, "x.js:command-injection:2")
 }
+
+func TestCrossFileListHelper(t *testing.T) {
+	// CVE-2018-16484 (m-server): the request path is rendered into a
+	// directory listing by a helper in another file.
+	expectProject(t, "render helper in another file", map[string]string{
+		"lib/index.js": `
+var http = require('http');
+var utils = require('./utils');
+http.createServer(function (req, res) {
+  res.write(utils.render(req.url, [], []));
+});`,
+		"lib/utils.js": `
+exports.render = function (path, dirs, files) {
+  var html = [];
+  html.push("<h1>" + path + "</h1>");
+  return html.join('');
+};`,
+	}, "lib/index.js:xss:5")
+}

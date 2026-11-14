@@ -1969,6 +1969,25 @@ func (a *analyzer) call(s *scope, c *js.Call) val {
 		args[1] = val{t: base.anyTaint(), safe: safeOf(base) | taint.Redirect | taint.SSRF}
 	}
 
+	// list.push(x): the array now holds x, as markup built in a list and
+	// joined at the end does.
+	if method == "push" || method == "unshift" {
+		if m, ok := c.Callee.(*js.Member); ok {
+			if id, ok := m.Obj.(*js.Ident); ok {
+				added := val{}
+				for _, v := range args {
+					added = join(added, v)
+				}
+				if added.anyTaint() != nil {
+					all := join(recv, added)
+					nv := recv
+					nv.t, nv.safe = all.t.Add(c.Line, id.Name+"."+method+"()"), all.safe
+					s.assign(id.Name, nv)
+				}
+			}
+		}
+	}
+
 	a.sinks(c, name, method, recvText, recv, args)
 
 	// Functions named like sanitizers (safeNextPath, sanitizeName,
