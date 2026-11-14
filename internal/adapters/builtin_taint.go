@@ -16,11 +16,14 @@ import (
 )
 
 // taintAdapter runs the built-in taint engine on JavaScript and TypeScript.
-// It is not in the default adapter list yet: add builtin-taint to
-// scan.adapters to try it (#347).
+// It runs by default next to builtin-code; scan.taint_engine: false turns
+// it off (#381).
 type taintAdapter struct{}
 
-func (taintAdapter) Name() string { return "builtin-taint" }
+// TaintAdapter is the name of the built-in taint engine adapter.
+const TaintAdapter = "builtin-taint"
+
+func (taintAdapter) Name() string { return TaintAdapter }
 
 // Controls is empty: the taint engine owns no control. Its findings carry
 // the controls of the weakness (D-001, D-002, D-003, D-006, H-001) and can
@@ -93,7 +96,8 @@ func taintSignal(fd taint.Finding, f *inventory.File, collector string) model.Si
 	return model.Signal{
 		RuleID: k.ID, ControlID: k.Control, Title: k.Title, Severity: sev, Confidence: conf, CWE: k.CWE,
 		File: f.Path, StartLine: fd.Line, EndLine: fd.EndLine, Snippet: snippet,
-		Message: k.Message + " Flow: " + strings.Join(steps, " -> ") + ".", Fix: k.Fix, Collector: collector,
+		// The steps quote code, which may hold secrets.
+		Message: redact.Line(k.Message + " Flow: " + strings.Join(steps, " -> ") + "."), Fix: k.Fix, Collector: collector,
 	}
 }
 

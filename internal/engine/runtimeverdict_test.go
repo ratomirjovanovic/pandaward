@@ -11,6 +11,7 @@ import (
 
 	"github.com/ratomirjovanovic/pandaward/internal/engine"
 	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/redact"
 	"github.com/ratomirjovanovic/pandaward/internal/report"
 )
 
@@ -183,6 +184,11 @@ func TestRuntimeVerdictStaleOnFileChangeAndExpiry(t *testing.T) {
 	c := latestControls(t, e)["C-001"]
 	if c.Status != model.StatusStale || !strings.Contains(c.Reason, "src/server.js") || !strings.Contains(c.Reason, "was PASS") {
 		t.Fatalf("C-001 after a route file change = %s %q, want STALE naming src/server.js", c.Status, c.Reason)
+	}
+	if redact.HasSecrets(c.Reason) {
+		// "was PASS: src/..." reads as a password assignment and would be
+		// redacted in reports and block a bundle export.
+		t.Fatalf("stale reason %q looks like a secret to the redactor", c.Reason)
 	}
 	if c := reportControls(t, e)["C-001"]; c.Status != model.StatusStale {
 		t.Fatalf("report C-001 after the scan = %s, want STALE", c.Status)
