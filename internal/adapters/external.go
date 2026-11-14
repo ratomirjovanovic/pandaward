@@ -453,6 +453,9 @@ func semgrep() Adapter {
 			if err != nil {
 				return nil, err
 			}
+			if err := addRequestSources(bundled, requestWrapperSources(c.Inv)); err != nil {
+				return nil, err
+			}
 			if extra := configAlgorithmRules(c.Inv); extra != nil {
 				if err := os.WriteFile(filepath.Join(bundled, "generated-config-algorithms.yaml"), extra, 0o600); err != nil {
 					return nil, err
