@@ -94,10 +94,10 @@
       }
     },
     "owasp/python/opengrep": {
-      "average_score_covered": 0.5300699038607737,
+      "average_score_covered": 0.5560439298347997,
       "categories": {
         "cmdi": 0.6263736263736264,
-        "codeinj": 0.08484848484848484,
+        "codeinj": 0.4484848484848485,
         "deserialization": 0.6666666666666667,
         "hash": 1,
         "ldapi": 0.6730769230769231,
@@ -132,10 +132,10 @@
       }
     },
     "owasp/python/semgrep": {
-      "average_score_covered": 0.43296289974652036,
+      "average_score_covered": 0.4589369257205464,
       "categories": {
         "cmdi": 0.47252747252747257,
-        "codeinj": 0.024242424242424176,
+        "codeinj": 0.3878787878787878,
         "deserialization": 0.6666666666666667,
         "hash": 1,
         "ldapi": 0.5336538461538461,
