@@ -58,8 +58,17 @@ func TestIsLibrary(t *testing.T) {
 		{`{"name":"x","exports":{".":"./a.js"}}`, true},
 		{`{"name":"x","private":true,"main":"index.js"}`, false},
 		{`{"name":"app","scripts":{"dev":"next dev"}}`, false},
+		{`{"name":"x","version":"1.0.0"} + index.js`, true},
+		{`{"name":"x"} + index.js`, false},
+		{`{"name":"x","version":"1.0.0","private":true} + index.js`, false},
+		{`{"name":"x","version":"1.0.0"}`, false},
 	} {
-		inv := &inventory.Inventory{Files: []*inventory.File{{Path: "package.json", Lines: strings.Split(c.pkg, "\n")}}}
+		pkg, index, _ := strings.Cut(c.pkg, " + ")
+		inv := &inventory.Inventory{Files: []*inventory.File{{Path: "package.json", Lines: strings.Split(pkg, "\n")}}}
+		if index != "" {
+			// Files are sorted by path.
+			inv.Files = append([]*inventory.File{{Path: index, Lang: "javascript"}}, inv.Files...)
+		}
 		if got := isLibrary(inv); got != c.want {
 			t.Errorf("%s: %v", c.pkg, got)
 		}

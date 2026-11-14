@@ -21,6 +21,9 @@ func adapterWatches(adapter, p string) bool {
 	p = strings.TrimSuffix(p, " (deleted)")
 	base := strings.ToLower(path.Base(p))
 	lang := inventory.LangOf(base)
+	if lang == "" && path.Ext(p) == "" && path.Base(path.Dir(p)) == "bin" {
+		lang = "javascript" // a Node.js script such as bin/serve, as the inventory reads it
+	}
 	switch adapter {
 	case "builtin-code":
 		return isCodeLang(lang) || inventory.IsAgentInstructions(p) || inventory.IsMCPConfig(p)

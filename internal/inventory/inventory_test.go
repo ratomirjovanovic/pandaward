@@ -471,3 +471,21 @@ func TestWalkSkipsLinkedWorktrees(t *testing.T) {
 		t.Errorf("skipped = %v", inv.Skipped)
 	}
 }
+
+func TestWalkFindsNodeScriptsInBin(t *testing.T) {
+	inv := walk(t, map[string]string{
+		"bin/serve":    "#!/usr/bin/env node\nrequire('../lib/serve');\n",
+		"bin/setup":    "#!/bin/sh\necho hi\n",
+		"tools/run":    "#!/usr/bin/env node\nconsole.log(1);\n",
+		"bin/readme":   "plain text\n",
+		"lib/serve.js": "module.exports = 1;\n",
+	}, inventory.Options{MaxFileBytes: 1024})
+	got := map[string]string{}
+	for _, f := range inv.Files {
+		got[f.Path] = f.Lang
+	}
+	want := map[string]string{"bin/serve": "javascript", "lib/serve.js": "javascript"}
+	if len(got) != len(want) || got["bin/serve"] != "javascript" || got["lib/serve.js"] != "javascript" {
+		t.Errorf("files = %v, want %v", got, want)
+	}
+}

@@ -136,13 +136,15 @@ func taintSignal(fd taint.Finding, f *inventory.File, collector string) model.Si
 }
 
 // isLibrary reports a published npm package: a root package.json that is
-// not private and names an entry point.
+// not private and names an entry point or has the default one, index.js.
 func isLibrary(inv *inventory.Inventory) bool {
 	f := inv.FileByPath("package.json")
 	if f == nil {
 		return false
 	}
 	var pkg struct {
+		Name    string          `json:"name"`
+		Version string          `json:"version"`
 		Private bool            `json:"private"`
 		Main    string          `json:"main"`
 		Module  string          `json:"module"`
@@ -152,5 +154,10 @@ func isLibrary(inv *inventory.Inventory) bool {
 	if json.Unmarshal([]byte(strings.Join(f.Lines, "\n")), &pkg) != nil || pkg.Private {
 		return false
 	}
-	return pkg.Main != "" || pkg.Module != "" || len(pkg.Exports) > 0 || len(pkg.Bin) > 0
+	if pkg.Main != "" || pkg.Module != "" || len(pkg.Exports) > 0 || len(pkg.Bin) > 0 {
+		return true
+	}
+	// Without main, npm loads index.js: a named, versioned package with
+	// one publishes it.
+	return pkg.Name != "" && pkg.Version != "" && inv.FileByPath("index.js") != nil
 }
