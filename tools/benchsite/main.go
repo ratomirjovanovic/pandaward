@@ -266,7 +266,7 @@ func parseCVE(b []byte) (*CVE, error) {
 	return c, nil
 }
 
-var engineLabel = map[string]string{"pandaward": "PandaWard", "builtin": "Built-in rules", "semgrep": "Semgrep", "opengrep": "Opengrep"}
+var engineLabel = map[string]string{"pandaward": "PandaWard", "builtin": "Built-in rules", "taint": "Built-in taint engine", "semgrep": "Semgrep", "opengrep": "Opengrep"}
 
 var funcs = template.FuncMap{
 	"engine": func(name string) string {
@@ -329,7 +329,7 @@ var funcs = template.FuncMap{
 	"engines": func() []string { return []string{"builtin", "semgrep", "opengrep"} },
 	// The CVE benchmark also scores PandaWard as a whole (built-in rules
 	// plus Semgrep); older snapshots lack it and show "-".
-	"cveengines": func() []string { return []string{"pandaward", "builtin", "semgrep", "opengrep"} },
+	"cveengines": func() []string { return []string{"pandaward", "builtin", "taint", "semgrep", "opengrep"} },
 }
 
 func shortCommit(s string) string {
