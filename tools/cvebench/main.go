@@ -370,7 +370,7 @@ func hasEngine(outs []Outcome, engine string) bool {
 }
 
 // combinedSemgrep returns the Semgrep engine the combined score uses:
-// semgrep, the scan's default, or opengrep when only that was selected; ""
+// opengrep, the scan's default, or semgrep when only that was selected; ""
 // when the built-in engine or both Semgrep engines are missing.
 func combinedSemgrep(selected []string) string {
 	has := map[string]bool{}
@@ -380,10 +380,10 @@ func combinedSemgrep(selected []string) string {
 	switch {
 	case !has["builtin"]:
 		return ""
-	case has["semgrep"]:
-		return "semgrep"
 	case has["opengrep"]:
 		return "opengrep"
+	case has["semgrep"]:
+		return "semgrep"
 	}
 	return ""
 }

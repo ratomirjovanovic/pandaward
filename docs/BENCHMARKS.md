@@ -44,7 +44,7 @@ sh tools/owaspbench/run.sh --engine semgrep --json              # JSON
 1. walks the checkout with the same inventory settings as `pandaward scan` (default excludes and size limits);
 2. runs each selected engine in process: `builtin` runs the built-in adapters; `semgrep` and `opengrep` run PandaWard's bundled Semgrep rules (`rules/semgrep`) through the same adapter a scan uses, offline, with no project or registry rules. Opengrep runs with `--taint-intrafile`. An engine that is not installed is reported as not run, never as a score of zero;
 3. maps each finding to a test case by its file name, and to a Benchmark category by rule (explicit table for built-in rules) or by the rule's CWE;
-4. counts a test case as flagged when a finding of the test case's own category is in its file, as the OWASP scorecard does. Findings of another category in the same file are reported separately and do not change the matrix. In the merged `all` result a test case counts once, however many engines flag it;
+4. counts a test case as flagged when a finding of the test case's own category is in its file, as the OWASP scorecard does. Findings of another category in the same file are reported separately and do not change the matrix. The `pandaward` result scores PandaWard as a scan runs it: the built-in findings, without the heuristics a bundled rule replaces, plus those of one Semgrep engine, Opengrep when it was measured and Semgrep otherwise; a test case counts once, however many rules flag it;
 5. prints TP, FP, FN, TN, the true positive rate (TPR), the false positive rate (FPR) and the Benchmark score, TPR - FPR (Youden's index), per category and engine, with each engine's version and the SHA-256 of the bundled Semgrep rule set.
 
 A category with no rule for an engine is shown as "not covered" rather than as a score of zero. The test case directory, `src/main/java/org/owasp/benchmark/testcode/`, is not treated as a test or fixture path, so every test case file is analyzed (the tool checks and reports this).
@@ -147,7 +147,7 @@ With the bundled rules on Opengrep, PandaWard reaches the 0.50 target of the Pan
 - **Hash, weak random and insecure cookie** are pattern rules and score 1.000.
 - **Deserialization stays a pattern rule**: `pickle` and `yaml.load` run code from their input whatever its source, so every call is reported. A taint version scored lower (+0.528), because it missed cases where the input passes through a step the engines do not follow, and the gate rejected it.
 - **The remaining misses** come mostly from three constructions: input read through a request wrapper class in another module (`helpers.separate_request`), which needs cross-file taint; string slices (`s[4:-17]`), through which neither engine propagates taint; and values passed through a configuration object.
-- **The remaining false positives** come from the same value-dependent constructions as in Java: a `match` on a character of a constant string, a list element taken by index after a removal, and a dictionary read with a constant key. Code injection (+0.085) is low for another reason: two thirds of its safe cases check that the input is a plain string literal before calling `exec`, and a rule cannot model that check.
+- **The remaining false positives** come from the same value-dependent constructions as in Java: a `match` on a character of a constant string, a list element taken by index after a removal, and a dictionary read with a constant key. Code injection (+0.085) was low for another reason: two thirds of its safe cases return early unless the input is one quoted string literal before calling `eval`. The rule skips the call after that check (#392); measured locally with Semgrep 1.182.1 on the 53 codeinj cases, false positives drop from 19 to 7 with the 12 true positives unchanged (+0.024 to +0.388). The 7 left take a branch that is always taken on constants, and the 8 misses read the request through `helpers.separate_request` in another module.
 - **Opengrep leads Semgrep** (+0.530 against +0.433) for the same reason as in Java: it follows taint through functions in the same file.
 
 ## OpenSSF CVE Benchmark (JavaScript and TypeScript)
@@ -157,7 +157,7 @@ The [OpenSSF CVE Benchmark](https://github.com/ossf-cve-benchmark/ossf-cve-bench
 ### How it is measured
 
 ```sh
-sh tools/cvebench/run.sh --engine builtin,semgrep,opengrep          # table
+sh tools/cvebench/run.sh --engine builtin,taint,semgrep,opengrep    # table
 sh tools/cvebench/run.sh --engine opengrep --cve CVE-2018-3721       # one CVE
 sh tools/cvebench/run.sh --engine builtin --json                     # JSON
 ```
@@ -168,55 +168,55 @@ sh tools/cvebench/run.sh --engine builtin --json                     # JSON
 - **CWE match**: one of those findings carries one of the CVE's CWEs;
 - **fix recognized**: a detecting rule reports fewer findings in the vulnerable files after the fix. Otherwise the CVE is **still flagged after the fix**, the fixed-commit false positive;
 - **unavailable**: a commit could not be fetched or checked out (repository gone). Such CVEs are not scored.
-- **PandaWard**: when the built-in engine and Semgrep or Opengrep are measured together, the built-in findings and the Semgrep findings (Opengrep's when Semgrep was not measured) are scored as one engine, `pandaward`, as a scan runs both. A CVE counts once when either finds it; the fix is recognized when one of the detecting rules reports fewer findings after it.
+- **PandaWard**: when the built-in engine and Semgrep or Opengrep are measured together, the built-in findings, the taint engine's and the Opengrep findings (Semgrep's when Opengrep was not measured, as a scan falls back to Semgrep) are scored as one engine, `pandaward`, as a scan runs them all. A CVE counts once when either finds it; the fix is recognized when one of the detecting rules reports fewer findings after it.
 
 Each CVE's result is written to a journal in the work directory as soon as it is measured, so an interrupted run continues where it stopped.
 
 | | |
 |---|---|
 | Benchmark | ossf-cve-benchmark, commit `91c59fd54b2b768c0f310bb0027d2ac59cdf74d4` |
-| PandaWard | `main` at `597264a` (after #330 and #332), manual `benchmarks` run [42848766043](https://github.com/ratomirjovanovic/pandaward/actions/runs/42848766043) on GitHub Actions |
-| Engines | built-in rules; Semgrep 1.182.0 and Opengrep 1.33.1 with the bundled rule set |
+| PandaWard | `main` at `20ee2a8` (after #382 and #383), manual `benchmarks` run [43635511785](https://github.com/ratomirjovanovic/pandaward/actions/runs/43635511785) on GitHub Actions |
+| Engines | built-in rules; built-in taint engine; Semgrep 1.182.0 and Opengrep 1.33.1 with the bundled rule set |
 | CVEs | 223 entries, 2 not scorable (not published or incomplete), 2 unavailable, 219 scored |
-| Date | 2026-11-10 |
+| Date | 2026-11-14 |
 
 ### Results
 
 | Engine | Detected | Detection rate | With CWE match | Fix recognized | Still flagged after fix |
 |---|---|---|---|---|---|
+| PandaWard (built-in rules, taint engine and Semgrep rules) | 117 of 219 | 53.4% | 78 | 82 | 35 |
 | Built-in rules | 45 of 219 | 20.5% | 19 | 28 | 17 |
-| Semgrep 1.182.0, bundled rules | 60 of 219 | 27.4% | 48 | 27 | 33 |
-| Opengrep 1.33.1, bundled rules | 60 of 219 | 27.4% | 48 | 27 | 33 |
+| Built-in taint engine | 59 of 219 | 26.9% | 50 | 44 | 15 |
+| Semgrep 1.182.0, bundled rules | 88 of 219 | 40.2% | 64 | 54 | 34 |
+| Opengrep 1.33.1, bundled rules | 87 of 219 | 39.7% | 63 | 53 | 34 |
 
-The first measurement (2026-11-09, before #330 and #332) was 23 detected and 10 fixes recognized for the built-in rules, and 13 and 6 for both Semgrep engines.
+The first measurement (2026-11-09) was 23 detected and 10 fixes recognized for the built-in rules, and 13 and 6 for both Semgrep engines; on 2026-11-10 it was 45 and 28, and 60 and 27. The sections below record each step.
 
-By the CVE's first CWE, for the classes with four or more CVEs (detected by built-in / Semgrep / Opengrep):
+By the CVE's first CWE, for the classes with four or more CVEs:
 
-| CWE | CVEs | Built-in | Semgrep | Opengrep |
-|---|---|---|---|---|
-| CWE-78, OS command injection | 48 | 10 | 30 | 30 |
-| CWE-79, cross-site scripting | 48 | 9 | 11 | 11 |
-| CWE-22, path traversal | 29 | 0 | 16 | 16 |
-| CWE-730, regular expression denial of service | 29 | 21 | 0 | 0 |
-| CWE-94, code injection | 12 | 4 | 3 | 3 |
-| CWE-116, improper encoding or escaping | 9 | 0 | 0 | 0 |
-| CWE-20, improper input validation | 6 | 0 | 0 | 0 |
-| CWE-89, SQL injection | 4 | 0 | 0 | 0 |
-| CWE-601, open redirect | 4 | 0 | 0 | 0 |
-| CWE-770, allocation without limits | 4 | 0 | 0 | 0 |
-
-The detecting rules were `code.js-redos-polynomial` (18), `code.js-shell` (10), `code.html-sink` (9), `code.js-eval` (4) and `code.js-redos` (4) for the built-in rules, and `pandaward-js-shell-exec` (21), `pandaward-js-path-traversal` (16), `pandaward-js-prototype-pollution` (9), `pandaward-js-html-sink` (7), `pandaward-js-reflected-xss` (4) and `pandaward-js-eval` (3) for both Semgrep engines.
+| CWE | CVEs | PandaWard | Built-in | Taint | Semgrep | Opengrep |
+|---|---|---|---|---|---|---|
+| CWE-78, OS command injection | 48 | 36 | 10 | 27 | 35 | 35 |
+| CWE-79, cross-site scripting | 48 | 25 | 9 | 10 | 21 | 21 |
+| CWE-22, path traversal | 29 | 17 | 0 | 9 | 17 | 16 |
+| CWE-730, regular expression denial of service | 29 | 22 | 21 | 0 | 1 | 1 |
+| CWE-94, code injection | 12 | 5 | 4 | 5 | 4 | 4 |
+| CWE-116, improper encoding or escaping | 9 | 5 | 0 | 3 | 5 | 5 |
+| CWE-20, improper input validation | 6 | 4 | 0 | 4 | 4 | 4 |
+| CWE-89, SQL injection | 4 | 1 | 0 | 1 | 0 | 0 |
+| CWE-601, open redirect | 4 | 1 | 0 | 0 | 1 | 1 |
+| CWE-770, allocation without limits | 4 | 0 | 0 | 0 | 0 | 0 |
 
 ### Interpretation
 
-PandaWard finds about one real JavaScript CVE in five with its built-in rules, and a bit more than one in four with its bundled Semgrep rules. The two sets overlap little: ReDoS is found only by the built-in check, path traversal and prototype pollution only by Semgrep rules.
+PandaWard as a scan runs it finds a bit more than half of the real JavaScript CVEs and recognizes the fix of 82 of the 117 it finds. No single engine gets there: ReDoS comes from the built-in check, most cross-site scripting and path traversal from the Semgrep rules, and the taint engine adds flows across functions and files that the others miss.
 
-- **Most of the gain is command injection, path traversal, prototype pollution and ReDoS.** The shell rule follows `child_process` under every import form, path traversal follows request URLs and archive entry names, and the ReDoS check analyses each regular expression as an automaton.
-- **The fix is recognized in less than half of the Semgrep detections.** In 33 of 60, the rule still fires as often after the fix, and for path traversal no fix is recognized at all: the fixes normalize the path and check its prefix, or escape the value, and the rules do not yet treat those checks as sanitizers.
-- **Opengrep and Semgrep give identical results** on this suite.
-- **Classes still missed**: encoding and escaping (9), input validation (6), SQL injection, open redirect and unbounded allocation (4 each), and most cross-site scripting in browser code.
+- **Where it is weak**: cross-site scripting (25 of 48, much of it in browser libraries where markup is built from options or page text), path traversal (17 of 29), code injection (5 of 12) and the small classes, SQL injection, open redirect and unbounded allocation, which are found once or not at all.
+- **Prototype pollution** is labelled CWE-78 in most entries, so it counts under OS command injection; many of the misses there are merges and path setters whose shape the engines do not yet recognize (#390).
+- **Still flagged after the fix** (35): the fix adds a check the rules do not read as one (a prefix check after `path.normalize`, a custom escape function), or it fixes one path of several and the rule fires on another.
+- **Opengrep and Semgrep differ by one CVE**, CVE-2017-16083, which the taint engine also finds.
 
-Next: count a CVE once for PandaWard as a whole (built-in rules plus Semgrep, as a scan runs them), sanitizers for the path, shell and HTML rules so fixes are recognized, and rules for incomplete escaping, URL scheme checks and open redirects.
+The full list of missed CVEs and their labelled lines is in the `outcomes` of the raw results.
 
 ### jQuery cross-site scripting rules
 
