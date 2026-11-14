@@ -43,8 +43,10 @@ type externalTool struct {
 	// note, set by normalize, is added to the run detail.
 	note string
 	// alts are other binaries that run the same rules and output format
-	// (opengrep for semgrep), tried after binary.
+	// (opengrep for semgrep), tried after binary unless altsFirst.
 	alts []string
+	// altsFirst tries alts before binary when no engine is configured.
+	altsFirst bool
 	// choose returns the one binary the project configured, or "" for
 	// binary and then alts. It is read at the start of a run.
 	choose func(c *Context) string
@@ -63,6 +65,9 @@ func (t *externalTool) Network() bool      { return t.network }
 // installed one.
 func (t *externalTool) Lookup() (string, error) {
 	names := append([]string{t.binary}, t.alts...)
+	if t.altsFirst {
+		names = append(append([]string{}, t.alts...), t.binary)
+	}
 	if t.prefer != "" {
 		names = []string{t.prefer}
 	}
@@ -434,7 +439,7 @@ func semgrep() Adapter {
 	// normalize records a note on t, so t exists before its fields.
 	t := &externalTool{}
 	*t = externalTool{
-		name: "semgrep", binary: "semgrep", alts: []string{"opengrep"}, controls: []string{"D-006"}, verArgs: []string{"--version"},
+		name: "semgrep", binary: "semgrep", alts: []string{"opengrep"}, altsFirst: true, controls: []string{"D-006"}, verArgs: []string{"--version"},
 		okExit: map[int]bool{0: true, 1: true},
 		choose: func(c *Context) string {
 			if c.Cfg == nil {

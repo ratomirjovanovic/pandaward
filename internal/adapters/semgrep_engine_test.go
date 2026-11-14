@@ -50,28 +50,38 @@ func semgrepArgs(t *testing.T, tool *externalTool, engine string) []string {
 	return args
 }
 
-// Without a configured engine semgrep wins and opengrep is the fallback;
-// opengrep runs with intra-file taint and without the --metrics flag it
-// does not have.
+// Without a configured engine opengrep wins, since it follows taint through
+// functions in the same file, and semgrep is the fallback; opengrep runs
+// with intra-file taint and without the --metrics flag it does not have.
 func TestSemgrepEngineSelection(t *testing.T) {
 	fakeTools(t, "semgrep", "opengrep")
 	tool := semgrepTool(t)
 	args := semgrepArgs(t, tool, "")
-	if tool.found != "semgrep" || !slices.Contains(args, "--metrics=off") || slices.Contains(args, "--taint-intrafile") {
+	if tool.found != "opengrep" || slices.Contains(args, "--metrics=off") || !slices.Contains(args, "--taint-intrafile") {
 		t.Fatalf("default engine: found %q, args %v", tool.found, args)
 	}
-	args = semgrepArgs(t, tool, "opengrep")
-	if tool.found != "opengrep" || slices.Contains(args, "--metrics=off") || !slices.Contains(args, "--taint-intrafile") {
-		t.Fatalf("opengrep engine: found %q, args %v", tool.found, args)
+	args = semgrepArgs(t, tool, "semgrep")
+	if tool.found != "semgrep" || !slices.Contains(args, "--metrics=off") || slices.Contains(args, "--taint-intrafile") {
+		t.Fatalf("semgrep engine: found %q, args %v", tool.found, args)
+	}
+
+	fakeTools(t, "semgrep")
+	tool = semgrepTool(t)
+	semgrepArgs(t, tool, "")
+	if tool.found != "semgrep" {
+		t.Fatalf("fallback: found %q, want semgrep", tool.found)
+	}
+
+	tool.prefer = "opengrep"
+	if _, err := tool.Lookup(); err == nil {
+		t.Fatal("a configured engine that is not installed must not fall back")
+	}
+	if got := tool.binaries(); got != "opengrep" {
+		t.Fatalf("binaries() = %q", got)
 	}
 
 	fakeTools(t, "opengrep")
 	tool = semgrepTool(t)
-	semgrepArgs(t, tool, "")
-	if tool.found != "opengrep" {
-		t.Fatalf("fallback: found %q, want opengrep", tool.found)
-	}
-
 	tool.prefer = "semgrep"
 	if _, err := tool.Lookup(); err == nil {
 		t.Fatal("a configured engine that is not installed must not fall back")
