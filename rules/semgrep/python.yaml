@@ -60,6 +60,13 @@ rules:
               - pattern: eval($X, ...)
               - pattern: exec($X, ...)
               - pattern: compile($X, ...)
+          # Returned unless the value is one quoted string literal: eval can
+          # only produce that string.
+          - pattern-not-inside: |
+              if not $X.startswith($Q) or not $X.endswith($Q) or $Q in $X[$A:$B]:
+                ...
+                return ...
+              ...
           - focus-metavariable: $X
 
   - id: pandaward-py-shell
