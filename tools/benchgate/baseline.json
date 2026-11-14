@@ -6,12 +6,20 @@
       "fix_recognized": 28
     },
     "cve/opengrep": {
-      "detected": 66,
-      "fix_recognized": 32
+      "detected": 87,
+      "fix_recognized": 53
+    },
+    "cve/pandaward": {
+      "detected": 117,
+      "fix_recognized": 82
     },
     "cve/semgrep": {
-      "detected": 66,
-      "fix_recognized": 32
+      "detected": 88,
+      "fix_recognized": 54
+    },
+    "cve/taint": {
+      "detected": 59,
+      "fix_recognized": 44
     },
     "owasp/java/builtin": {
       "average_score_covered": -0.00031693711967547183,
