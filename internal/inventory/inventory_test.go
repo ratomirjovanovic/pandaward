@@ -241,7 +241,7 @@ func TestExcluded(t *testing.T) {
 		"docs/out/index.html":                                            false,
 		".env":                                                           false,
 	} {
-		if got := inventory.Excluded(rel, ex); got != want {
+		if got := inventory.Excluded("", rel, ex); got != want {
 			t.Errorf("Excluded(%q) = %v, want %v", rel, got, want)
 		}
 	}
@@ -473,19 +473,59 @@ func TestWalkSkipsLinkedWorktrees(t *testing.T) {
 }
 
 func TestWalkFindsNodeScriptsInBin(t *testing.T) {
+	// The default exclude list skips bin, the build output of .NET and Go.
+	exclude := []string{"node_modules", "bin", "obj"}
 	inv := walk(t, map[string]string{
-		"bin/serve":    "#!/usr/bin/env node\nrequire('../lib/serve');\n",
-		"bin/setup":    "#!/bin/sh\necho hi\n",
-		"tools/run":    "#!/usr/bin/env node\nconsole.log(1);\n",
-		"bin/readme":   "plain text\n",
-		"lib/serve.js": "module.exports = 1;\n",
-	}, inventory.Options{MaxFileBytes: 1024})
-	got := map[string]string{}
+		"package.json":                         `{"name":"x","bin":{"serve":"./bin/serve"}}`,
+		"bin/serve":                            "#!/usr/bin/env node\nrequire('../lib/serve');\n",
+		"bin/cli.js":                           "require('../lib/serve');\n",
+		"bin/setup":                            "#!/bin/sh\necho hi\n",
+		"bin/readme":                           "plain text\n",
+		"bin/vendor/x.js":                      "module.exports = 1;\n",
+		"tools/run":                            "#!/usr/bin/env node\nconsole.log(1);\n",
+		"lib/serve.js":                         "module.exports = 1;\n",
+		"dotnet/App.csproj":                    "<Project/>\n",
+		"dotnet/bin/Debug/net8.0/wwwroot/a.js": "var a = 1;\n",
+		"web/package.json":                     `{"name":"web"}`,
+		"web/bin/Release/b.js":                 "var b = 1;\n",
+	}, inventory.Options{Exclude: exclude, MaxFileBytes: 1024})
+	var got []string
 	for _, f := range inv.Files {
-		got[f.Path] = f.Lang
+		if f.Lang == "javascript" {
+			got = append(got, f.Path)
+		}
 	}
-	want := map[string]string{"bin/serve": "javascript", "lib/serve.js": "javascript"}
-	if len(got) != len(want) || got["bin/serve"] != "javascript" || got["lib/serve.js"] != "javascript" {
-		t.Errorf("files = %v, want %v", got, want)
+	want := []string{"bin/cli.js", "bin/serve", "lib/serve.js"}
+	if !slices.Equal(got, want) {
+		t.Errorf("javascript files = %v, want %v", got, want)
+	}
+}
+
+func TestExcludedReadsPackageBin(t *testing.T) {
+	root := t.TempDir()
+	for _, p := range []string{"package.json", "dotnet/App.csproj"} {
+		full := filepath.Join(root, filepath.FromSlash(p))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte("{}"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ex := []string{"bin", "node_modules"}
+	for rel, want := range map[string]bool{
+		"bin/www":                   false,
+		"bin/vendor/x.js":           true,
+		"dotnet/bin/Debug/a.js":     true,
+		"dotnet/bin/a.js":           true,
+		"node_modules/bin/x.js":     true,
+		"node_modules/x/bin/cli.js": true,
+	} {
+		if got := inventory.Excluded(root, rel, ex); got != want {
+			t.Errorf("Excluded(%q) = %v, want %v", rel, got, want)
+		}
+		if !inventory.Excluded("", rel, ex) {
+			t.Errorf("without a root, %q should stay excluded", rel)
+		}
 	}
 }

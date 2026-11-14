@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -54,6 +55,31 @@ func TestDropIgnoredDirSignals(t *testing.T) {
 		t.Fatalf("dropped %d, want 1", n)
 	}
 	if len(out.Signals) != 2 || out.Signals[0].File != "scratch/.env" || out.Signals[1].File != "scratchpad/app.py" {
+		t.Fatalf("kept %+v", out.Signals)
+	}
+}
+
+// A Node.js package's commands in bin are source even though the default
+// exclude list skips bin; external tools' signals there are kept (#384).
+func TestKeepPackageBinSignals(t *testing.T) {
+	root := t.TempDir()
+	e, _, err := Init(root, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+	if err := os.WriteFile(filepath.Join(root, "package.json"), []byte(`{"name":"x"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := adapters.Result{Signals: []model.Signal{
+		{RuleID: "semgrep.x", File: "bin/www"},
+		{RuleID: "semgrep.x", File: filepath.Join(root, "bin", "Debug", "app.js")},
+		{RuleID: "semgrep.x", File: "dotnet/bin/app.js"},
+	}}
+	if n := e.dropExcluded(&out, nil); n != 2 {
+		t.Fatalf("dropped %d, want 2", n)
+	}
+	if len(out.Signals) != 1 || out.Signals[0].File != "bin/www" {
 		t.Fatalf("kept %+v", out.Signals)
 	}
 }
