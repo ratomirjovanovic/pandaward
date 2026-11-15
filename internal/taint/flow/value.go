@@ -180,6 +180,9 @@ func mix(v, x *Value) *Value {
 		return v
 	}
 	r := v.copy()
+	if v.Safe&^x.Safe != 0 {
+		r.T = x.T // the trace of the part that is not safe
+	}
 	r.Safe &= x.Safe
 	r.Opaque = v.Opaque && x.Opaque
 	return r
@@ -206,6 +209,10 @@ func joinDepth(a, b *Value, widen bool, depth int) *Value {
 	switch {
 	case a.T != nil && b.T != nil:
 		r.T, r.Safe, r.Opaque = a.T, a.Safe&b.Safe, a.Opaque && b.Opaque
+		if a.Safe&^b.Safe != 0 {
+			// the trace of the side the join is not safe for
+			r.T = b.T
+		}
 	case a.T != nil:
 		r.T, r.Safe, r.Opaque = a.T, a.Safe, a.Opaque
 	case b.T != nil:

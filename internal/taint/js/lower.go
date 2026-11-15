@@ -27,10 +27,11 @@ func Lower(f *File, name string, resolve Resolver) *ir.Module {
 	}
 	l.protos = prototypes(f.Stmts)
 	m.Init = l.function("<module>", 1, nil, f.Stmts, nil, nil, "", true)
-	if len(m.Exports) == 0 {
-		// A script that exports nothing, such as one of the files a
-		// browser library is concatenated from: its functions are globals
-		// any other script calls.
+	if len(m.Exports) == 0 && !l.imports {
+		// A script that exports and imports nothing, such as one of the
+		// files a browser library is concatenated from: its functions
+		// are globals any other script calls. A program that imports
+		// and exports nothing (a server's main file) exports nothing.
 		m.Exports = nil
 	}
 	return m
@@ -126,10 +127,12 @@ type lowerer struct {
 	// F.prototype.m = function, F.prototype = { m() {} }.
 	protos map[string][]*Prop
 
-	fn     *ir.Function
-	cur    *ir.Block
-	ntemp  int
-	locals map[string]bool
+	fn    *ir.Function
+	cur   *ir.Block
+	ntemp int
+	// imports is set once the file imports a module.
+	imports bool
+	locals  map[string]bool
 	// written are names of enclosing scopes this function assigns: it
 	// reads them back from its own copy.
 	written  map[string]bool
@@ -225,9 +228,9 @@ func (l *lowerer) function(name string, line int, params []Expr, body []Stmt, ex
 		l.cur.Term = ir.Term{Kind: ir.Return}
 	}
 	fn.Link()
-	nfunc := l.nfunc
+	nfunc, imports := l.nfunc, l.imports
 	*l = saved
-	l.nfunc = nfunc
+	l.nfunc, l.imports = nfunc, imports
 	return fn
 }
 
@@ -634,6 +637,7 @@ func (l *lowerer) stmt(s Stmt) {
 				name = mod + "." + sp.Imported
 			}
 			l.bind(sp.Local, &ir.Instr{Op: ir.Import, Pos: at(s.Line), Name: name})
+			l.imports = true
 		}
 	case *Export:
 		l.export(s)
@@ -679,6 +683,7 @@ func (l *lowerer) export(s *Export) {
 				name = l.defaultOf(s.From, mod)
 			}
 			l.bind(sp.Exported, &ir.Instr{Op: ir.Import, Pos: at(s.Line), Name: name})
+			l.imports = true
 			l.mod.Exports[sp.Exported] = true
 		}
 	default:
@@ -1242,6 +1247,7 @@ func (l *lowerer) object(e *ObjectLit) ir.Operand {
 func (l *lowerer) call(e *Call) ir.Operand {
 	if id, ok := e.Callee.(*Ident); ok && id.Name == "require" && len(e.Args) == 1 && !l.locals["require"] {
 		if s, ok := e.Args[0].(*Lit); ok && s.Kind == TString {
+			l.imports = true
 			return l.value(ir.Import, e.Line, l.moduleOf(s.Val), ir.Operand{}, ir.Operand{})
 		}
 	}
@@ -1342,9 +1348,9 @@ func (l *lowerer) class(c *Class) ir.Operand {
 		l.cur.Term = ir.Term{Kind: ir.Return}
 	}
 	body.Link()
-	nfunc := l.nfunc
+	nfunc, imports := l.nfunc, l.imports
 	*l = saved
-	l.nfunc = nfunc
+	l.nfunc, l.imports = nfunc, imports
 	t := l.temp()
 	l.emit(&ir.Instr{Op: ir.Func, Pos: at(c.Line), Dst: t, Fn: body})
 	return ir.V(t)

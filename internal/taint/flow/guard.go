@@ -75,6 +75,23 @@ func (f *fnRun) refine(st State, cond ir.Operand, edge bool) State {
 					break
 				}
 			}
+		case g.Method == "startsWith" && d.Op == ir.Bin:
+			// p.indexOf(base) === 0 is p.startsWith(base)
+			call, other, op := f.fn.Defs[d.A.Var], d.B, d.Name
+			if call == nil || call.Op != ir.Call {
+				call, other, op = f.fn.Defs[d.B.Var], d.A, flipCompare[d.Name]
+			}
+			if call == nil || call.Op != ir.Call || call.Name != "indexOf" || len(call.Args) != 1 || !isInt(f.val(st, other), 0) {
+				continue
+			}
+			if !(op == "==" && edge || op == "!=" && !edge) {
+				continue
+			}
+			name := f.root(call.A)
+			if v, ok := st[name]; g.Normalized && (!ok || !v.Norm) {
+				continue
+			}
+			mark(name, g.Kinds)
 		case g.Method != "" && d.Op == ir.Call && d.Name == g.Method && edge:
 			name := f.root(d.A)
 			if g.Normalized {
@@ -197,7 +214,7 @@ func (f *fnRun) lacks(st State, d *ir.Instr, edge bool) (string, ir.Operand, boo
 		if call == nil || call.Op != ir.Call {
 			call, other, op = f.fn.Defs[d.B.Var], d.A, flipCompare[d.Name]
 		}
-		if call == nil || call.Op != ir.Call || call.Name != "indexOf" || len(call.Args) != 1 {
+		if call == nil || call.Op != ir.Call || call.Name != "indexOf" && call.Name != "search" || len(call.Args) != 1 {
 			break
 		}
 		n, isNum := intConst(f.val(st, other))
@@ -210,8 +227,12 @@ func (f *fnRun) lacks(st State, d *ir.Instr, edge bool) (string, ir.Operand, boo
 		if !(minus && edge || found && !edge) {
 			break
 		}
-		if s, ok := str(call.Args[0]); ok {
+		if s, ok := str(call.Args[0]); ok && call.Name == "indexOf" {
 			return s, call.A, true
+		}
+		// p.search(/\.\./) === -1: the pattern's literal text
+		if re := f.val(st, call.Args[0]); call.Name == "search" && re.C != nil && re.C.Kind == ir.Other && strings.HasPrefix(re.C.Val, "/") {
+			return strings.ReplaceAll(re.C.Val, `\`, ""), call.A, true
 		}
 	}
 	return "", ir.Operand{}, false

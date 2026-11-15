@@ -99,9 +99,12 @@ function fetchIt (request) { fs.readFile(request.url) }`
 // TestJSPathGuards checks the JavaScript checks that a path has no parent
 // segments, and replace() calls that remove them.
 func TestJSPathGuards(t *testing.T) {
-	head := "var fs = require('fs')\nfunction serve (req, res, p) {\n"
+	head := "var fs = require('fs'), path = require('path'), base = '/srv'\nfunction serve (req, res, p) {\n"
 	for _, c := range []struct{ body, want string }{
 		{"  fs.readFile(p)\n", "taint.js-path-traversal:3"},
+		{"  if (p.search(/(\\/|^)\\.\\.(\\/|$)/) != -1) return\n  fs.readFile(p)\n", ""},
+		{"  var f = path.resolve(path.join(base, p))\n  if (f.indexOf(base) != 0) return\n  fs.readFile(f)\n", ""},
+		{"  var f = path.join(base, p)\n  if (f.indexOf(base) != 0) return\n  fs.readFile(f)\n", "taint.js-path-traversal:5"},
 		{"  if (p.indexOf('..') !== -1) return\n  fs.readFile(p)\n", ""},
 		{"  if (p.indexOf('..') === -1) fs.readFile(p)\n", ""},
 		{"  if (-1 < p.indexOf('..')) return\n  fs.readFile(p)\n", ""},
