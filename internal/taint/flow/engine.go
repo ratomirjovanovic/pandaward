@@ -133,7 +133,7 @@ type run struct {
 // own; lines are the source lines, for the steps of each flow.
 func (e *Engine) Analyze(m *ir.Module, lines []string) []taint.Finding {
 	p := e.NewProject(func(string) (*ir.Module, []string) { return nil, nil })
-	return p.analyze(p.add(m, lines))
+	return p.analyze(p.add(m, lines), 0)
 }
 
 // imports reports a module body that imports mod or one of its members.

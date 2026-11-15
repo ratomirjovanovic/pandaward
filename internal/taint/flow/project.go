@@ -135,21 +135,25 @@ func (p *Project) SetProperties(props map[string]string) { p.e.props = props }
 // AnalyzeOne analyzes a module that is not loaded by name, such as a
 // single file.
 func (p *Project) AnalyzeOne(m *ir.Module, lines []string) []taint.Finding {
-	return p.analyze(p.add(m, lines))
+	before := len(p.order)
+	return p.analyze(p.add(m, lines), before)
 }
 
 // Module analyzes every function of a module and returns the flows found
 // since the previous call, in this module or in the modules it calls.
 func (p *Project) Module(name string) []taint.Finding {
+	before := len(p.order)
 	r := p.module(name)
 	if r == nil {
 		return nil
 	}
-	return p.analyze(r)
+	return p.analyze(r, before)
 }
 
-func (p *Project) analyze(r *run) []taint.Finding {
-	before := len(p.order)
+// analyze roots every function of a module and returns the findings
+// recorded since before, which counts the ones loading the module made:
+// add analyzes the module body, and with it the handlers it registers.
+func (p *Project) analyze(r *run, before int) []taint.Finding {
 	p.calls = 0
 	for _, fn := range r.mod.Funcs {
 		r.root(fn)
