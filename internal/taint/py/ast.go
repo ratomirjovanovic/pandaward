@@ -250,6 +250,7 @@ type (
 	FuncDef struct {
 		Pos
 		Name       string
+		TypeParams []*Param // def f[T: bound](...): Ann is the bound
 		Params     []*Param
 		Returns    Expr
 		Body       []Stmt
@@ -259,6 +260,7 @@ type (
 	ClassDef struct {
 		Pos
 		Name       string
+		TypeParams []*Param
 		Bases      []*Arg
 		Body       []Stmt
 		Decorators []Expr
@@ -344,8 +346,9 @@ type (
 	// TypeAlias is type Name[params] = value.
 	TypeAlias struct {
 		Pos
-		Name  string
-		Value Expr
+		Name       *Name
+		TypeParams []*Param
+		Value      Expr
 	}
 	// BadStmt stands for a statement that did not parse.
 	BadStmt struct{ Pos }

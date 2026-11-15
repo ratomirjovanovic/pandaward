@@ -418,7 +418,7 @@ func dump(b *strings.Builder, n Node) {
 			stmts(c.Body)
 		}
 	case *TypeAlias:
-		w("type " + n.Name + " = ")
+		w("type " + n.Name.Id + " = ")
 		dump(b, n.Value)
 	case *BadStmt:
 		w("BAD")

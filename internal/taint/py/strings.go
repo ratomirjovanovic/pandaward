@@ -252,7 +252,8 @@ func parseField(field string, raw bool, line, col int) (Expr, []Error) {
 		spec := field[specStart:]
 		sp, e := parseFString(spec, raw, line, col+specStart)
 		errs = append(errs, e...)
-		fv.Spec = &FString{Pos{line, col + specStart}, sp}
+		// CPython places the spec at its colon.
+		fv.Spec = &FString{Pos{line, col + specStart - 1}, sp}
 	}
 	return fv, errs
 }

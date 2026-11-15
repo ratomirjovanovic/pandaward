@@ -1,6 +1,7 @@
 package py
 
 import (
+	"regexp"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -41,6 +42,9 @@ type lexer struct {
 	lineAt  int // offset where the current line starts
 	indents []int
 	depth   int // open brackets
+	// where the outermost open bracket is, and the indentation of its line
+	openLine, openCol, openIndent int
+	openTok                       string
 	atBOL   bool
 	last    tokKind
 	pending []token
@@ -133,7 +137,13 @@ func (l *lexer) scan() token {
 			l.pos++
 			l.newline()
 			if l.depth > 0 {
-				continue
+				if !l.unclosed() {
+					continue
+				}
+				// A bracket left open: close it here so that the next
+				// statement still parses.
+				l.errorf(l.openLine, l.openCol, "'"+l.openTok+"' was never closed")
+				l.depth = 0
 			}
 			l.atBOL = true
 			if l.last == tNewline || l.last == tIndent || l.last == tDedent {
@@ -157,6 +167,10 @@ func (l *lexer) scan() token {
 		op := l.operator()
 		switch op {
 		case "(", "[", "{":
+			if l.depth == 0 {
+				l.openLine, l.openCol, l.openTok = line, col, op
+				l.openIndent = l.indents[len(l.indents)-1]
+			}
 			l.depth++
 		case ")", "]", "}":
 			if l.depth > 0 {
@@ -376,6 +390,9 @@ func (l *lexer) scanBody(raw, fmtStr bool, line, col int) bool {
 		switch {
 		case c == '\\':
 			l.pos++
+			if fmtStr && l.pos < len(s) && (s[l.pos] == '{' || s[l.pos] == '}') {
+				continue // a backslash does not escape a brace
+			}
 			if l.pos < len(s) {
 				if s[l.pos] == '\n' || s[l.pos] == '\r' {
 					if s[l.pos] == '\r' && l.pos+1 < len(s) && s[l.pos+1] == '\n' {
@@ -429,6 +446,28 @@ func (l *lexer) skipField() {
 	depth := 0
 	for l.pos < len(s) {
 		c := s[l.pos]
+		if depth == 0 && c == ':' && !(l.pos+1 < len(s) && s[l.pos+1] == '=') {
+			// The format spec: literal text up to the closing brace, with
+			// nested replacement fields.
+			l.pos++
+			for l.pos < len(s) && s[l.pos] != '}' {
+				switch s[l.pos] {
+				case '{':
+					l.pos++
+					l.skipField()
+					continue
+				case '\n':
+					l.pos++
+					l.newline()
+					continue
+				}
+				l.pos++
+			}
+			if l.pos < len(s) {
+				l.pos++
+			}
+			return
+		}
 		switch {
 		case c == '\'' || c == '"':
 			// A string inside the expression; it may be an f-string too.
@@ -487,3 +526,35 @@ func (l *lexer) operator() string {
 	l.pos += n
 	return string(r)
 }
+
+// statementStart lists words that begin a statement and cannot continue an
+// expression at the start of a line.
+var statementStart = []string{"def ", "class ", "async def ", "import ", "from ", "@", "if ", "for ", "while ", "try:", "with ", "return", "raise "}
+
+// unclosed reports, after a line break inside brackets, that the next line
+// starts a new statement at or left of the indentation of the line that
+// opened the outermost bracket: the bracket was never closed.
+func (l *lexer) unclosed() bool {
+	width, p := 0, l.pos
+	for p < len(l.src) && (l.src[p] == ' ' || l.src[p] == '	') {
+		if l.src[p] == '	' {
+			width = (width/8 + 1) * 8
+		} else {
+			width++
+		}
+		p++
+	}
+	if width > l.openIndent {
+		return false
+	}
+	rest := l.src[p:]
+	for _, w := range statementStart {
+		if strings.HasPrefix(rest, w) {
+			return true
+		}
+	}
+	return assignStart.MatchString(rest)
+}
+
+// assignStart matches a line that starts with an assignment to a name.
+var assignStart = regexp.MustCompile(`^[A-Za-z_][\w.]*\s*(=[^=]|[-+*/%|&^]=)`)

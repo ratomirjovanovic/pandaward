@@ -114,11 +114,13 @@ func Inspect(n Node, fn func(Node) bool) {
 		ex(n.Value)
 	case *FuncDef:
 		exprs(n.Decorators)
+		params(n.TypeParams)
 		params(n.Params)
 		ex(n.Returns)
 		body(n.Body)
 	case *ClassDef:
 		exprs(n.Decorators)
+		params(n.TypeParams)
 		for _, a := range n.Bases {
 			ex(a.Value)
 		}
@@ -168,6 +170,8 @@ func Inspect(n Node, fn func(Node) bool) {
 			body(c.Body)
 		}
 	case *TypeAlias:
+		ex(n.Name)
+		params(n.TypeParams)
 		ex(n.Value)
 	}
 }

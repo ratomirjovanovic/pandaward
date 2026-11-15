@@ -391,12 +391,10 @@ func (p *parser) smallStmt() Stmt {
 			if n := p.peekAt(1); n.kind == tName && !keywords[n.val] {
 				if a := p.peekAt(2); a.is("=") || a.is("[") {
 					p.advance()
-					name := p.name()
-					if p.at("[") {
-						p.skipBrackets()
-					}
+					name := &Name{p.pos(), p.name()}
+					tps := p.typeParams()
 					p.expect("=")
-					return &TypeAlias{pos, name, p.expr()}
+					return &TypeAlias{pos, name, tps, p.expr()}
 				}
 			}
 		}
@@ -708,14 +706,21 @@ func (p *parser) withItem() *WithItem {
 }
 
 func (p *parser) asyncStmt(decos []Expr) Stmt {
+	pos := p.pos()
 	p.advance()
 	switch {
 	case p.atKw("def"):
-		return p.funcDef(decos, true)
+		f := p.funcDef(decos, true).(*FuncDef)
+		f.Pos = pos
+		return f
 	case p.atKw("for"):
-		return p.forStmt(true)
+		f := p.forStmt(true).(*For)
+		f.Pos = pos
+		return f
 	case p.atKw("with"):
-		return p.withStmt(true)
+		w := p.withStmt(true).(*With)
+		w.Pos = pos
+		return w
 	}
 	p.fail("expected def, for or with after async")
 	return nil
@@ -743,34 +748,47 @@ func (p *parser) decorated() Stmt {
 	return nil
 }
 
-// skipBrackets skips a balanced [...] (type parameters).
-func (p *parser) skipBrackets() {
-	depth := 0
-	for {
-		t := p.tok()
-		if t.kind == tEOF {
-			return
-		}
-		p.advance()
+// typeParams parses an optional [T, *Ts, **P, U: bound = default] list.
+func (p *parser) typeParams() []*Param {
+	if !p.accept("[") {
+		return nil
+	}
+	var out []*Param
+	for !p.at("]") {
+		tp := &Param{Pos: p.pos()}
 		switch {
-		case t.is("["):
-			depth++
-		case t.is("]"):
-			depth--
-			if depth == 0 {
-				return
+		case p.accept("**"):
+			tp.Kind = "**"
+		case p.accept("*"):
+			tp.Kind = "*"
+		}
+		tp.Name = p.name()
+		if p.accept(":") {
+			tp.Ann = p.expr()
+		}
+		if p.accept("=") {
+			if p.at("*") {
+				sp := p.pos()
+				p.advance()
+				tp.Default = &Starred{sp, p.expr()}
+			} else {
+				tp.Default = p.expr()
 			}
 		}
+		out = append(out, tp)
+		if !p.accept(",") {
+			break
+		}
 	}
+	p.expect("]")
+	return out
 }
 
 func (p *parser) funcDef(decos []Expr, async bool) Stmt {
 	pos := p.pos()
 	p.expectKw("def")
 	f := &FuncDef{Pos: pos, Name: p.name(), Decorators: decos, Async: async}
-	if p.at("[") {
-		p.skipBrackets()
-	}
+	f.TypeParams = p.typeParams()
 	p.expect("(")
 	f.Params = p.params(")", true)
 	p.expect(")")
@@ -826,9 +844,7 @@ func (p *parser) classDef(decos []Expr) Stmt {
 	pos := p.pos()
 	p.expectKw("class")
 	c := &ClassDef{Pos: pos, Name: p.name(), Decorators: decos}
-	if p.at("[") {
-		p.skipBrackets()
-	}
+	c.TypeParams = p.typeParams()
 	if p.accept("(") {
 		c.Bases = p.args()
 		p.expect(")")
@@ -1189,9 +1205,11 @@ func (p *parser) awaitPrimary() Expr {
 }
 
 func (p *parser) primary() Expr {
+	// A trailer starts where its primary starts, including the opening
+	// parenthesis of a parenthesized expression, as in CPython.
+	start := p.pos()
 	x := p.atom()
 	for {
-		pos := p.pos()
 		switch {
 		case p.at("."):
 			p.advance()
@@ -1200,26 +1218,30 @@ func (p *parser) primary() Expr {
 				p.fail("expected an attribute name, found " + t.describe())
 			}
 			p.advance()
-			x = &Attribute{x.At(), x, t.val}
+			x = &Attribute{start, x, t.val}
 		case p.at("("):
+			lparen := p.pos()
 			p.advance()
-			args := p.args()
+			args := p.argsAt(lparen)
 			p.expect(")")
-			x = &Call{x.At(), x, args}
+			x = &Call{start, x, args}
 		case p.at("["):
 			p.advance()
 			idx := p.subscript()
 			p.expect("]")
-			x = &Subscript{x.At(), x, idx}
+			x = &Subscript{start, x, idx}
 		default:
-			_ = pos
 			return x
 		}
 	}
 }
 
 // args parses call arguments up to ")".
-func (p *parser) args() []*Arg {
+func (p *parser) args() []*Arg { return p.argsAt(p.pos()) }
+
+// argsAt parses call arguments; lparen is where a generator expression
+// that is the only argument starts.
+func (p *parser) argsAt(lparen Pos) []*Arg {
 	var out []*Arg
 	for !p.at(")") {
 		a := &Arg{Pos: p.pos()}
@@ -1237,7 +1259,7 @@ func (p *parser) args() []*Arg {
 		default:
 			v := p.starOrNamedArg()
 			if p.atKw("for") || p.atKw("async") && p.peekAt(1).kw("for") {
-				v = &Comp{Pos: v.At(), Kind: "gen", Elt: v, Gens: p.comprehensions()}
+				v = &Comp{Pos: lparen, Kind: "gen", Elt: v, Gens: p.comprehensions()}
 			}
 			a.Value = v
 		}
@@ -1431,7 +1453,12 @@ func (p *parser) braceAtom() Expr {
 	}
 	first := p.starOrNamed()
 	if p.accept(":") {
-		v := p.expr()
+		var v Expr
+		if p.inPattern {
+			v = p.pattern()
+		} else {
+			v = p.expr()
+		}
 		if p.atKw("for") || p.atKw("async") && p.peekAt(1).kw("for") {
 			c := &Comp{Pos: pos, Kind: "dict", Key: first, Elt: v, Gens: p.comprehensions()}
 			p.expect("}")
