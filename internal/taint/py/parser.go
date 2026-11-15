@@ -1255,7 +1255,11 @@ func (p *parser) argsAt(lparen Pos) []*Arg {
 		case p.tok().kind == tName && !keywords[p.tok().val] && p.peekAt(1).is("="):
 			a.Name = p.advance().val
 			p.advance()
-			a.Value = p.expr()
+			if p.inPattern {
+				a.Value = p.pattern() // case C(x=str() as s)
+			} else {
+				a.Value = p.expr()
+			}
 		default:
 			v := p.starOrNamedArg()
 			if p.atKw("for") || p.atKw("async") && p.peekAt(1).kw("for") {

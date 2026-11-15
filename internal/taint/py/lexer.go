@@ -553,7 +553,34 @@ func (l *lexer) unclosed() bool {
 			return true
 		}
 	}
-	return assignStart.MatchString(rest)
+	if !assignStart.MatchString(rest) {
+		return false
+	}
+	// Inside a call, name= on a line that ends with a comma or closes more
+	// brackets than it opens is a keyword argument: f(\n    a=1)
+	if l.openTok == "(" {
+		line := rest
+		if i := strings.IndexByte(line, '\n'); i >= 0 {
+			line = line[:i]
+		}
+		line = strings.TrimRight(line, " \t\r")
+		if strings.HasSuffix(line, ",") {
+			return false
+		}
+		balance := 0
+		for i := 0; i < len(line); i++ {
+			switch line[i] {
+			case '(', '[', '{':
+				balance++
+			case ')', ']', '}':
+				balance--
+			}
+		}
+		if balance < 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // assignStart matches a line that starts with an assignment to a name.

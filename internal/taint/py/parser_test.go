@@ -159,6 +159,10 @@ func TestMatch(t *testing.T) {
         pass
     case [first, *others]:
         pass
+    case Doc(value=str() as text) if (
+        text
+    ):
+        pass
     case _:
         pass
 match = {"soft": "keyword"}
@@ -167,7 +171,7 @@ match[x] = 1
 `
 	f := parse(t, src)
 	want := strings.Join([]string{
-		`match command.split() case [action] {pass} case (| ["go" direction] ["move" direction]) {pass} case (as Point(x=0 y=0) origin) if origin {pass} case {"type":(as (| "a" "b") kind) **rest} {pass} case (| (| Color.RED (- 1)) 1.5j) {pass} case [first *others] {pass} case _ {pass}`,
+		`match command.split() case [action] {pass} case (| ["go" direction] ["move" direction]) {pass} case (as Point(x=0 y=0) origin) if origin {pass} case {"type":(as (| "a" "b") kind) **rest} {pass} case (| (| Color.RED (- 1)) 1.5j) {pass} case [first *others] {pass} case Doc(value=(as str() text)) if text {pass} case _ {pass}`,
 		`match = {"soft":"keyword"}`,
 		`match(x)`,
 		`match[x] = 1`,
@@ -235,6 +239,26 @@ w = 3
 	}
 	if strings.Count(got, "BAD") != 3 {
 		t.Errorf("want 3 bad statements:\n%s", got)
+	}
+}
+
+// A bracket left open ends at the next statement, but a keyword argument
+// at the indentation of the call's line does not close it.
+func TestUnclosedBracket(t *testing.T) {
+	f := Parse("t.py", "x = foo(1,\ny = 2\n")
+	if len(f.Errors) == 0 || !strings.Contains(f.Errors[0].Msg, "never closed") {
+		t.Errorf("want a never closed error first, got %v", f.Errors)
+	}
+	if got := DumpBody(f.Body); !strings.Contains(got, "y = 2") {
+		t.Errorf("lost the next statement:\n%s", got)
+	}
+	for _, src := range []string{
+		"def f():\n    write(\n        '''\nx''',\n    a=1)\n",
+		"def f():\n    g(\n    a=1,\n    b=2,\n    )\n",
+	} {
+		if f := Parse("t.py", src); len(f.Errors) != 0 {
+			t.Errorf("%q: %v", src, f.Errors)
+		}
 	}
 }
 
