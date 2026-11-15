@@ -640,6 +640,7 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 			}
 		}
 		superseded, hidden = supersededByTaint(allSignals, kept, superseded)
+		superseded = supersededInTaintFiles(allSignals, inv, superseded)
 	}
 	replacedBy := map[string]string{} // fingerprint -> bundled rule
 	for i, rule := range superseded {
@@ -1107,6 +1108,29 @@ func supersededByTaint(sigs, carriedTaint []model.Signal, superseded map[int]str
 		}
 	}
 	return superseded, hidden
+}
+
+// supersededInTaintFiles adds the signals of bundled Semgrep rules and
+// built-in heuristics that the taint engine replaces in the files it analyzed (#406): in Python it
+// decides those weaknesses from the data flow, and the rules' own
+// findings there were false positives on real code (docs/BENCHMARKS.md).
+func supersededInTaintFiles(sigs []model.Signal, inv *inventory.Inventory, superseded map[int]string) map[int]string {
+	for i, s := range sigs {
+		if _, ok := superseded[i]; ok || s.Collector != "semgrep" && s.Collector != "builtin-code" {
+			continue
+		}
+		f := inv.FileByPath(s.File)
+		if f == nil {
+			continue
+		}
+		if rule := adapters.TaintReplaces(s.RuleID, f.Lang, f.Path); rule != "" {
+			if superseded == nil {
+				superseded = map[int]string{}
+			}
+			superseded[i] = taintPrefix + rule
+		}
+	}
+	return superseded
 }
 
 func confidenceRank(c model.Confidence) int {

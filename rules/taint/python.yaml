@@ -40,6 +40,13 @@ sources:
     - request.path_params
     - request.headers
     - request.cookies
+  # Text a language model returned, which a prompt can steer: the last
+  # attributes of an access chain ([] is an index).
+  chains:
+    - choices.[].message.content
+    - choices.[].text
+    - content.[].text
+    - output_text
   # Calls that return client input.
   calls:
     - input
@@ -235,6 +242,44 @@ sinks:
       - starlette.responses.RedirectResponse
       - fastapi.responses.RedirectResponse
 
+  - id: taint.py-ssrf
+    kind: ssrf
+    control: D-004
+    cwe: "CWE-918"
+    title: Server-side request to a URL from untrusted input
+    message: Input chooses the URL the server requests, so it can reach internal services or cloud metadata endpoints.
+    fix: Allow only known hosts (check urlparse(url).hostname against an allowlist) and refuse private and link-local addresses.
+    calls:
+      - requests.get
+      - requests.post
+      - requests.put
+      - requests.patch
+      - requests.delete
+      - requests.head
+      - requests.options
+      - requests.request#1
+      - urllib.request.urlopen
+      - urllib.request.Request
+      - urllib.urlopen
+      - urllib2.urlopen
+      - httpx.get
+      - httpx.post
+      - httpx.put
+      - httpx.patch
+      - httpx.delete
+      - httpx.head
+      - httpx.request#1
+      - httpx.stream#1
+      - aiohttp.request#1
+      - requests.Session.get
+      - requests.Session.post
+      - requests.Session.request#1
+      - httpx.Client.get
+      - httpx.Client.post
+      - httpx.AsyncClient.get
+      - httpx.AsyncClient.post
+    text_only: true
+
   - id: taint.py-trust-boundary
     kind: trust
     control: D-001
@@ -294,7 +339,7 @@ sanitizers:
   - kinds: [xss]
     calls: [html.escape, markupsafe.escape, flask.escape, cgi.escape, django.utils.html.escape, django.utils.html.strip_tags, bleach.clean, jinja2.escape, werkzeug.utils.escape, xml.sax.saxutils.escape, flask.jsonify]
   - kinds: [path]
-    calls: [os.path.basename, werkzeug.utils.secure_filename, pathlib.PurePath.name]
+    calls: [os.path.basename, werkzeug.utils.secure_filename, pathlib.PurePath.name, werkzeug.utils.safe_join, werkzeug.security.safe_join, flask.safe_join]
   - kinds: [cmd]
     calls: [shlex.quote, pipes.quote]
   - kinds: [ldap]
@@ -322,6 +367,9 @@ guards:
   # string literal: evaluating it runs nothing.
   - kinds: [code]
     quoted_literal: true
+  # Library checks that pass only for a safe value.
+  - kinds: [redirect, ssrf]
+    calls: [django.utils.http.url_has_allowed_host_and_scheme, django.utils.http.is_safe_url]
   # A value that is only letters and digits, or one of a list of
   # constants, cannot change a command, query, path or page.
   - kinds: [all]
@@ -395,6 +443,31 @@ lookups:
   - prefetch_related
   - values
   - values_list
+
+# Bundled Semgrep rules the taint engine replaces in the Python files it
+# analyzes: it decides the same weaknesses from the data flow, with fewer
+# false positives (see docs/BENCHMARKS.md). Rules for what it does not
+# cover (TLS verification, template injection) stay, and so does the
+# deserialization rule: pickle and yaml.load run code from whatever they
+# are given, so every call whose input is not a constant is worth a look.
+# The built-in heuristics are not listed: they run when Semgrep and
+# Opengrep are not installed, and the bundled rules replace them when they
+# are.
+supersedes:
+  - pandaward-py-eval
+  - pandaward-py-shell
+  - pandaward-py-sql-injection
+  - pandaward-py-path-traversal
+  - pandaward-py-ldap-injection
+  - pandaward-py-xpath-injection
+  - pandaward-py-xss
+  - pandaward-py-open-redirect
+  - pandaward-py-trust-boundary
+  - pandaward-py-xxe
+  - pandaward-py-ssrf
+  - pandaward-py-weak-hash
+  - pandaward-py-weak-random
+  - pandaward-py-insecure-cookie
 
 # Weak digests and predictable numbers, and where they must not end up.
 weak:

@@ -50,7 +50,11 @@ func (l *lowerer) function(name string, pos Pos, params []*Param, decos []Expr, 
 		if p.Kind == "/" || p.Kind == "*marker" {
 			continue
 		}
-		fn.Params = append(fn.Params, ir.Param{Name: p.Name, Kind: p.Kind, Pos: at(p.Pos), Ann: dotted(p.Ann)})
+		prm := ir.Param{Name: p.Name, Kind: p.Kind, Pos: at(p.Pos), Ann: dotted(p.Ann)}
+		if c, ok := p.Default.(*Const); ok {
+			prm.Default = constOf(c).Const
+		}
+		fn.Params = append(fn.Params, prm)
 	}
 	for _, d := range decos {
 		fn.Decorators = append(fn.Decorators, decorator(d))

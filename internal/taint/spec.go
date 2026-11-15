@@ -72,6 +72,9 @@ type Spec struct {
 	// values that must not be predictable or stored as a weak digest
 	// (Python).
 	Weak Weak
+	// Supersedes lists bundled Semgrep rules the engine replaces in the
+	// files it analyzes (Python).
+	Supersedes []string
 	// Lookups are methods that return what their receiver holds, not their
 	// arguments: a row found by a key from the request is the database's
 	// data (Python).
@@ -105,7 +108,10 @@ type Sources struct {
 	// untrusted data, parameter names that hold a request object (their
 	// attributes are then qualified by that name), and decorators that
 	// register a route handler, whose parameters are path values.
-	Attributes      []string `yaml:"attributes"`
+	Attributes []string `yaml:"attributes"`
+	// Chains are attribute paths whose end is untrusted wherever it is
+	// read, such as a language model's reply (choices.[].message.content).
+	Chains          []string `yaml:"chains"`
 	Calls           []string `yaml:"calls"`
 	Params          []string `yaml:"params"`
 	RouteDecorators []string `yaml:"route_decorators"`
@@ -133,6 +139,9 @@ type Guard struct {
 	Methods []string `yaml:"methods"`
 	// Allowlist: `x in <constants>` is true, so x is one of them.
 	Allowlist bool `yaml:"allowlist"`
+	// Calls are library checks that return true only for a safe first
+	// argument.
+	Calls []string `yaml:"calls"`
 }
 
 // Escape is x.replace(Old, new) with a new that does not contain Old.
@@ -236,6 +245,7 @@ type specFile struct {
 	TextCalls   []string    `yaml:"text_calls"`
 	Lookups     []string    `yaml:"lookups"`
 	Weak        Weak        `yaml:"weak"`
+	Supersedes  []string    `yaml:"supersedes"`
 }
 
 // Weak lists the calls that make a weak digest or a predictable number,
@@ -292,7 +302,7 @@ func Parse(data []byte) (*Spec, error) {
 	if err := yaml.Unmarshal(data, &f); err != nil {
 		return nil, err
 	}
-	s := &Spec{Sources: f.Sources, Sinks: f.Sinks, Sanitizers: f.Sanitizers, Guards: f.Guards, Normalizers: f.Normalizers, Responses: f.Responses, Escapes: f.Escapes, URLParsers: f.URLParsers, ShellFlags: f.ShellFlags, TextCalls: f.TextCalls, Lookups: f.Lookups, Weak: f.Weak, sanitizeCall: map[string]Kind{}, sanitizeMethod: map[string]Kind{}}
+	s := &Spec{Sources: f.Sources, Sinks: f.Sinks, Sanitizers: f.Sanitizers, Guards: f.Guards, Normalizers: f.Normalizers, Responses: f.Responses, Escapes: f.Escapes, URLParsers: f.URLParsers, ShellFlags: f.ShellFlags, TextCalls: f.TextCalls, Lookups: f.Lookups, Weak: f.Weak, Supersedes: f.Supersedes, sanitizeCall: map[string]Kind{}, sanitizeMethod: map[string]Kind{}}
 	for _, g := range s.Guards {
 		for _, n := range g.KindsRaw {
 			k, ok := kindByName[n]

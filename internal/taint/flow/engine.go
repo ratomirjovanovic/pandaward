@@ -41,6 +41,7 @@ type Engine struct {
 	textCalls   map[string]bool
 	lookups     map[string]bool
 	weak        weak
+	chains      [][]string
 }
 
 // New prepares an engine for a specification.
@@ -49,6 +50,9 @@ func New(spec *taint.Spec) *Engine {
 		srcAttrs: set(spec.Sources.Attributes), srcCalls: set(spec.Sources.Calls), params: set(spec.Sources.Params),
 		routes: set(spec.Sources.RouteDecorators), normalizers: set(spec.Normalizers), responses: set(spec.Responses.Calls), setters: map[string]bool{}, urlParsers: set(spec.URLParsers), textCalls: set(spec.TextCalls), lookups: set(spec.Lookups)}
 	e.weak = newWeak(spec)
+	for _, c := range spec.Sources.Chains {
+		e.chains = append(e.chains, strings.Split(c, "."))
+	}
 	for _, s := range spec.Sinks {
 		for n, t := range s.Calls {
 			e.calls[n] = append(e.calls[n], sinkTarget{s, t, false})
@@ -135,6 +139,9 @@ type fnRun struct {
 	// ret and self are the returned value and self at the returns, joined
 	// in the report pass.
 	ret, self *Value
+	// raises and returns record, in the report pass, a raise no handler of
+	// the function catches and a return of something other than None.
+	raises, returns bool
 	// shared are the temporaries read outside the block that sets them;
 	// the others are dropped at the end of their block.
 	shared map[string]bool
@@ -227,6 +234,14 @@ func (r *run) newSource(line int, what string) *taint.Trace {
 // function analyzes fn from an entry state and returns the value it
 // returns and the value of self when it returns.
 func (r *run) function(fn *ir.Function, entry State, route bool) (ret, self *Value) {
+	ret, self, _ = r.analyzeFn(fn, entry, route)
+	return ret, self
+}
+
+// analyzeFn is function, and also reports a validator: a function that
+// returns nothing and raises on some path, so that its caller continues
+// only with arguments it accepted.
+func (r *run) analyzeFn(fn *ir.Function, entry State, route bool) (ret, self *Value, validates bool) {
 	f := &fnRun{run: r, fn: fn, route: route, shared: sharedTemps(fn)}
 	in := map[*ir.Block]State{fn.Entry(): entry}
 	visits := map[*ir.Block]int{}
@@ -268,7 +283,7 @@ func (r *run) function(fn *ir.Function, entry State, route bool) (ret, self *Val
 			}
 		}
 	}
-	return f.ret, f.self
+	return f.ret, f.self, f.raises && !f.returns
 }
 
 // routeParam matches a typed path parameter such as <int:id>.
@@ -350,9 +365,17 @@ func (f *fnRun) block(b *ir.Block, s State, push func(*ir.Block, State)) {
 		}
 		push(t.Succs[0], f.refine(st, t.Cond, true))
 		push(t.Succs[1], f.refine(st, t.Cond, false))
+	case ir.Raise:
+		if f.report && len(b.Handlers) == 0 {
+			f.raises = true
+		}
 	case ir.Return:
 		if f.report {
-			f.ret = joinFirst(f.ret, f.val(st, t.Value))
+			v := f.val(st, t.Value)
+			f.ret = joinFirst(f.ret, v)
+			if !t.Value.IsZero() && !(v.C != nil && v.C.Kind == ir.None) {
+				f.returns = true
+			}
 			if v, ok := st["self"]; ok {
 				f.self = joinFirst(f.self, v)
 			}
@@ -369,6 +392,46 @@ func (f *fnRun) block(b *ir.Block, s State, push func(*ir.Block, State)) {
 			}
 		}
 	}
+}
+
+// chained reports an attribute read at the end of a source chain, such
+// as completion.choices[0].message.content.
+func (f *fnRun) chained(in *ir.Instr) bool {
+	if len(f.e.chains) == 0 {
+		return false
+	}
+	path := []string{in.Name}
+	o := in.A
+	for len(path) < 8 {
+		d := f.fn.Defs[o.Var]
+		if d == nil {
+			break
+		}
+		if d.Op == ir.Load {
+			path = append(path, d.Name)
+		} else if d.Op == ir.Index {
+			path = append(path, "[]")
+		} else {
+			break
+		}
+		o = d.A
+	}
+	for _, c := range f.e.chains {
+		if len(c) > len(path) {
+			continue
+		}
+		ok := true
+		for i := range c {
+			if c[len(c)-1-i] != path[i] {
+				ok = false
+				break
+			}
+		}
+		if ok {
+			return true
+		}
+	}
+	return false
 }
 
 // joinFirst joins v into acc, taking v as it is when acc is unset.
@@ -452,19 +515,23 @@ func (f *fnRun) instr(in *ir.Instr, st State) {
 		st[in.Dst] = &Value{Q: in.Name}
 	case ir.Func:
 		st[in.Dst] = &Value{Fn: in.Fn}
-		if f.report {
-			if old, ok := f.envs[in.Fn]; ok {
-				joinInto(old, st, false)
-			} else {
-				f.envs[in.Fn] = st.copy()
-			}
+		// The enclosing scope a nested function sees, recorded in every
+		// pass: it may be called before the fixpoint ends.
+		if old, ok := f.envs[in.Fn]; ok {
+			joinInto(old, st, false)
+		} else {
+			f.envs[in.Fn] = st.copy()
 		}
 	case ir.Bin:
 		f.set(st, in.Dst, binary(in.Name, f.val(st, in.A), f.val(st, in.B)), line)
 	case ir.Unary:
 		f.set(st, in.Dst, unary(in.Name, f.val(st, in.A)), line)
 	case ir.Load:
-		f.set(st, in.Dst, f.load(f.val(st, in.A), in.Name, line), line)
+		v := f.load(f.val(st, in.A), in.Name, line)
+		if v.T == nil && f.chained(in) {
+			v = f.source(line, "")
+		}
+		f.set(st, in.Dst, v, line)
 	case ir.Store:
 		if in.A.Var != "" {
 			base := f.val(st, in.A).copy()

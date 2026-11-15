@@ -117,6 +117,8 @@ func (f *fnRun) refine(st State, cond ir.Operand, edge bool) State {
 			}
 		case len(g.Methods) > 0 && d.Op == ir.Call && edge && contains(g.Methods, d.Name):
 			mark(f.root(d.A), g.Kinds)
+		case len(g.Calls) > 0 && d.Op == ir.Call && edge && len(d.Args) > 0 && f.calls(d, st, g.Calls):
+			mark(f.root(d.Args[0]), g.Kinds)
 		case g.Allowlist && isIn && !absent && constant(f.val(st, d.B)) && f.val(st, d.B).C == nil:
 			mark(f.root(d.A), g.Kinds)
 		case g.Netloc:
@@ -156,6 +158,17 @@ func (f *fnRun) refine(st State, cond ir.Operand, edge bool) State {
 		return st
 	}
 	return out
+}
+
+// calls reports a call instruction whose qualified callee is in list.
+func (f *fnRun) calls(d *ir.Instr, st State, list []string) bool {
+	q := f.val(st, d.A).Q
+	if d.Name != "" && q != "" {
+		q += "." + d.Name
+	} else if d.Name != "" {
+		return false
+	}
+	return contains(list, q)
 }
 
 func isInt(v *Value, n int) bool {
