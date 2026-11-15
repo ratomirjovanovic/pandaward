@@ -69,6 +69,8 @@ func (f *fnRun) call(in *ir.Instr, st State) *Value {
 	c := f.resolve(in, st)
 	if f.report {
 		f.weakSinks(c)
+		f.routeCall(c)
+		f.jsxSinks(c)
 	}
 	r := f.weakSource(c, f.callResolved(c, st))
 	for _, n := range c.names {
@@ -168,6 +170,7 @@ func (f *fnRun) callResolved(c *call, st State) *Value {
 			return r
 		}
 	}
+	f.callbacks(c)
 	if r := f.container(c, st); r != nil {
 		return r
 	}
@@ -556,6 +559,10 @@ func (f *fnRun) sinks(c *call, st State) {
 		s := t.sink
 		if t.shell {
 			sh, ok := c.kw["shell"]
+			if !ok && len(c.args) > 0 {
+				// JavaScript: spawn(cmd, args, { shell: true })
+				sh, ok = c.args[len(c.args)-1].Fields["shell"]
+			}
 			if truth, known := knownTruth(sh); !ok || !known || !truth {
 				// [shell, "-c", command, ...] runs command in a shell too.
 				if cmd := f.shellList(c, t.t.Arg); cmd != nil && cmd.tainted(s.Kind) {
@@ -672,7 +679,98 @@ func (f *fnRun) foundUnknown(s *taint.Sink, line int) {
 
 // foundAt records a finding at a sink with the trace that reached it, or
 // with the sink alone when nil.
+// propSinks reports a store into a property that is a sink, such as
+// el.innerHTML = x or location.href = x: the property alone, or with the
+// receiver's name or qualified name.
+func (f *fnRun) propSinks(in *ir.Instr, base, v *Value) {
+	if !v.dangerous() {
+		return
+	}
+	recv := f.receiverName(&ir.Instr{Name: in.Name, A: in.A})
+	for _, s := range f.e.spec.Sinks {
+		for _, p := range s.Props {
+			if p == in.Name || recv != "" && p == recv+"."+in.Name || base.Q != "" && p == base.Q+"."+in.Name {
+				if v.tainted(s.Kind) {
+					f.found(s, in.Pos.Line, v)
+				}
+			}
+		}
+	}
+}
+
+// jsxSinks reports an attribute path of a JSX element (jsx(tag, attrs))
+// that is a sink, such as dangerouslySetInnerHTML.__html.
+func (f *fnRun) jsxSinks(c *call) {
+	if len(c.names) == 0 || c.names[0] != "jsx" || len(c.args) < 2 {
+		return
+	}
+	for _, s := range f.e.spec.Sinks {
+		for _, path := range s.JSX {
+			v := c.args[1]
+			for _, part := range strings.Split(path, ".") {
+				next, ok := v.Fields[part]
+				if !ok {
+					v = taintOf(v)
+					break
+				}
+				v = next
+			}
+			if v.tainted(s.Kind) {
+				f.found(s, c.in.Pos.Line, v)
+			}
+		}
+	}
+}
+
+// elementCallbacks are methods whose callback gets an element of the
+// receiver as its first argument.
+var elementCallbacks = map[string]bool{"forEach": true, "map": true, "filter": true, "some": true, "every": true, "find": true,
+	"findIndex": true, "flatMap": true, "each": true, "then": true, "replace": false}
+
+// callbacks analyzes the functions a call of code the engine does not see
+// receives (new Promise(function (resolve) {...}), list.forEach(fn),
+// p.then(fn)): they run with the caller's scope, and their sinks count.
+func (f *fnRun) callbacks(c *call) {
+	if !f.report || f.p.depth >= maxCallDepth {
+		return
+	}
+	for _, a := range c.all {
+		if a.Fn == nil || isClass(a.Fn) || f.p.owner[a.Fn] == nil || f.p.active[a.Fn] {
+			continue
+		}
+		args := &call{in: &ir.Instr{}, kw: map[string]*Value{}}
+		if elementCallbacks[c.in.Name] {
+			args.args = []*Value{iterate(c.recv)}
+		}
+		f.invoke(a.Fn, nil, args)
+	}
+}
+
+// routeCall analyzes the handlers a call registers.
+func (f *fnRun) routeCall(c *call) {
+	for _, rc := range f.e.spec.Sources.RouteCalls {
+		match := false
+		for _, n := range c.names {
+			match = match || contains(rc.Calls, n)
+		}
+		if !match && contains(rc.Methods, c.in.Name) {
+			match = contains(rc.Receivers, f.receiverName(c.in)) || contains(rc.Receivers, c.recv.Inst)
+		}
+		if !match {
+			continue
+		}
+		for _, a := range c.all {
+			if a.Fn != nil && !isClass(a.Fn) {
+				f.p.handler(a.Fn, rc)
+			}
+		}
+	}
+}
+
 func (f *fnRun) foundAt(s *taint.Sink, line int, t *taint.Trace) {
+	if s.RequestOnly && t != nil && t.Root().Library {
+		return // a library that opens the path it is given does its job
+	}
 	k := f.mod.Path + "|" + s.ID + ":" + strconv.Itoa(line)
 	if _, ok := f.p.findings[k]; ok {
 		return
@@ -688,6 +786,6 @@ func (f *fnRun) foundAt(s *taint.Sink, line int, t *taint.Trace) {
 			steps[i].File = ""
 		}
 	}
-	f.p.findings[k] = taint.Finding{Sink: s, File: f.mod.Path, Line: line, EndLine: line, Steps: steps}
+	f.p.findings[k] = taint.Finding{Sink: s, File: f.mod.Path, Line: line, EndLine: line, Steps: steps, Library: t != nil && t.Root().Library}
 	f.p.order = append(f.p.order, k)
 }

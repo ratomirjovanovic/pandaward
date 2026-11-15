@@ -1,0 +1,241 @@
+# Taint specification for JavaScript and TypeScript on the IR engine
+# (internal/taint/flow), measured next to the jsflow engine
+# (javascript.yaml) until it is at least as good on the CVE benchmark
+# (#406). Names are qualified after module resolution: child_process.exec
+# matches require('child_process').exec, an imported exec and cp.exec. A
+# handler a route call registers gets the request (express.request) as its
+# first parameter and the response (express.response) as its second.
+
+sources:
+  attributes:
+    - express.request.query
+    - express.request.body
+    - express.request.params
+    - express.request.headers
+    - express.request.cookies
+    - express.request.signedCookies
+    - express.request.url
+    - express.request.originalUrl
+    - express.request.path
+    - express.request.hostname
+    - express.request.files
+    - express.request.file
+    - express.request.payload
+    - express.request.rawBody
+    - express.request.querystring
+    - express.request.request.body
+    - express.request.request.query
+    - express.request.request.url
+    - location.hash
+    - location.search
+    - location.href
+    - location.pathname
+    - document.URL
+    - document.documentURI
+    - document.referrer
+    - document.baseURI
+    - window.name
+    - window.location.hash
+    - window.location.search
+    - window.location.href
+    - process.argv
+  calls:
+    - express.request.get
+    - express.request.header
+    - express.request.param
+  route_calls:
+    - receivers: [app, router, server, api, routes, route, r, fastify, express, express.Router, express]
+      methods: [get, post, put, patch, delete, del, all, use, options, head, route]
+      request: express.request
+      response: express.response
+    - calls: [http.createServer, https.createServer, http2.createServer, http2.createSecureServer, connect, express]
+      request: express.request
+      response: express.response
+
+sinks:
+  - id: taint.js-command-injection
+    kind: cmd
+    control: D-002
+    cwe: "CWE-78"
+    title: Shell command built from untrusted input
+    message: Input reaches a command run through a shell, so shell metacharacters in it run extra commands.
+    fix: Use execFile or spawn with an argument array and no shell, or validate the value against a strict allowlist first.
+    calls:
+      - child_process.exec
+      - child_process.execSync
+      - shelljs.exec
+      - execa.command
+      - execa.commandSync
+      - execa.shell
+      - execa.shellSync
+      - exec-sh
+    calls_with_shell_option:
+      - child_process.spawn#0
+      - child_process.spawnSync#0
+      - child_process.execFile#0
+      - child_process.execFileSync#0
+
+  - id: taint.js-code-injection
+    kind: code
+    control: D-001
+    cwe: "CWE-94"
+    title: Code built from untrusted input is evaluated
+    message: Input reaches eval, the Function constructor or a similar evaluator, so it runs as code.
+    fix: Never evaluate input. Parse it as data (JSON.parse) or map it through a lookup table.
+    calls: [eval, Function#*, setTimeout, setInterval, vm.runInNewContext, vm.runInThisContext, vm.runInContext, vm.compileFunction, vm.Script]
+
+  - id: taint.js-path-traversal
+    kind: path
+    control: D-006
+    cwe: "CWE-22"
+    title: File path built from untrusted input
+    message: Input reaches a file system path, so ../ sequences or absolute paths read or write files outside the intended directory.
+    fix: Resolve the path and check that it stays inside the base directory (path.resolve(base, p).startsWith(base + path.sep)), or take only path.basename of it.
+    request_only: true
+    calls:
+      - fs.readFile
+      - fs.readFileSync
+      - fs.writeFile
+      - fs.writeFileSync
+      - fs.appendFile
+      - fs.appendFileSync
+      - fs.createReadStream
+      - fs.createWriteStream
+      - fs.unlink
+      - fs.unlinkSync
+      - fs.rm
+      - fs.rmSync
+      - fs.rmdir
+      - fs.rmdirSync
+      - fs.mkdir
+      - fs.mkdirSync
+      - fs.readdir
+      - fs.readdirSync
+      - fs.stat
+      - fs.statSync
+      - fs.open
+      - fs.openSync
+      - fs.rename
+      - fs.renameSync
+      - fs.copyFile
+      - fs.copyFileSync
+      - fs.exists
+      - fs.existsSync
+      - fs.lstat
+      - fs.lstatSync
+      - fs.access
+      - fs.accessSync
+      - fs.link
+      - fs.linkSync
+      - fs.symlink
+      - fs.symlinkSync
+      - fs.realpath
+      - fs.realpathSync
+      - fs.promises.readFile
+      - fs.promises.writeFile
+      - fs.promises.unlink
+      - fs/promises.readFile
+      - fs/promises.writeFile
+      - fs/promises.unlink
+      - fs/promises.rm
+      - fs-extra.readFile
+      - fs-extra.readFileSync
+      - fs-extra.writeFile
+      - fs-extra.outputFile
+      - fs-extra.remove
+      - fs-extra.copy
+      - graceful-fs.readFile
+      - graceful-fs.createReadStream
+      - graceful-fs.writeFile
+      - send#1
+      - mkdirp
+      - mkdirp.sync
+      - rimraf
+      - rimraf.sync
+      - express.response.sendFile
+      - express.response.download
+      - express.response.sendfile
+
+  - id: taint.js-sql-injection
+    kind: sql
+    control: D-003
+    cwe: "CWE-89"
+    title: SQL query text built from untrusted input
+    message: Input reaches the text of an SQL query, so it can change the query.
+    fix: Pass the value as a bound parameter ($1, ?) or through a tagged sql template.
+    methods: [query#0, execute#0, raw#0, $queryRawUnsafe#0, $executeRawUnsafe#0, unsafe#0]
+    receivers_not: [Promise, res, response, router, app, $]
+
+  - id: taint.js-xss
+    kind: xss
+    control: H-001
+    cwe: "CWE-79"
+    title: Untrusted input written as HTML
+    message: Input is written into the page as HTML, so a script in it runs in the user's browser.
+    fix: Write it as text (textContent, a template that escapes) or sanitize it with DOMPurify first.
+    calls: [document.write, document.writeln, $, jQuery, express.response.send, express.response.write, express.response.end]
+    methods: [insertAdjacentHTML#1, html#0, append#0, prepend#0, after#0, before#0, replaceWith#0]
+    method_receivers:
+      html: [$]
+      append: [$]
+      prepend: [$]
+      after: [$]
+      before: [$]
+      replaceWith: [$]
+    props: [innerHTML, outerHTML, ctx.body]
+    jsx: [dangerouslySetInnerHTML.__html]
+
+  - id: taint.js-ssrf
+    kind: ssrf
+    control: D-006
+    cwe: "CWE-918"
+    title: Request URL built from untrusted input
+    message: Input chooses the URL of a server-side request, so it can reach internal services.
+    fix: Allow only known hosts; parse the URL and compare its host with an allowlist.
+    calls: [fetch, axios, axios.get, axios.post, axios.request, got, got.get, request, request.get, needle.get, http.get, http.request, https.get, https.request, node-fetch, undici.request, undici.fetch]
+    request_only: true
+    text_only: true
+
+  - id: taint.js-open-redirect
+    kind: redirect
+    control: D-006
+    cwe: "CWE-601"
+    title: Redirect target built from untrusted input
+    message: Input chooses where the user is redirected, so a link can send users to another site.
+    fix: Redirect only to relative paths or to an allowlist of hosts.
+    calls: [express.response.redirect]
+    props: [location.href, window.location.href]
+    request_only: true
+
+sanitizers:
+  - kinds: [all]
+    calls: [Number, parseInt, parseFloat, Boolean, Math.floor, Math.ceil, Math.round, Math.trunc, Math.abs, Math.min, Math.max, isNaN, Number.isInteger, Number.parseInt, Number.parseFloat, encodeURIComponent, len]
+    methods: [startsWith, endsWith, includes, indexOf, lastIndexOf, test, match, localeCompare, hasOwnProperty, length]
+  - kinds: [cmd]
+    calls: [shell-quote.quote, shell-escape, shellescape, any-shell-escape]
+  - kinds: [path]
+    calls: [path.basename, sanitize-filename]
+  - kinds: [xss]
+    calls: [escape-html, he.encode, he.escape, lodash.escape, validator.escape, DOMPurify.sanitize, dompurify.sanitize, xss, sanitize-html, encodeURI, JSON.stringify]
+  - kinds: [sql]
+    calls: [mysql.escape, pg-format, sqlstring.escape]
+
+returns:
+  express.response.status: express.response
+  express.response.type: express.response
+  express.response.set: express.response
+  express.response.header: express.response
+  express.response.cookie: express.response
+
+text_calls: [decodeURIComponent, decodeURI, unescape, String, querystring.parse, qs.parse, url.parse, JSON.parse, Buffer.from, path.join, path.resolve, path.normalize]
+
+decoders: [decodeURIComponent, decodeURI, unescape, Buffer.from, atob]
+
+guards:
+  - kinds: [path]
+    contains: [".."]
+  - kinds: [path]
+    method: startsWith
+    normalized: true
+
+normalizers: [path.resolve, path.normalize, fs.realpathSync]

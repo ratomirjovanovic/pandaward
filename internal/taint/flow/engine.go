@@ -622,6 +622,7 @@ func (f *fnRun) instr(in *ir.Instr, st State) {
 			v := f.val(st, in.B)
 			if f.report {
 				f.weakStore(in.Name, v, line)
+				f.propSinks(in, f.val(st, in.A), v)
 			}
 			base.Fields["."+in.Name] = v
 			st[in.A.Var] = mix(base, v)
@@ -665,6 +666,9 @@ func (f *fnRun) load(base *Value, name string, line int) *Value {
 	}
 	if fv, ok := base.Fields["."+name]; ok {
 		return fv
+	}
+	if fv, ok := base.Fields[name]; ok && base.Inst == "dict" {
+		return fv // obj.x of an object literal { x: ... }
 	}
 	if base.Q != "" {
 		// a static field of a class of the project
@@ -724,6 +728,9 @@ func (f *fnRun) index(in *ir.Instr, st State) *Value {
 	if k.C != nil {
 		if fv, ok := base.Fields[key(k.C)]; ok {
 			return fv
+		}
+		if fv, ok := base.Fields["."+k.C.Val]; ok && k.C.Kind == ir.Str {
+			return fv // obj["x"] of obj.x = ...
 		}
 		if base.C != nil && base.C.Kind == ir.Str && k.C.Kind == ir.Int {
 			if i, err := strconv.Atoi(k.C.Val); err == nil {

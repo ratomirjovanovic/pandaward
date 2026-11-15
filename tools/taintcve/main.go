@@ -26,6 +26,8 @@ import (
 	"github.com/ratomirjovanovic/pandaward/internal/config"
 	"github.com/ratomirjovanovic/pandaward/internal/inventory"
 	"github.com/ratomirjovanovic/pandaward/internal/taint"
+	"github.com/ratomirjovanovic/pandaward/internal/taint/flow"
+	"github.com/ratomirjovanovic/pandaward/internal/taint/ir"
 	"github.com/ratomirjovanovic/pandaward/internal/taint/js"
 	"github.com/ratomirjovanovic/pandaward/internal/taint/jsflow"
 )
@@ -51,7 +53,9 @@ func main() {
 	only := flag.String("cve", "", "comma-separated CVE ids")
 	scan := flag.Bool("scan", false, "instead: print the findings in application code under the directories given as arguments (no library mode)")
 	cpu := flag.String("cpuprofile", "", "write a CPU profile to this file")
+	irEngine := flag.Bool("ir", false, "measure the IR engine (internal/taint/flow, rules/taint/jsir.yaml) instead of jsflow")
 	flag.Parse()
+	useIR = *irEngine
 	if *cpu != "" {
 		f, err := os.Create(*cpu)
 		if err == nil && pprof.StartCPUProfile(f) == nil {
@@ -182,9 +186,34 @@ func analyze(spec *taint.Spec, dir string, c cve) (map[string][]taint.Finding, b
 		}
 		found = true
 		file := js.Parse(f, string(b), js.OptionsFor(f))
+		if useIR {
+			out[f] = analyzeIR(file, string(b))
+			continue
+		}
 		out[f] = jsflow.Analyze(file, spec, jsflow.Options{Library: true})
 	}
 	return out, found
+}
+
+// useIR selects the IR engine (-ir).
+var useIR bool
+
+var irEng *flow.Engine
+
+// analyzeIR runs the IR engine on one file in library mode.
+func analyzeIR(file *js.File, src string) []taint.Finding {
+	if irEng == nil {
+		spec, err := taint.Load("jsir")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		irEng = flow.New(spec)
+	}
+	m := js.Lower(file, file.Path, nil)
+	p := irEng.NewProject(func(string) (*ir.Module, []string) { return nil, nil })
+	p.Library = true
+	return p.AnalyzeOne(m, strings.Split(src, "\n"))
 }
 
 func count(m map[string][]taint.Finding, rule string) int {

@@ -124,12 +124,27 @@ type Sources struct {
 	Calls           []string `yaml:"calls"`
 	Params          []string `yaml:"params"`
 	RouteDecorators []string `yaml:"route_decorators"`
+	// RouteCalls register a handler function: its first parameter is the
+	// request (Q Request) and its second the response (class Response)
+	// (JavaScript: app.get(path, handler), http.createServer(handler)).
+	RouteCalls []RouteCall `yaml:"route_calls"`
 	// ParamAnnotations mark a parameter as request data (Java:
 	// RequestParam, PathVariable, QueryParam, ...).
 	ParamAnnotations []string `yaml:"param_annotations"`
 	// HTMLReturnFrameworks are modules whose import makes a route
 	// handler's return value an HTML response.
 	HTMLReturnFrameworks []string `yaml:"html_return_frameworks"`
+}
+
+// RouteCall is a call that registers a request handler: a method in
+// Methods called on a receiver named or of a class in Receivers, or a
+// call of one of Calls.
+type RouteCall struct {
+	Receivers []string `yaml:"receivers"`
+	Methods   []string `yaml:"methods"`
+	Calls     []string `yaml:"calls"`
+	Request   string   `yaml:"request"`
+	Response  string   `yaml:"response"`
 }
 
 // Guard is a test that makes a value safe for Kinds on one branch: the

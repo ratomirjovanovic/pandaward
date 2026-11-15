@@ -43,6 +43,10 @@ type Project struct {
 	classes  map[string]*ir.Function
 	findings map[string]taint.Finding
 	order    []string
+	// Library makes the parameters of exported functions sources, for a
+	// published package (hypotheses).
+	Library  bool
+	handlers map[*ir.Function]bool
 	memo     map[string]callResult
 	active   map[*ir.Function]bool
 	depth    int
@@ -52,12 +56,87 @@ type Project struct {
 // NewProject starts the analysis of a project whose modules load returns.
 func (e *Engine) NewProject(load Loader) *Project {
 	return &Project{e: e, load: load, runs: map[string]*run{}, byMod: map[*ir.Module]*run{}, none: map[string]bool{}, owner: map[*ir.Function]*run{},
-		classes: map[string]*ir.Function{}, findings: map[string]taint.Finding{}, memo: map[string]callResult{}, active: map[*ir.Function]bool{}}
+		classes: map[string]*ir.Function{}, findings: map[string]taint.Finding{}, memo: map[string]callResult{}, active: map[*ir.Function]bool{}, handlers: map[*ir.Function]bool{}}
+}
+
+// handler analyzes a function a route call registers, with the request
+// and response the call gives it.
+func (p *Project) handler(fn *ir.Function, rc taint.RouteCall) {
+	owner := p.owner[fn]
+	if owner == nil || p.handlers[fn] || p.depth >= maxCallDepth {
+		return
+	}
+	p.handlers[fn] = true
+	entry := State{}
+	for i, prm := range fn.Params {
+		switch i {
+		case 0:
+			entry[prm.Name] = &Value{Q: rc.Request}
+		case 1:
+			entry[prm.Name] = &Value{Inst: rc.Response}
+		default:
+			entry[prm.Name] = &Value{}
+		}
+	}
+	p.depth++
+	owner.function(fn, entry, false)
+	p.depth--
+}
+
+// exported analyzes the functions a module exports with their parameters
+// as sources: in a published package the caller decides what they hold.
+func (p *Project) exported(r *run) {
+	for _, name := range sortedKeys(r.exit) {
+		v := r.exit[name]
+		if v.Fn == nil || strings.HasPrefix(name, "$") || p.owner[v.Fn] != r {
+			continue
+		}
+		params := func(fn *ir.Function, entry State) State {
+			for _, prm := range fn.Params {
+				if _, set := entry[prm.Name]; set {
+					continue
+				}
+				t := taint.NewSource(prm.Pos.Line, "parameter "+prm.Name+" of exported "+name, true)
+				t.File = r.mod.Path
+				entry[prm.Name] = &Value{T: t}
+			}
+			return entry
+		}
+		if !isClass(v.Fn) {
+			r.function(v.Fn, params(v.Fn, State{}), false)
+			continue
+		}
+		// An exported class: built with arguments from the caller, then
+		// each method called with arguments from the caller.
+		class := v.Fn
+		inst := &Value{Inst: className(r.mod, class)}
+		if init := p.method(class, "__init__", 0); init != nil {
+			if _, self, _ := r.analyzeFn(init, params(init, State{init.Params[0].Name: inst}), false); self != nil {
+				inst = self.copy()
+				inst.Inst = className(r.mod, class)
+			}
+		}
+		for _, m := range r.mod.Funcs {
+			if m.Parent == class && !strings.HasSuffix(m.Name, ".__init__") && len(m.Params) > 0 {
+				entry := State{}
+				if !decorated(m, "staticmethod") {
+					entry[m.Params[0].Name] = inst
+				}
+				r.function(m, params(m, entry), false)
+			}
+		}
+	}
 }
 
 // SetProperties gives the engine the keys and values of the project's
 // .properties files, which Properties.getProperty(key, default) reads.
 func (p *Project) SetProperties(props map[string]string) { p.e.props = props }
+
+// AnalyzeOne analyzes a module that is not loaded by name, such as a
+// single file.
+func (p *Project) AnalyzeOne(m *ir.Module, lines []string) []taint.Finding {
+	return p.analyze(p.add(m, lines))
+}
 
 // Module analyzes every function of a module and returns the flows found
 // since the previous call, in this module or in the modules it calls.
@@ -74,6 +153,9 @@ func (p *Project) analyze(r *run) []taint.Finding {
 	p.calls = 0
 	for _, fn := range r.mod.Funcs {
 		r.root(fn)
+	}
+	if p.Library {
+		p.exported(r)
 	}
 	keys := append([]string(nil), p.order[before:]...)
 	sort.Strings(keys)
@@ -153,9 +235,14 @@ func (p *Project) resolve(q string, hops int) *ir.Function {
 		return nil
 	}
 	parts := strings.Split(q, ".")
-	// A module named after its class (Java): the name is the class.
+	// A module named after its class (Java): the name is the class; a
+	// module whose default export is a function (JavaScript
+	// module.exports = fn).
 	if r := p.module(q); r != nil {
 		if v, ok := r.exit[parts[len(parts)-1]]; ok && v.Fn != nil {
+			return v.Fn
+		}
+		if v, ok := r.exit["default"]; ok && v.Fn != nil {
 			return v.Fn
 		}
 	}
@@ -254,6 +341,18 @@ func (f *fnRun) project(c *call, st State) (*Value, bool) {
 		}
 	case c.recv.Fn != nil && isClass(c.recv.Fn):
 		fn = p.method(c.recv.Fn, in.Name, 0) // Class.method(...)
+	}
+	if fn == nil && in.Name != "" {
+		// a method stored in an object: obj.m() with { m() {...} }
+		for _, k := range []string{"." + in.Name, in.Name} {
+			if v, ok := c.recv.Fields[k]; ok && v.Fn != nil {
+				fn = v.Fn
+				if len(fn.Params) > 0 && fn.Params[0].Name == "this" {
+					self = c.recv
+				}
+				break
+			}
+		}
 	}
 	if fn == nil || decorated(fn, "abstract") {
 		return nil, false
