@@ -11,11 +11,14 @@ import (
 	"github.com/ratomirjovanovic/pandaward/internal/model"
 	"github.com/ratomirjovanovic/pandaward/internal/redact"
 	"github.com/ratomirjovanovic/pandaward/internal/taint"
+	"github.com/ratomirjovanovic/pandaward/internal/taint/flow"
 	"github.com/ratomirjovanovic/pandaward/internal/taint/jsflow"
+	pyparse "github.com/ratomirjovanovic/pandaward/internal/taint/py"
 	"github.com/ratomirjovanovic/pandaward/internal/version"
 )
 
-// taintAdapter runs the built-in taint engine on JavaScript and TypeScript.
+// taintAdapter runs the built-in taint engine on JavaScript, TypeScript and
+// Python.
 // It runs by default next to builtin-code; scan.taint_engine: false turns
 // it off (#381).
 type taintAdapter struct{}
@@ -93,6 +96,13 @@ func (a taintAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 		}
 	}
 	files, parseErrors := len(paths), proj.ParseErrors
+	pyFiles, pyErrors, err := a.python(ctx, c, &res)
+	if err != nil {
+		return res, finish(run, model.ExitError, err.Error(), len(res.Signals))
+	}
+	if ctx.Err() != nil {
+		return res, finish(run, model.ExitTimeout, "cancelled", len(res.Signals))
+	}
 	detail := fmt.Sprintf("%d JavaScript/TypeScript files", files)
 	if library {
 		detail += "; library mode: parameters of exported functions are sources"
@@ -100,7 +110,60 @@ func (a taintAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 	if parseErrors > 0 {
 		detail += fmt.Sprintf("; %d with syntax the parser skipped", parseErrors)
 	}
+	detail += fmt.Sprintf("; %d Python files", pyFiles)
+	if pyErrors > 0 {
+		detail += fmt.Sprintf(" (%d with syntax the parser skipped)", pyErrors)
+	}
 	return res, finish(run, model.ExitOK, detail, len(res.Signals))
+}
+
+// python runs the IR engine (#406) on the Python files, one module at a
+// time.
+func (a taintAdapter) python(ctx context.Context, c *Context, res *Result) (files, parseErrors int, err error) {
+	var spec *taint.Spec
+	var eng *flow.Engine
+	for _, f := range c.Inv.Files {
+		if f.Lang != "python" || IsTestPath(f.Path) {
+			continue
+		}
+		if ctx.Err() != nil {
+			return files, parseErrors, nil
+		}
+		if eng == nil {
+			if spec, err = taint.Load("python"); err != nil {
+				return 0, 0, err
+			}
+			eng = flow.New(spec)
+		}
+		files++
+		src := strings.Join(f.Lines, "\n")
+		pf := pyparse.Parse(f.Path, src)
+		if len(pf.Errors) > 0 {
+			parseErrors++
+		}
+		name, pkg := pyModuleName(f.Path)
+		for _, fd := range eng.Analyze(pyparse.Lower(pf, name, pkg), f.Lines) {
+			res.Signals = append(res.Signals, taintSignal(fd, f, a.Name()))
+		}
+	}
+	return files, parseErrors, nil
+}
+
+// pyModuleName returns the dotted module name of a file relative to the
+// project root, and whether it is a package's __init__.py.
+func pyModuleName(p string) (string, bool) {
+	p = strings.TrimSuffix(p, ".py")
+	pkg := false
+	if path.Base(p) == "__init__" {
+		p, pkg = path.Dir(p), true
+		if p == "." {
+			return "", true
+		}
+	}
+	for _, prefix := range []string{"src/", "lib/"} {
+		p = strings.TrimPrefix(p, prefix)
+	}
+	return strings.ReplaceAll(p, "/", "."), pkg
 }
 
 // taintSignal turns a flow into a signal whose message shows the path.
