@@ -733,19 +733,33 @@ var elementCallbacks = map[string]bool{"forEach": true, "map": true, "filter": t
 // callbacks analyzes the functions a call of code the engine does not see
 // receives (new Promise(function (resolve) {...}), list.forEach(fn),
 // p.then(fn)): they run with the caller's scope, and their sinks count.
+//
+// A function written in place (its parent is this function) does not
+// count toward the call depth: it is nesting in the source, as in
+// new Promise(() => process.nextTick(() => exec(cmd))), which bounds it.
 func (f *fnRun) callbacks(c *call) {
-	if !f.report || f.p.depth >= maxCallDepth {
+	if !f.report {
 		return
 	}
 	for _, a := range callbackFns(c.all) {
 		if a.Fn == nil || isClass(a.Fn) || f.p.owner[a.Fn] == nil || f.p.active[a.Fn] {
 			continue
 		}
+		inPlace := a.Fn.Parent == f.fn
+		if !inPlace && f.p.depth >= maxCallDepth {
+			continue
+		}
 		args := &call{in: &ir.Instr{}, kw: map[string]*Value{}}
 		if elementCallbacks[c.in.Name] {
 			args.args = []*Value{iterate(c.recv)}
 		}
+		if inPlace {
+			f.p.depth--
+		}
 		f.invoke(a.Fn, nil, args)
+		if inPlace {
+			f.p.depth++
+		}
 	}
 }
 

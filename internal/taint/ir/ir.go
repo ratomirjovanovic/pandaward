@@ -240,6 +240,10 @@ type Module struct {
 	Name  string
 	Init  *Function
 	Funcs []*Function // every function, the module body first
+	// Exports are the names of the module body that other modules can
+	// import, when the language tells them from its other names
+	// (JavaScript); nil means every name (Python).
+	Exports map[string]bool
 }
 
 // NewBlock adds a block to f.

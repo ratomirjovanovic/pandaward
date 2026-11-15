@@ -117,6 +117,42 @@ func TestJSPathGuards(t *testing.T) {
 	}
 }
 
+// TestJSExportForms checks which functions count as exported: only the
+// exports of a module, the ones a chain of assignments or a wrapper
+// exports, the methods of an exported instance, and every function of a
+// script that exports nothing.
+func TestJSExportForms(t *testing.T) {
+	head := "var exec = require('child_process').exec\n"
+	for _, c := range []struct{ body, want string }{
+		{"function run (a) { exec(a) }\nexports.ok = function () { run('ls') }", ""},
+		{"function run (a) { exec(a) }\nexports = module.exports = run", "taint.js-command-injection:2"},
+		{"function View (a) { exec(a) }\nexport default memo(View)", "taint.js-command-injection:2"},
+		{"function run (a) { exec(a) }\nclass C { go (b) { run(b) } }\nmodule.exports = new C()", "taint.js-command-injection:2"},
+		{"function run (a) { exec(a) }\nclass C { go () { run('ls') } }\nmodule.exports = new C()", ""},
+	} {
+		src := head + c.body
+		if got := strings.Join(jsFlows(t, src), " "); got != c.want {
+			t.Errorf("got %q, want %q\n%s", got, c.want, src)
+		}
+	}
+	script := "function run (a) { document.write(a) }"
+	if got := strings.Join(jsFlows(t, script), " "); got != "taint.js-xss:1" {
+		t.Errorf("script: got %q", got)
+	}
+}
+
+// TestJSInPlaceCallbacks checks that functions written in place as
+// callbacks do not use up the call depth.
+func TestJSInPlaceCallbacks(t *testing.T) {
+	src := `var exec = require('child_process').exec
+function one (x) { return new Promise(() => { process.nextTick(() => { two(x) }) }) }
+function two (y) { return new Promise(() => { process.nextTick(() => { exec('ls ' + y) }) }) }
+exports.one = one`
+	if got := strings.Join(jsFlows(t, src), " "); got != "taint.js-command-injection:3" {
+		t.Errorf("got %q", got)
+	}
+}
+
 // TestJSRouteHandlers checks that the flows in a handler the module body
 // registers are reported: loading the module analyzes its body, and the
 // handler with it.

@@ -19,13 +19,19 @@ type Resolver func(spec string) string
 // their own names. Functions are lowered with their enclosing scope, class
 // methods get "this" and constructors are named __init__.
 func Lower(f *File, name string, resolve Resolver) *ir.Module {
-	m := &ir.Module{Path: f.Path, Name: name}
+	m := &ir.Module{Path: f.Path, Name: name, Exports: map[string]bool{}}
 	l := &lowerer{mod: m, resolve: resolve}
 	if l.resolve == nil {
 		l.resolve = func(string) string { return "" }
 	}
 	l.protos = prototypes(f.Stmts)
 	m.Init = l.function("<module>", 1, nil, f.Stmts, nil, nil, "", true)
+	if len(m.Exports) == 0 {
+		// A script that exports nothing, such as one of the files a
+		// browser library is concatenated from: its functions are globals
+		// any other script calls.
+		m.Exports = nil
+	}
 	return m
 }
 
@@ -565,6 +571,9 @@ func (l *lowerer) export(s *Export) {
 			v = ir.V(f.Name)
 		} else {
 			v = l.expr(s.Default)
+			if l.module {
+				l.exportWrapped(s.Default)
+			}
 		}
 		l.exportName("default", v, s.Line)
 	case s.From != "":
@@ -575,9 +584,11 @@ func (l *lowerer) export(s *Export) {
 				name = l.defaultOf(s.From, mod)
 			}
 			l.bind(sp.Exported, &ir.Instr{Op: ir.Import, Pos: at(s.Line), Name: name})
+			l.mod.Exports[sp.Exported] = true
 		}
 	default:
 		for _, sp := range s.Specs {
+			l.mod.Exports[sp.Exported] = true
 			if sp.Exported != sp.Local {
 				l.bind(sp.Exported, &ir.Instr{Op: ir.Copy, Pos: at(s.Line), A: l.name(sp.Local, s.Line)})
 			}
@@ -589,6 +600,7 @@ func (l *lowerer) exportName(name string, v ir.Operand, line int) {
 	if !l.module {
 		return
 	}
+	l.mod.Exports[name] = true
 	if name != v.Var {
 		l.emit(&ir.Instr{Op: ir.Copy, Pos: at(line), Dst: name, A: v})
 	}
@@ -672,26 +684,78 @@ func (l *lowerer) switchStmt(s *Switch) {
 
 // exprStmt lowers an expression statement, with the module export forms.
 func (l *lowerer) exprStmt(x Expr) {
-	if a, ok := x.(*Assign); ok && a.Op == "=" {
-		if path := memberPath(a.Target); path != "" && l.module {
-			switch {
-			case path == "module.exports":
-				v := l.expr(a.Value)
-				l.emit(&ir.Instr{Op: ir.Copy, Pos: at(a.Line), Dst: "default", A: v})
-				l.exportObject(a.Value, v, a.Line)
-				return
-			case strings.HasPrefix(path, "module.exports.") && strings.Count(path, ".") == 2:
-				v := l.expr(a.Value)
-				l.emit(&ir.Instr{Op: ir.Copy, Pos: at(a.Line), Dst: path[len("module.exports."):], A: v})
-				return
-			case strings.HasPrefix(path, "exports.") && strings.Count(path, ".") == 1:
-				v := l.expr(a.Value)
-				l.emit(&ir.Instr{Op: ir.Copy, Pos: at(a.Line), Dst: path[len("exports."):], A: v})
-				return
-			}
-		}
+	if a, ok := x.(*Assign); ok && a.Op == "=" && l.module && exportChain(a) {
+		l.assignChain(a)
+		return
 	}
 	l.expr(x)
+}
+
+// exportChain reports an assignment a = b = v one of whose targets is a
+// module export (exports = module.exports = fn).
+func exportChain(a *Assign) bool {
+	for {
+		if exportDst(memberPath(a.Target)) != "" {
+			return true
+		}
+		next, ok := a.Value.(*Assign)
+		if !ok || next.Op != "=" {
+			return false
+		}
+		a = next
+	}
+}
+
+// exportDst is the name of the module body an assignment target exports:
+// "default" for module.exports, x for module.exports.x and exports.x.
+func exportDst(path string) string {
+	switch {
+	case path == "module.exports":
+		return "default"
+	case strings.HasPrefix(path, "module.exports.") && strings.Count(path, ".") == 2:
+		return path[len("module.exports."):]
+	case strings.HasPrefix(path, "exports.") && strings.Count(path, ".") == 1:
+		return path[len("exports."):]
+	}
+	return ""
+}
+
+// assignChain lowers a = b = v whose export targets bind module body
+// names, and returns v.
+func (l *lowerer) assignChain(a *Assign) ir.Operand {
+	var v ir.Operand
+	if next, ok := a.Value.(*Assign); ok && next.Op == "=" {
+		v = l.assignChain(next)
+	} else {
+		v = l.expr(a.Value)
+	}
+	dst := exportDst(memberPath(a.Target))
+	if dst == "" {
+		l.assign(a.Target, v, a.Line)
+		return v
+	}
+	l.emit(&ir.Instr{Op: ir.Copy, Pos: at(a.Line), Dst: dst, A: v})
+	l.mod.Exports[dst] = true
+	if dst == "default" {
+		l.exportObject(a.Value, v, a.Line)
+		l.exportWrapped(a.Value)
+	}
+	return v
+}
+
+// exportWrapped marks the names a default export wraps as exported, as in
+// export default memo(Component) or connect(map)(Component): callers reach
+// them through the wrapper.
+func (l *lowerer) exportWrapped(x Expr) {
+	c, ok := x.(*Call)
+	for ok {
+		for _, a := range c.Args {
+			if id, isID := a.(*Ident); isID {
+				l.mod.Exports[id.Name] = true
+			}
+		}
+		c, ok = c.Callee.(*Call)
+	}
 }
 
 // exportObject binds the keys of module.exports = { a, b: c } as names.
@@ -703,6 +767,7 @@ func (l *lowerer) exportObject(x Expr, v ir.Operand, line int) {
 	for _, p := range obj.Props {
 		if p.Key != "" && p.Kind != "spread" && p.Computed == nil {
 			l.emit(&ir.Instr{Op: ir.Load, Pos: at(line), Dst: p.Key, A: v, Name: p.Key})
+			l.mod.Exports[p.Key] = true
 		}
 	}
 }

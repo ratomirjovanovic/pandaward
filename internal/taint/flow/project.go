@@ -91,7 +91,9 @@ func (p *Project) exported(r *run) {
 		all[name] = v
 	}
 	for name, v := range r.exit {
-		all[name] = v
+		if r.mod.Exports == nil || r.mod.Exports[name] {
+			all[name] = v
+		}
 	}
 	// module.exports = obj exports the functions of the object.
 	if v, ok := all["default"]; ok && v.Inst == "dict" {
@@ -103,20 +105,21 @@ func (p *Project) exported(r *run) {
 	}
 	for _, name := range sortedKeys(all) {
 		v := all[name]
+		// module.exports = new Client(): the methods of the instance, as
+		// the module built it.
+		if class := p.classes[v.Inst]; v.Fn == nil && class != nil && p.owner[class] == r && !strings.HasPrefix(name, "$") {
+			for _, m := range r.mod.Funcs {
+				if m.Parent == class && !strings.HasSuffix(m.Name, ".__init__") && len(m.Params) > 0 {
+					entry := State{m.Params[0].Name: v}
+					r.function(m, p.exportedParams(r, m, name, entry), false)
+				}
+			}
+			continue
+		}
 		if v.Fn == nil || strings.HasPrefix(name, "$") || p.owner[v.Fn] != r {
 			continue
 		}
-		params := func(fn *ir.Function, entry State) State {
-			for _, prm := range fn.Params {
-				if _, set := entry[prm.Name]; set {
-					continue
-				}
-				t := taint.NewSource(prm.Pos.Line, "parameter "+prm.Name+" of exported "+name, true)
-				t.File = r.mod.Path
-				entry[prm.Name] = &Value{T: t}
-			}
-			return entry
-		}
+		params := func(fn *ir.Function, entry State) State { return p.exportedParams(r, fn, name, entry) }
 		if !isClass(v.Fn) {
 			r.function(v.Fn, params(v.Fn, State{}), false)
 			continue
@@ -141,6 +144,21 @@ func (p *Project) exported(r *run) {
 			}
 		}
 	}
+}
+
+// exportedParams sets the parameters of an exported function that entry
+// does not set to sources: the caller of a published package decides
+// what they hold.
+func (p *Project) exportedParams(r *run, fn *ir.Function, name string, entry State) State {
+	for _, prm := range fn.Params {
+		if _, set := entry[prm.Name]; set {
+			continue
+		}
+		t := taint.NewSource(prm.Pos.Line, "parameter "+prm.Name+" of exported "+name, true)
+		t.File = r.mod.Path
+		entry[prm.Name] = &Value{T: t}
+	}
+	return entry
 }
 
 // SetProperties gives the engine the keys and values of the project's
