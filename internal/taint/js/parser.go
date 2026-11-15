@@ -1321,6 +1321,11 @@ func (p *parser) unary() Expr {
 		case "!", "~", "+", "-", "++", "--":
 			p.next()
 			return &Unary{Pos: ln, Op: t.Val, X: p.unary()}
+		case "::":
+			// The bind operator ::this.method, as babel's function-bind
+			// proposal writes it: the method itself.
+			p.next()
+			return p.unary()
 		case "<":
 			if p.ts && !p.jsx {
 				// A type assertion <T>x.

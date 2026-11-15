@@ -2,6 +2,7 @@ package flow
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 
@@ -345,5 +346,28 @@ export function GET(request: Request) {
 }`
 	if got := jsFlowsIn(t, "page.tsx", page); len(got) != 0 {
 		t.Errorf("page: got %v", got)
+	}
+}
+
+// TestJSReactProps checks that in a library of components this.props and
+// the props of createElement reach dangerouslySetInnerHTML, and that the
+// bind operator does not hide the render method that holds it.
+func TestJSReactProps(t *testing.T) {
+	src := `import React from 'react';
+export default class Box extends React.Component {
+  render() {
+    const { html } = this.props;
+    return <div onClick={::this.click}><span dangerouslySetInnerHTML={{ __html: html }} /></div>;
+  }
+  click() {}
+}
+export function Raw(props) {
+  return React.createElement('span', { dangerouslySetInnerHTML: { __html: props.html } });
+}`
+	flows := jsFlowsIn(t, "box.jsx", src)
+	sort.Strings(flows)
+	got := strings.Join(flows, " ")
+	if got != "taint.js-xss:10 taint.js-xss:5" {
+		t.Errorf("got %q", got)
 	}
 }

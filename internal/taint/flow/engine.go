@@ -759,6 +759,13 @@ func (f *fnRun) instr(in *ir.Instr, st State) {
 }
 
 func (f *fnRun) load(base *Value, name string, line int) *Value {
+	// In a library of React components, this.props is what the code using
+	// the component passes.
+	if name == "props" && f.p.Library && base.T == nil && f.p.classes[base.Inst] != nil && imports(f.mod.Init, "react") {
+		t := taint.NewSource(line, f.text(line), true)
+		t.File = f.mod.Path
+		return &Value{T: t}
+	}
 	if name == "path" && f.path != "" && strings.HasSuffix(base.Q, "request") {
 		return strVal(f.path)
 	}
