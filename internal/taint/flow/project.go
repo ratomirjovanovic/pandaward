@@ -402,6 +402,9 @@ func encode(sb *strings.Builder, v *Value, depth int) {
 	if v.From != "" {
 		sb.WriteString("u" + v.From)
 	}
+	if v.W != nil {
+		fmt.Fprintf(sb, "w%p/%d", v.W, v.WK)
+	}
 	if depth >= 2 {
 		return
 	}

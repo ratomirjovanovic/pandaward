@@ -373,3 +373,44 @@ def handler():
 		t.Errorf("got %v", got)
 	}
 }
+
+// Weak digests stored as passwords, predictable numbers used as secrets and
+// cookies without their flags; the safe variants stay quiet.
+func TestWeakCrypto(t *testing.T) {
+	src := header + `import hashlib, random, secrets
+@app.route('/x')
+def handler():
+    user = load()
+    h = hashlib.md5()
+    h.update(b"pw")
+    user.password = h.hexdigest()
+    user.checksum = hashlib.md5(b"data").hexdigest()
+    user.password = hashlib.sha256(b"pw").hexdigest()
+    f = open(f'{base}/passwordFile.txt', 'a')
+    f.write(hashlib.new('sha1', b"pw").hexdigest())
+    token = str(random.random())[2:]
+    store = {}
+    store['resetToken'] = token
+    store['author'] = token
+    store['csrf'] = secrets.token_hex(16)
+    session['id'] = random.randint(0, 9)
+    resp = make_response("ok")
+    resp.set_cookie('sid', 'v', secure=False, httponly=True)
+    resp.set_cookie('sid', 'v', secure=True, httponly=True)
+    resp.set_cookie('remember', str(random.getrandbits(32)), secure=True)
+    return resp
+`
+	got := strings.Join(sinks(analyze(t, src)), " ")
+	want := "insecure-cookie:22 weak-hash:10 weak-hash:14 weak-random:17 weak-random:20 weak-random:24"
+	if got != want {
+		t.Errorf("got  %s\nwant %s", got, want)
+	}
+}
+
+func TestWords(t *testing.T) {
+	for name, want := range map[string]bool{"rememberMe18": true, "api_key": true, "author": false, "passwordFile.txt": false, "csrf_token": true} {
+		if got := named(name, map[string]bool{"remember": true, "apikey": true, "auth": true, "token": true}); got != want {
+			t.Errorf("%s: %v", name, got)
+		}
+	}
+}

@@ -275,7 +275,7 @@ func join(x, y val) val {
 	// one a finding is about.
 	sx, sy := safeOf(x), safeOf(y)
 	t := tx
-	if bits.OnesCount16(uint16(sy)) < bits.OnesCount16(uint16(sx)) {
+	if bits.OnesCount32(uint32(sy)) < bits.OnesCount32(uint32(sx)) {
 		t = ty
 	}
 	return val{t: t, safe: sx & sy}

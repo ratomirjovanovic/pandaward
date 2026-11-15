@@ -15,7 +15,7 @@ import (
 
 // Kind is a set of weakness kinds; a sanitizer makes a value safe for some
 // kinds only.
-type Kind uint16
+type Kind uint32
 
 const (
 	Cmd Kind = 1 << iota
@@ -33,12 +33,18 @@ const (
 	// as the session.
 	Trust
 	XXE
+	// WeakHash, WeakRandom and Cookie are not untrusted input: a weak
+	// digest stored as a password, a predictable value used as a secret,
+	// and a cookie set without its security flags (Python).
+	WeakHash
+	WeakRandom
+	Cookie
 	// Shape marks checks found by the shape of the code alone.
 	Shape
 	All Kind = 1<<iota - 1
 )
 
-var kindByName = map[string]Kind{"cmd": Cmd, "code": Code, "path": Path, "sql": SQL, "xss": XSS, "ssrf": SSRF, "redirect": Redirect, "proto": Proto, "deser": Deser, "ldap": LDAP, "xpath": XPath, "trust": Trust, "xxe": XXE, "shape": Shape, "all": All}
+var kindByName = map[string]Kind{"cmd": Cmd, "code": Code, "path": Path, "sql": SQL, "xss": XSS, "ssrf": SSRF, "redirect": Redirect, "proto": Proto, "deser": Deser, "ldap": LDAP, "xpath": XPath, "trust": Trust, "xxe": XXE, "weakhash": WeakHash, "weakrandom": WeakRandom, "cookie": Cookie, "shape": Shape, "all": All}
 
 // Spec is a parsed taint specification.
 type Spec struct {
@@ -62,6 +68,10 @@ type Spec struct {
 	// b64decode, os.path.join); any other call the engine does not model
 	// returns an opaque object built from them (Python).
 	TextCalls []string
+	// Weak describes weak hashes and random numbers and the names of
+	// values that must not be predictable or stored as a weak digest
+	// (Python).
+	Weak Weak
 	// Lookups are methods that return what their receiver holds, not their
 	// arguments: a row found by a key from the request is the database's
 	// data (Python).
@@ -225,6 +235,21 @@ type specFile struct {
 	ShellFlags  []string    `yaml:"shell_flags"`
 	TextCalls   []string    `yaml:"text_calls"`
 	Lookups     []string    `yaml:"lookups"`
+	Weak        Weak        `yaml:"weak"`
+}
+
+// Weak lists the calls that make a weak digest or a predictable number,
+// and the names (of keys, attributes, files) that mark a secret or a
+// stored password.
+type Weak struct {
+	HashCalls     []string `yaml:"hash_calls"`
+	HashNew       []string `yaml:"hash_new"`
+	HashNames     []string `yaml:"hash_algorithms"`
+	RandomCalls   []string `yaml:"random_calls"`
+	SecretNames   []string `yaml:"secret_names"`
+	PasswordNames []string `yaml:"password_names"`
+	CookieSetters []string `yaml:"cookie_setters"`
+	CookieFlags   []string `yaml:"cookie_flags"`
 }
 
 func parseTarget(s string) (Target, error) {
@@ -267,7 +292,7 @@ func Parse(data []byte) (*Spec, error) {
 	if err := yaml.Unmarshal(data, &f); err != nil {
 		return nil, err
 	}
-	s := &Spec{Sources: f.Sources, Sinks: f.Sinks, Sanitizers: f.Sanitizers, Guards: f.Guards, Normalizers: f.Normalizers, Responses: f.Responses, Escapes: f.Escapes, URLParsers: f.URLParsers, ShellFlags: f.ShellFlags, TextCalls: f.TextCalls, Lookups: f.Lookups, sanitizeCall: map[string]Kind{}, sanitizeMethod: map[string]Kind{}}
+	s := &Spec{Sources: f.Sources, Sinks: f.Sinks, Sanitizers: f.Sanitizers, Guards: f.Guards, Normalizers: f.Normalizers, Responses: f.Responses, Escapes: f.Escapes, URLParsers: f.URLParsers, ShellFlags: f.ShellFlags, TextCalls: f.TextCalls, Lookups: f.Lookups, Weak: f.Weak, sanitizeCall: map[string]Kind{}, sanitizeMethod: map[string]Kind{}}
 	for _, g := range s.Guards {
 		for _, n := range g.KindsRaw {
 			k, ok := kindByName[n]

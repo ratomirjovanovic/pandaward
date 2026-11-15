@@ -40,6 +40,7 @@ type Engine struct {
 	urlParsers  map[string]bool
 	textCalls   map[string]bool
 	lookups     map[string]bool
+	weak        weak
 }
 
 // New prepares an engine for a specification.
@@ -47,6 +48,7 @@ func New(spec *taint.Spec) *Engine {
 	e := &Engine{spec: spec, calls: map[string][]sinkTarget{}, methods: map[string][]sinkTarget{}, stores: map[string]*taint.Sink{},
 		srcAttrs: set(spec.Sources.Attributes), srcCalls: set(spec.Sources.Calls), params: set(spec.Sources.Params),
 		routes: set(spec.Sources.RouteDecorators), normalizers: set(spec.Normalizers), responses: set(spec.Responses.Calls), setters: map[string]bool{}, urlParsers: set(spec.URLParsers), textCalls: set(spec.TextCalls), lookups: set(spec.Lookups)}
+	e.weak = newWeak(spec)
 	for _, s := range spec.Sinks {
 		for n, t := range s.Calls {
 			e.calls[n] = append(e.calls[n], sinkTarget{s, t, false})
@@ -470,6 +472,9 @@ func (f *fnRun) instr(in *ir.Instr, st State) {
 				base.Fields = map[string]*Value{}
 			}
 			v := f.val(st, in.B)
+			if f.report {
+				f.weakStore(in.Name, v, line)
+			}
 			base.Fields["."+in.Name] = v
 			st[in.A.Var] = mix(base, v)
 		}
@@ -617,6 +622,14 @@ func (f *fnRun) setIndex(in *ir.Instr, st State) {
 	base := f.val(st, in.A)
 	k := f.val(st, in.B)
 	v := f.val(st, in.C)
+	if f.report {
+		if name := keyName(k); name != "" {
+			f.weakStore(name, v, in.Pos.Line)
+		}
+		if _, ok := f.e.stores[base.Q]; ok {
+			f.weakSession(v, in.Pos.Line)
+		}
+	}
 	if s, ok := f.e.stores[base.Q]; ok && f.report {
 		if k.tainted(s.Kind) && !(s.TextOnly && k.Opaque) {
 			f.found(s, in.Pos.Line, k)
