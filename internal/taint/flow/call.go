@@ -78,6 +78,15 @@ func (f *fnRun) call(in *ir.Instr, st State) *Value {
 		f.eventCall(c)
 		f.jsxSinks(c)
 	}
+	// app.route('/path') is a router: .get(handler) on it registers one.
+	if c.method == "route" && len(c.args) == 1 {
+		name := f.receiverName(c.in)
+		for _, rc := range f.e.spec.Sources.RouteCalls {
+			if contains(rc.Receivers, name) || contains(rc.Receivers, c.recv.Inst) {
+				return &Value{Inst: "router"}
+			}
+		}
+	}
 	// promisify(exec) is exec, called for its promise.
 	if len(c.args) == 1 && (contains(c.names, "util.promisify") || contains(c.names, "promisify")) {
 		return c.args[0]

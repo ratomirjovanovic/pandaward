@@ -421,3 +421,20 @@ module.exports = Info;`, "taint.js-command-injection:5"},
 		}
 	}
 }
+
+// TestJSRouteChain checks that handlers registered on app.route(path) are
+// routes, so the request reaches the helpers they call.
+func TestJSRouteChain(t *testing.T) {
+	src := `import { Request, Response } from 'express';
+function show(name: any, response: Response) {
+  return response.send('Dashboard ' + name);
+}
+export function setup(app: any) {
+  app.route('/:d').get((request: Request, response: Response) => {
+    show(request.params.d, response);
+  });
+}`
+	if got := strings.Join(jsFlowsIn(t, "routes.ts", src), " "); got != "taint.js-xss:3" {
+		t.Errorf("got %q", got)
+	}
+}
