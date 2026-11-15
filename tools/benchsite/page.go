@@ -60,7 +60,7 @@ const page = `<!doctype html>
     <h2>History</h2>
     <p class="sub">Average score over covered categories for the OWASP suites, CVEs detected for the CVE benchmark. Each row links to the release or commit it was measured on. A pull request that lowers any of these numbers fails CI.</p>
     <div class="tablewrap"><table>
-      <tr><th rowspan="2">Measured on</th><th colspan="3">Java</th><th colspan="3">Python</th><th colspan="4">JS/TS CVEs</th></tr>
+      <tr><th rowspan="2">Measured on</th><th colspan="{{len engines}}">Java</th><th colspan="{{len engines}}">Python</th><th colspan="{{len cveengines}}">JS/TS CVEs</th></tr>
       <tr>{{range engines}}<th class="num">{{.}}</th>{{end}}{{range engines}}<th class="num">{{.}}</th>{{end}}{{range cveengines}}<th class="num">{{.}}</th>{{end}}</tr>
       {{range .History}}{{$h := .}}
       <tr><td><a href="{{.URL}}">{{.Label}}</a><br><small>{{.Date}}</small></td>
@@ -76,7 +76,7 @@ const page = `<!doctype html>
     <h2>Reproduce</h2>
     <p class="sub">From a clone of the repository at the release tag, with Go installed. Semgrep and Opengrep are optional; an engine that is not installed is reported as not run. Nothing from the benchmarks or the CVE projects is built or executed.</p>
 <pre class="code">sh tools/owaspbench/run.sh --suite java   --engine builtin,semgrep,opengrep
-sh tools/owaspbench/run.sh --suite python --engine builtin,semgrep,opengrep
+sh tools/owaspbench/run.sh --suite python --engine builtin,semgrep,opengrep,taint
 sh tools/cvebench/run.sh --engine builtin,taint,semgrep,opengrep   # hours; resumes if interrupted</pre>
   </section>
 </main>

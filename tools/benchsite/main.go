@@ -343,7 +343,7 @@ var funcs = template.FuncMap{
 		}
 		return nil
 	},
-	"engines": func() []string { return []string{"pandaward", "builtin", "semgrep", "opengrep"} },
+	"engines": func() []string { return []string{"pandaward", "builtin", "taint", "semgrep", "opengrep"} },
 	// The CVE benchmark also scores PandaWard as a whole (built-in rules
 	// plus Semgrep); older snapshots lack it and show "-".
 	"cveengines": func() []string { return []string{"pandaward", "builtin", "taint", "semgrep", "opengrep"} },
