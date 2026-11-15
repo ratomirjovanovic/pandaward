@@ -45,10 +45,10 @@ type lexer struct {
 	// where the outermost open bracket is, and the indentation of its line
 	openLine, openCol, openIndent int
 	openTok                       string
-	atBOL   bool
-	last    tokKind
-	pending []token
-	errs    []Error
+	atBOL                         bool
+	last                          tokKind
+	pending                       []token
+	errs                          []Error
 }
 
 // bom is the UTF-8 byte order mark.
