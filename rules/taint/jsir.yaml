@@ -266,6 +266,13 @@ text_calls: [decodeURIComponent, decodeURI, unescape, String, querystring.parse,
 decoders: [decodeURIComponent, decodeURI, unescape, Buffer.from, atob]
 
 guards:
+  # A value that matches an anchored pattern of listed characters, or is
+  # one of a list of constants, cannot change a command, query, path or
+  # page (also through a function that returns such a check).
+  - kinds: [all]
+    anchored_regex: true
+  - kinds: [all]
+    allowlist: true
   - kinds: [path]
     contains: [".."]
   - kinds: [path]

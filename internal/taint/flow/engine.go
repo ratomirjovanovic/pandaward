@@ -137,7 +137,9 @@ type run struct {
 	// stored are the functions a nested function of the module exports
 	// (exports.f = fn inside (function () { ... })()), by name.
 	stored map[string]*Value
-	html   bool
+	// set are the names the module body sets (setInModule).
+	set  map[string]bool
+	html bool
 	// done are the functions analyzed as roots.
 	done map[*ir.Function]bool
 }
@@ -593,7 +595,28 @@ func (f *fnRun) val(st State, o ir.Operand) *Value {
 	if v, ok := st[o.Var]; ok {
 		return v
 	}
+	// A name the module body reads but never sets is a global (RegExp,
+	// document, eval), named as a free name of a function is.
+	if f.fn == f.mod.Init && !ir.IsTemp(o.Var) && !f.setInModule(o.Var) {
+		return &Value{Q: o.Var}
+	}
 	return empty
+}
+
+// setInModule reports a name the module body sets somewhere.
+func (r *run) setInModule(name string) bool {
+	if r.set == nil {
+		r.set = map[string]bool{}
+		for _, b := range r.mod.Init.Blocks {
+			for _, in := range b.Instrs {
+				r.set[in.Dst] = true
+			}
+		}
+		for _, p := range r.mod.Init.Params {
+			r.set[p.Name] = true
+		}
+	}
+	return r.set[name]
 }
 
 // lookup finds a variable of an enclosing scope or the module, or names a

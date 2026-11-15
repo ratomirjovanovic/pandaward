@@ -155,6 +155,10 @@ func (f *fnRun) refine(st State, cond ir.Operand, edge bool) State {
 			}
 		}
 	}
+	val := func(o ir.Operand) *Value { return f.val(st, o) }
+	if o, kinds, ok := f.valueCheck(f.fn, val, d, edge, 0); ok {
+		mark(f.root(o), kinds)
+	}
 	if out == nil {
 		return st
 	}

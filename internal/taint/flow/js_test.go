@@ -153,6 +153,44 @@ exports.one = one`
 	}
 }
 
+// TestJSValueChecks checks the JavaScript checks that leave only safe
+// values: anchored patterns of listed characters, lists of constants, and
+// functions of the project that return such a check.
+func TestJSValueChecks(t *testing.T) {
+	head := "var exec = require('child_process').execSync\nvar Re = new RegExp('^[a-z0-9.-]+$')\nvar Loose = new RegExp('^([a-z]\\.)*[a-z]$')\nvar Types = ['A', 'MX']\nfunction ok (h) { return Re.test(h) }\nfunction loose (h) { return Loose.test(h) }\nexports.f = function (h) {\n"
+	for _, c := range []struct{ check, want string }{
+		{"", "taint.js-command-injection:9"},
+		{"  if (!/^[a-z]+$/.test(h)) return\n", ""},
+		{"  if (!ok(h)) return\n", ""},
+		{"  if (Types.indexOf(h) === -1) return\n", ""},
+		{"  if (!Types.includes(h)) return\n", ""},
+		{"  if (!h.match(/^\\w+$/)) return\n", ""},
+		// a dot in a string pattern is any character: a;ls x passes
+		{"  if (!loose(h)) return\n", "taint.js-command-injection:9"},
+		{"  if (!/^[a-z]+/.test(h)) return\n", "taint.js-command-injection:9"},
+		{"  if (!/^[^;]+$/.test(h)) return\n", "taint.js-command-injection:9"},
+		{"  if (!/^a|b$/.test(h)) return\n", "taint.js-command-injection:9"},
+	} {
+		body := c.check
+		if body == "" {
+			body = "  ;\n"
+		}
+		src := head + body + "  exec('host ' + h)\n}"
+		if got := strings.Join(jsFlows(t, src), " "); got != c.want {
+			t.Errorf("got %q, want %q\n%s", got, c.want, src)
+		}
+	}
+}
+
+// TestJSModuleGlobals checks that names the module body reads but never
+// sets are globals, such as document in a browser script.
+func TestJSModuleGlobals(t *testing.T) {
+	src := "document.write(location.hash)\n"
+	if got := strings.Join(jsFlows(t, src), " "); got != "taint.js-xss:1" {
+		t.Errorf("got %q", got)
+	}
+}
+
 // TestJSRouteHandlers checks that the flows in a handler the module body
 // registers are reported: loading the module analyzes its body, and the
 // handler with it.

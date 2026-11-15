@@ -73,6 +73,14 @@ func (f *fnRun) call(in *ir.Instr, st State) *Value {
 		f.jsxSinks(c)
 	}
 	r := f.weakSource(c, f.callResolved(c, st))
+	// new RegExp("^[a-z]+$") is the pattern, as a /literal/ is.
+	if contains(c.names, "RegExp") && len(c.args) >= 1 && c.args[0].C != nil && c.args[0].C.Kind == ir.Str {
+		flags := ""
+		if len(c.args) > 1 && c.args[1].C != nil {
+			flags = c.args[1].C.Val
+		}
+		return constVal(&ir.Const{Kind: ir.Other, Val: "/" + c.args[0].C.Val + "/" + flags})
+	}
 	for _, n := range c.names {
 		if contains(f.e.spec.Weak.RandomFill, n) && len(in.Args) > 0 {
 			if name := f.root(in.Args[0]); name != "" {

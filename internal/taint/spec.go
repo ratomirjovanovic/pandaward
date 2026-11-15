@@ -169,6 +169,9 @@ type Guard struct {
 	// Calls are library checks that return true only for a safe first
 	// argument.
 	Calls []string `yaml:"calls"`
+	// AnchoredRegex: a match of a regular expression anchored at both
+	// ends that admits no arbitrary character (JavaScript re.test(x)).
+	AnchoredRegex bool `yaml:"anchored_regex"`
 }
 
 // Escape is x.replace(Old, new) with a new that does not contain Old.
