@@ -58,7 +58,7 @@ jobs:
           pipx install "semgrep==${SEMGREP_VERSION}"
           echo "$bin" >> "$GITHUB_PATH"
       - name: OWASP Benchmark for Java
-        run: sh tools/owaspbench/run.sh --suite java --engine builtin,semgrep,opengrep --json > owasp-java.json
+        run: sh tools/owaspbench/run.sh --suite java --engine builtin,semgrep,opengrep,taint --json > owasp-java.json
       - name: OWASP Benchmark for Python
         run: sh tools/owaspbench/run.sh --suite python --engine builtin,semgrep,opengrep,taint --json > owasp-python.json
       - name: Compare with the baseline

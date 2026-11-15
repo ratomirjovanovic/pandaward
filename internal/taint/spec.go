@@ -412,6 +412,55 @@ func Load(lang string) (*Spec, error) {
 	return Parse(b)
 }
 
+// Classes returns the qualified class names the specification mentions
+// (the part of a qualified name before a lower-case method, and the
+// classes methods return), for resolving the names of star imports.
+func (s *Spec) Classes() map[string]bool {
+	out := map[string]bool{}
+	add := func(name string) {
+		name, _, _ = strings.Cut(name, "#")
+		parts := strings.Split(name, ".")
+		for i := len(parts); i >= 2; i-- {
+			last := parts[i-1]
+			if last != "" && last[0] >= 'A' && last[0] <= 'Z' {
+				out[strings.Join(parts[:i], ".")] = true
+				return
+			}
+		}
+	}
+	for _, k := range s.Sinks {
+		for _, list := range [][]string{k.CallsRaw, k.ShellRaw, k.MethodsRaw} {
+			for _, n := range list {
+				add(n)
+			}
+		}
+		if k.WeakAlgorithms != nil {
+			for _, n := range k.WeakAlgorithms.Calls {
+				add(n)
+			}
+		}
+	}
+	for _, n := range s.Sources.Calls {
+		add(n)
+	}
+	for _, z := range s.Sanitizers {
+		for _, n := range z.Calls {
+			add(n)
+		}
+	}
+	for k, v := range s.Returns {
+		add(k)
+		add(v + ".x")
+	}
+	for _, n := range append(append(append([]string{}, s.Weak.RandomCalls...), s.Weak.CookieFlagSetters...), s.TextCalls...) {
+		add(n)
+	}
+	for _, st := range s.Weak.SecretStores {
+		add(st)
+	}
+	return out
+}
+
 // Sanitizes returns the kinds a call to the resolved callee name makes safe.
 func (s *Spec) Sanitizes(name string) Kind { return s.sanitizeCall[name] }
 

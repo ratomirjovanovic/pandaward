@@ -157,16 +157,18 @@ sinks:
     title: Untrusted input written into an HTML response
     message: Input is written into the response without HTML encoding, so it can run script in the user's browser.
     fix: Encode the value for HTML (ESAPI encodeForHTML, Spring HtmlUtils.htmlEscape) or render it through an escaping template.
+    # The writer and stream of the HTTP response (see returns): a
+    # PrintWriter to a log file is not the page.
     calls:
-      - java.io.PrintWriter.print
-      - java.io.PrintWriter.println
-      - java.io.PrintWriter.write
-      - java.io.PrintWriter.printf#*
-      - java.io.PrintWriter.format#*
-      - java.io.PrintWriter.append
-      - javax.servlet.ServletOutputStream.print
-      - javax.servlet.ServletOutputStream.println
-      - javax.servlet.ServletOutputStream.write
+      - javax.servlet.http.ResponseWriter.print
+      - javax.servlet.http.ResponseWriter.println
+      - javax.servlet.http.ResponseWriter.write
+      - javax.servlet.http.ResponseWriter.printf#*
+      - javax.servlet.http.ResponseWriter.format#*
+      - javax.servlet.http.ResponseWriter.append
+      - javax.servlet.http.ResponseOutputStream.print
+      - javax.servlet.http.ResponseOutputStream.println
+      - javax.servlet.http.ResponseOutputStream.write
 
   - id: taint.java-trust-boundary
     kind: trust
@@ -222,6 +224,22 @@ sinks:
     message: A cookie is set with setSecure(false), so it is also sent over plain HTTP.
     fix: Call setSecure(true) (and setHttpOnly(true)) on cookies that carry session or user data.
 
+# Bundled Semgrep rules the taint engine replaces in the Java files it
+# analyzes. The SSRF and deserialization rules stay: the engine has no
+# sinks for them yet.
+supersedes:
+  - pandaward-java-sql-injection
+  - pandaward-java-command-exec
+  - pandaward-java-path-traversal
+  - pandaward-java-ldap-injection
+  - pandaward-java-xpath-injection
+  - pandaward-java-xss
+  - pandaward-java-trust-boundary
+  - pandaward-java-weak-cipher
+  - pandaward-java-weak-hash
+  - pandaward-java-weak-random
+  - pandaward-java-insecure-cookie
+
 sanitizers:
   - kinds: [all]
     calls: [Integer.parseInt, Integer.valueOf, Long.parseLong, Long.valueOf, Double.parseDouble, Float.parseFloat, Boolean.parseBoolean, java.util.UUID.fromString]
@@ -252,10 +270,12 @@ sanitizers:
 # What methods of known classes return, so that the methods called on the
 # result are known too.
 returns:
-  javax.servlet.http.HttpServletResponse.getWriter: java.io.PrintWriter
-  javax.servlet.http.HttpServletResponse.getOutputStream: javax.servlet.ServletOutputStream
+  # the response's writer and stream, told apart from other writers
+  javax.servlet.http.HttpServletResponse.getWriter: javax.servlet.http.ResponseWriter
+  javax.servlet.http.HttpServletResponse.getOutputStream: javax.servlet.http.ResponseOutputStream
+  javax.servlet.ServletResponse.getWriter: javax.servlet.http.ResponseWriter
   javax.servlet.http.HttpServletRequest.getSession: javax.servlet.http.HttpSession
-  jakarta.servlet.http.HttpServletResponse.getWriter: java.io.PrintWriter
+  jakarta.servlet.http.HttpServletResponse.getWriter: javax.servlet.http.ResponseWriter
   jakarta.servlet.http.HttpServletRequest.getSession: jakarta.servlet.http.HttpSession
   org.owasp.esapi.ESAPI.encoder: org.owasp.esapi.Encoder
   Runtime.getRuntime: java.lang.Runtime

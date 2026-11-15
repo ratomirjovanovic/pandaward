@@ -14,7 +14,17 @@ import (
 // Instance methods get an implicit first parameter "this" whose annotation
 // is the class, constructors are named __init__, and declared types become
 // the classes of values (Cast), resolved through the imports.
-func Lower(f *File) []*ir.Module {
+func Lower(f *File) []*ir.Module { return LowerWith(f, nil) }
+
+// LowerWith is Lower with the qualified classes the specification knows,
+// which resolve the simple names of star imports (import javax.servlet.http.*).
+func LowerWith(f *File, known map[string]bool) []*ir.Module {
+	var stars []string
+	for _, imp := range f.Imports {
+		if imp.Star && !imp.Static {
+			stars = append(stars, imp.Path)
+		}
+	}
 	var out []*ir.Module
 	for _, c := range f.Types {
 		name := c.Name
@@ -22,7 +32,7 @@ func Lower(f *File) []*ir.Module {
 			name = f.Package + "." + c.Name
 		}
 		m := &ir.Module{Path: f.Path, Name: name}
-		l := &lowerer{mod: m, file: f, imports: map[string]string{}}
+		l := &lowerer{mod: m, file: f, imports: map[string]string{}, known: known, stars: stars}
 		for _, imp := range f.Imports {
 			if !imp.Star && !imp.Static {
 				l.imports[imp.Path[strings.LastIndexByte(imp.Path, '.')+1:]] = imp.Path
@@ -83,6 +93,19 @@ type lowerer struct {
 	static   bool // in a static method or initializer
 	nlambda  int
 	yields   []yieldTarget
+	known    map[string]bool
+	stars    []string
+}
+
+// starClass resolves a simple name through the star imports to a class
+// the specification knows.
+func (l *lowerer) starClass(name string) string {
+	for _, pkg := range l.stars {
+		if l.known[pkg+"."+name] {
+			return pkg + "." + name
+		}
+	}
+	return ""
 }
 
 func (l *lowerer) temp() string {
@@ -105,6 +128,12 @@ func (l *lowerer) typeName(t string) string {
 	}
 	first, rest, _ := strings.Cut(base, ".")
 	if q, ok := l.imports[first]; ok {
+		if rest != "" {
+			return q + "." + rest + dims
+		}
+		return q + dims
+	}
+	if q := l.starClass(first); q != "" {
 		if rest != "" {
 			return q + "." + rest + dims
 		}
@@ -821,6 +850,11 @@ func (l *lowerer) name(n *Name) ir.Operand {
 			}
 			return l.value(ir.Load, n.Pos, n.Id, ir.V("this"), ir.Operand{})
 		}
+	}
+	if q := l.starClass(n.Id); q != "" {
+		t := l.temp()
+		l.emit(&ir.Instr{Op: ir.Import, Pos: at(n.Pos), Dst: t, Name: q})
+		return ir.V(t)
 	}
 	if l.samePackageClass(n.Id) {
 		t := l.temp()

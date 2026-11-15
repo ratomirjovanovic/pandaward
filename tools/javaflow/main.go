@@ -69,7 +69,7 @@ func main() {
 			}
 			text := strings.ReplaceAll(string(b), "\r\n", "\n")
 			lines[rel] = strings.Split(text, "\n")
-			mods[rel] = java.Lower(java.Parse(rel, text))
+			mods[rel] = java.LowerWith(java.Parse(rel, text), spec.Classes())
 			return mods[rel]
 		}
 		if *showIR {
