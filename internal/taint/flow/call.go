@@ -775,8 +775,9 @@ func callbackFns(args []*Value) []*Value {
 	return out
 }
 
-// stripsDotDot reports p.replace(/\.\.\//g, ”): a JavaScript regular
-// expression that removes parent directory segments from a path.
+// stripsDotDot reports a replace() whose pattern is a JavaScript regular
+// expression matching parent directory segments (/\.\.\//g) and whose
+// replacement is empty: it removes them from a path.
 func stripsDotDot(re, repl *ir.Const) bool {
 	return re != nil && repl != nil && re.Kind == ir.Other && strings.HasPrefix(re.Val, "/") &&
 		strings.Contains(re.Val, `\.\.`) && repl.Kind == ir.Str && repl.Val == ""
