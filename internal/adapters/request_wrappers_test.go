@@ -106,3 +106,57 @@ func TestAddRequestSources(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestPythonRequestSources(t *testing.T) {
+	inv := &inventory.Inventory{}
+	add := func(path, src string) {
+		inv.Files = append(inv.Files, &inventory.File{Path: path, Lang: "python", Lines: strings.Split(src, "\n")})
+	}
+	add("helpers/separate_request.py", `import flask
+
+class request_wrapper:
+	request: flask.Request
+
+	def __init__(self, request: flask.Request):
+		self.request = request
+
+	def get_form_parameter(self, name: str):
+		return self.request.form.get(name)
+
+	def get_cookie(self, name: str):
+		value = self.request.cookies.get(name)
+		return value
+
+	def get_safe_value(self, name: str):
+		return "bar"
+
+def helper():
+	return 1
+`)
+	add("app/models.py", `class Plain:
+    def __init__(self, name):
+        self.name = name
+    def upper(self):
+        return self.name.upper()
+`)
+	add("tests/fake_request.py", `class Fake:
+    def __init__(self, req):
+        self.req = req
+    def get(self, n):
+        return self.req.args.get(n)
+`)
+	got := pythonRequestSources(inv)
+	want := "      - patterns:\n" +
+		"          - pattern-inside: |\n" +
+		"              $W = helpers.separate_request.request_wrapper(...)\n" +
+		"              ...\n" +
+		"          - pattern-either:\n" +
+		"              - pattern: $W.get_cookie(...)\n" +
+		"              - pattern: $W.get_form_parameter(...)\n"
+	if got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+	if pythonRequestSources(nil) != "" {
+		t.Fatal("no sources without an inventory")
+	}
+}
