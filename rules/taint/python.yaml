@@ -1,0 +1,355 @@
+# Taint specification for Python, read by the built-in taint engine
+# (builtin-taint) over the IR (internal/taint/flow). Names are qualified
+# after imports: `subprocess.run` matches `import subprocess;
+# subprocess.run(...)`, `from subprocess import run` and `import subprocess
+# as sp; sp.run(...)`. A method of an instance is qualified by the call that
+# made it: `pathlib.Path.read_text` is read_text on the result of
+# pathlib.Path(...). Builtins have their plain name (open, eval).
+# `name#N` selects positional argument N (default 0), `name#*` any
+# argument, `name#self` the receiver.
+
+sources:
+  # Attributes of a request that carry client input.
+  attributes:
+    # Flask and Quart (the request proxy)
+    - flask.request.args
+    - flask.request.form
+    - flask.request.values
+    - flask.request.cookies
+    - flask.request.headers
+    - flask.request.data
+    - flask.request.json
+    - flask.request.files
+    - flask.request.stream
+    - flask.request.query_string
+    - flask.request.full_path
+    - flask.request.url
+    - flask.request.view_args
+    - quart.request.args
+    - quart.request.headers
+    - quart.request.cookies
+    # Django, Django REST framework and Starlette request parameters
+    - request.GET
+    - request.POST
+    - request.COOKIES
+    - request.FILES
+    - request.META
+    - request.body
+    - request.data
+    - request.query_params
+    - request.path_params
+    - request.headers
+    - request.cookies
+  # Calls that return client input.
+  calls:
+    - input
+    - flask.request.get_json
+    - flask.request.get_data
+    - quart.request.get_json
+  # Parameters with these names hold a request object.
+  params: [request]
+  # Decorators that register a route handler; its parameters are path or
+  # query values (Flask, FastAPI, Starlette, Sanic, Quart).
+  route_decorators: [route, get, post, put, patch, delete, api_route, websocket]
+  # A string returned by a Flask route handler is sent as HTML.
+  html_return_frameworks: [flask]
+
+sinks:
+  - id: taint.py-command-injection
+    kind: cmd
+    control: D-002
+    cwe: "CWE-78"
+    title: Shell command built from untrusted input
+    message: Input reaches a command run through a shell, so shell metacharacters in it run extra commands.
+    fix: Pass an argument list to subprocess without shell=True, or validate the value against a strict allowlist first.
+    calls:
+      - os.system
+      - os.popen
+      - subprocess.getoutput
+      - subprocess.getstatusoutput
+      - asyncio.create_subprocess_shell
+      - commands.getoutput
+    # These run a shell only with shell=True.
+    calls_with_shell_option:
+      - subprocess.run#0
+      - subprocess.call#0
+      - subprocess.check_call#0
+      - subprocess.check_output#0
+      - subprocess.Popen#0
+
+  - id: taint.py-code-injection
+    kind: code
+    control: D-001
+    cwe: "CWE-94"
+    title: Code built from untrusted input is evaluated
+    message: Input reaches eval, exec or compile, so it runs as Python code.
+    fix: Never evaluate input. Parse it as data (json.loads, ast.literal_eval) or map it through a lookup table.
+    calls: [eval, exec, compile]
+
+  - id: taint.py-deserialization
+    kind: deser
+    control: D-001
+    cwe: "CWE-502"
+    title: Untrusted data is deserialized into objects
+    message: Input reaches a deserializer that can build arbitrary objects, so a crafted payload runs code.
+    fix: Use a data-only format (json, yaml.safe_load) for untrusted input, or sign the data and verify it first.
+    calls:
+      - pickle.loads
+      - pickle.load
+      - _pickle.loads
+      - cPickle.loads
+      - dill.loads
+      - jsonpickle.decode
+      - marshal.loads
+      - shelve.open
+      - yaml.load
+      - yaml.load_all
+      - yaml.unsafe_load
+      - yaml.unsafe_load_all
+    safe_kwargs:
+      Loader: [yaml.SafeLoader, yaml.CSafeLoader, yaml.BaseLoader]
+
+  - id: taint.py-path-traversal
+    kind: path
+    control: D-003
+    cwe: "CWE-22"
+    title: File path built from untrusted input
+    message: Input reaches a file system path, so `../` sequences or an absolute path reach files outside the intended directory.
+    fix: Resolve the path and check that it stays inside the base directory (Path.resolve() and is_relative_to), or map names through an allowlist.
+    calls:
+      - open
+      - io.open
+      - codecs.open
+      - os.open
+      - os.remove
+      - os.unlink
+      - os.rmdir
+      - os.removedirs
+      - os.rename
+      - os.listdir
+      - os.scandir
+      - os.makedirs
+      - os.mkdir
+      - os.path.exists
+      - os.path.isfile
+      - os.path.getsize
+      - shutil.copy#*
+      - shutil.copyfile#*
+      - shutil.move#*
+      - shutil.rmtree
+      - flask.send_file
+      - fileinput.input
+      # Methods of a path built from untrusted input.
+      - pathlib.Path.read_text#self
+      - pathlib.Path.read_bytes#self
+      - pathlib.Path.write_text#self
+      - pathlib.Path.write_bytes#self
+      - pathlib.Path.open#self
+      - pathlib.Path.unlink#self
+      - pathlib.Path.rmdir#self
+      - pathlib.Path.mkdir#self
+      - pathlib.Path.touch#self
+      - pathlib.Path.iterdir#self
+      - pathlib.Path.exists#self
+      - pathlib.Path.is_file#self
+      - pathlib.Path.is_dir#self
+      - pathlib.Path.stat#self
+
+  - id: taint.py-sql-injection
+    kind: sql
+    control: D-001
+    cwe: "CWE-89"
+    title: SQL query built from untrusted input
+    message: Input is built into SQL text that is then executed, so it can change the query.
+    fix: Pass values as query parameters (cursor.execute(sql, params)) instead of building them into the SQL text.
+    calls:
+      - sqlalchemy.text
+      - sqlalchemy.sql.text
+    methods:
+      - execute
+      - executemany
+      - executescript
+      - raw
+      - extra#*
+
+  - id: taint.py-ldap-injection
+    kind: ldap
+    control: D-001
+    cwe: "CWE-90"
+    title: LDAP filter built from untrusted input
+    message: Input is built into an LDAP search filter, so it can change which entries the search returns.
+    fix: Escape the value with ldap3.utils.conv.escape_filter_chars (or ldap.filter.escape_filter_chars) before building the filter.
+    methods:
+      - search#1
+      - search_s#2
+      - search_st#2
+      - search_ext#2
+      - search_ext_s#2
+    method_receivers:
+      search: [conn, connection, ldap_conn, ldap, ld, l, c, server]
+
+  - id: taint.py-xpath-injection
+    kind: xpath
+    control: D-001
+    cwe: "CWE-643"
+    title: XPath query built from untrusted input
+    message: Input is built into an XPath expression, so it can change which nodes the query selects.
+    fix: Pass the value as an XPath variable (tree.xpath("//user[@id=$id]", id=value)) instead of building it into the expression.
+    calls:
+      - elementpath.select#1
+      - elementpath.iter_select#1
+      - lxml.etree.XPath
+    methods:
+      - xpath
+
+  - id: taint.py-xxe
+    kind: xxe
+    control: D-001
+    cwe: "CWE-611"
+    title: XML parsed with external entities from untrusted input
+    message: Untrusted XML is parsed by a parser with external entities turned on, so it can read local files or reach internal hosts.
+    fix: Keep external entities off (the default of xml.sax) or parse with defusedxml.
+    calls:
+      - xml.dom.minidom.parseString
+      - xml.dom.minidom.parse
+      - xml.sax.parseString
+    requires_flag:
+      arg: 1
+      flag: xml.sax.handler.feature_external_ges
+      setters: [setFeature]
+
+  - id: taint.py-open-redirect
+    kind: redirect
+    control: H-001
+    cwe: "CWE-601"
+    title: Redirect to a URL from untrusted input
+    message: Input chooses where the response redirects, so a link to this site can send users to an attacker's page.
+    fix: Redirect only to relative paths or to hosts on an allowlist (check urlparse(url).netloc).
+    text_only: true
+    calls:
+      - flask.redirect
+      - werkzeug.utils.redirect
+      - django.shortcuts.redirect
+      - django.http.HttpResponseRedirect
+      - django.http.HttpResponsePermanentRedirect
+      - starlette.responses.RedirectResponse
+      - fastapi.responses.RedirectResponse
+
+  - id: taint.py-trust-boundary
+    kind: trust
+    control: D-001
+    cwe: "CWE-501"
+    title: Untrusted data stored in the session
+    message: Input is stored in the server-side session, where later code trusts it as the application's own data.
+    fix: Validate the value before storing it in the session, or keep client input apart from trusted session data.
+    text_only: true
+    stores:
+      - flask.session
+      - request.session
+
+  - id: taint.py-xss
+    kind: xss
+    control: D-006
+    cwe: "CWE-79"
+    title: Untrusted input written into an HTML response
+    message: Input is written into HTML without escaping, so it can run script in the user's browser.
+    fix: Escape the value (html.escape, markupsafe.escape) or render it through an autoescaping template.
+    handler_return: true
+    text_only: true
+    calls:
+      - flask.render_template_string
+      - markupsafe.Markup
+      - flask.Markup
+      - django.http.HttpResponse
+      - django.utils.safestring.mark_safe
+
+sanitizers:
+  - kinds: [all]
+    calls: [int, float, bool, len, hash, id, ord, abs, round, isinstance, callable, uuid.UUID, ipaddress.ip_address, json.dumps]
+    methods: [startswith, endswith, isdigit, isnumeric, isdecimal, isalpha, isalnum, isidentifier, isspace, islower, isupper, count, find, rfind, index, rindex, exists, is_file, is_dir]
+  - kinds: [xss]
+    calls: [html.escape, markupsafe.escape, flask.escape, cgi.escape, django.utils.html.escape, django.utils.html.strip_tags, bleach.clean, jinja2.escape, werkzeug.utils.escape, xml.sax.saxutils.escape, flask.jsonify]
+  - kinds: [path]
+    calls: [os.path.basename, werkzeug.utils.secure_filename, pathlib.PurePath.name]
+  - kinds: [cmd]
+    calls: [shlex.quote, pipes.quote]
+  - kinds: [ldap]
+    calls: [ldap3.utils.conv.escape_filter_chars, ldap.filter.escape_filter_chars, ldap.dn.escape_dn_chars]
+  - kinds: [xss, sql, cmd, redirect, path, ldap, xpath]
+    calls: [urllib.parse.quote, urllib.parse.quote_plus, hashlib.sha256, hashlib.md5, hashlib.sha1]
+  - kinds: [deser, code]
+    calls: [ast.literal_eval, json.loads]
+
+guards:
+  # A value checked not to contain `..` cannot leave its directory.
+  - kinds: [path]
+    contains: [".."]
+  # A value without a quote cannot leave a quoted literal.
+  - kinds: [sql, xpath]
+    contains: ["'"]
+  # A resolved path checked to start with the base directory stays in it.
+  - kinds: [path]
+    method: startswith
+    normalized: true
+  - kinds: [path]
+    method: is_relative_to
+    normalized: true
+  # A value that starts and ends with a quote and has none inside is a
+  # string literal: evaluating it runs nothing.
+  - kinds: [code]
+    quoted_literal: true
+  # The host of a parsed URL compared with an allowlist.
+  - kinds: [redirect, ssrf]
+    netloc: true
+
+# x.replace(old, new) with a one-character old that new does not contain
+# removes every occurrence.
+escapes:
+  - old: "'"
+    kinds: [sql, xpath]
+  - old: "<"
+    kinds: [xss]
+
+# Calls that parse a URL; its netloc can be checked against an allowlist.
+url_parsers: [urllib.parse.urlparse, urllib.parse.urlsplit, urlparse.urlparse, urlparse.urlsplit]
+
+# Calls that return text derived from their arguments. The result of any
+# other call the engine does not model is an object built from the input,
+# which text_only sinks ignore.
+text_calls:
+  - str
+  - repr
+  - format
+  - urllib.parse.unquote
+  - urllib.parse.unquote_plus
+  - urllib.parse.urljoin
+  - urllib.parse.urlunparse
+  - base64.b64decode
+  - base64.urlsafe_b64decode
+  - base64.b64encode
+  - binascii.unhexlify
+  - codecs.decode
+  - html.unescape
+  - os.path.join
+  - os.path.normpath
+  - os.path.realpath
+  - os.path.abspath
+  - posixpath.join
+  - textwrap.dedent
+  - json.loads
+  - json.load
+
+# A list starting with a shell and -c runs its next element as a shell
+# command (subprocess.run(["sh", "-c", cmd])).
+shell_flags: ["-c", "/c", "/C"]
+
+normalizers:
+  - os.path.realpath
+  - os.path.abspath
+  - pathlib.Path.resolve
+  - pathlib.Path.absolute
+
+responses:
+  calls: [flask.make_response, flask.Response, flask.wrappers.Response, werkzeug.wrappers.Response]
+  content_type_kwargs: [mimetype, content_type]
+  html_types: [text/html]

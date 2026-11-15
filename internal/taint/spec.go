@@ -26,20 +26,45 @@ const (
 	SSRF
 	Redirect
 	Proto
+	Deser
+	LDAP
+	XPath
+	// Trust is untrusted data stored where the application trusts it, such
+	// as the session.
+	Trust
+	XXE
 	// Shape marks checks found by the shape of the code alone.
 	Shape
 	All Kind = 1<<iota - 1
 )
 
-var kindByName = map[string]Kind{"cmd": Cmd, "code": Code, "path": Path, "sql": SQL, "xss": XSS, "ssrf": SSRF, "redirect": Redirect, "proto": Proto, "shape": Shape, "all": All}
+var kindByName = map[string]Kind{"cmd": Cmd, "code": Code, "path": Path, "sql": SQL, "xss": XSS, "ssrf": SSRF, "redirect": Redirect, "proto": Proto, "deser": Deser, "ldap": LDAP, "xpath": XPath, "trust": Trust, "xxe": XXE, "shape": Shape, "all": All}
 
 // Spec is a parsed taint specification.
 type Spec struct {
 	Sources    Sources
 	Sinks      []*Sink
 	Sanitizers []Sanitizer
-	// sanitizer kinds by callee name
-	sanitizeCall map[string]Kind
+	// Guards are checks that make a value safe on one branch (Python).
+	Guards []*Guard
+	// Normalizers return a canonical path, which a prefix check can then
+	// confine (Python).
+	Normalizers []string
+	// Responses build an HTTP response from a body (Python).
+	Responses Responses
+	// Escapes are replace() calls that remove a character (Python).
+	Escapes []*Escape
+	// URLParsers parse a URL whose netloc a guard can check (Python).
+	URLParsers []string
+	// ShellFlags make a list [shell, flag, command] run a shell command.
+	ShellFlags []string
+	// TextCalls return text derived from their arguments (unquote,
+	// b64decode, os.path.join); any other call the engine does not model
+	// returns an opaque object built from them (Python).
+	TextCalls []string
+	// sanitizer kinds by callee name and by method name
+	sanitizeCall   map[string]Kind
+	sanitizeMethod map[string]Kind
 }
 
 // Sources lists where untrusted data comes from.
@@ -61,7 +86,55 @@ type Sources struct {
 	PluginOptions     []string `yaml:"plugin_options"`
 	Globals           []string `yaml:"globals"`
 	LibraryParameters bool     `yaml:"library_parameters"`
+
+	// The IR engine (Python): qualified attributes and calls that return
+	// untrusted data, parameter names that hold a request object (their
+	// attributes are then qualified by that name), and decorators that
+	// register a route handler, whose parameters are path values.
+	Attributes      []string `yaml:"attributes"`
+	Calls           []string `yaml:"calls"`
+	Params          []string `yaml:"params"`
+	RouteDecorators []string `yaml:"route_decorators"`
+	// HTMLReturnFrameworks are modules whose import makes a route
+	// handler's return value an HTML response.
+	HTMLReturnFrameworks []string `yaml:"html_return_frameworks"`
 }
+
+// Guard is a test that makes a value safe for Kinds on one branch: the
+// value does not contain one of Contains (the branch where `c in x` is
+// false), or a normalized path passed Method (startswith) on the branch
+// where it is true.
+type Guard struct {
+	KindsRaw   []string `yaml:"kinds"`
+	Kinds      Kind     `yaml:"-"`
+	Contains   []string `yaml:"contains"`
+	Method     string   `yaml:"method"`
+	Normalized bool     `yaml:"normalized"`
+	// QuotedLiteral: startswith and endswith a quote and no quote between.
+	QuotedLiteral bool `yaml:"quoted_literal"`
+	// Netloc: the host of a parsed URL is in a constant allowlist.
+	Netloc bool `yaml:"netloc"`
+}
+
+// Escape is x.replace(Old, new) with a new that does not contain Old.
+type Escape struct {
+	Old      string   `yaml:"old"`
+	KindsRaw []string `yaml:"kinds"`
+	Kinds    Kind     `yaml:"-"`
+}
+
+// Responses are calls that build a response from a body (the first
+// argument, or the first element of a tuple); a keyword in ContentType
+// with a value outside HTMLTypes makes the body safe for HTML.
+type Responses struct {
+	Calls       []string `yaml:"calls"`
+	ContentType []string `yaml:"content_type_kwargs"`
+	HTMLTypes   []string `yaml:"html_types"`
+}
+
+// ArgReceiver is the Arg of a target that watches the receiver of a
+// method call (`pathlib.Path.read_text#self`).
+const ArgReceiver = -2
 
 // Target is a callee or method name and the argument it watches; Arg is -1
 // for any argument.
@@ -91,6 +164,20 @@ type Sink struct {
 	ReceiversNot    []string            `yaml:"receivers_not"`
 	Props           []string            `yaml:"props"`
 	JSX             []string            `yaml:"jsx"`
+	// The IR engine (Python): Stores are containers (qualified names)
+	// where storing an untrusted key or value is the sink; SafeKwargs maps
+	// a keyword to the qualified names or constants that make the call
+	// safe; RequiresFlag needs a flag set on an argument (a parser with
+	// external entities turned on); HandlerReturn makes the return value
+	// of a route handler the sink.
+	Stores        []string            `yaml:"stores"`
+	SafeKwargs    map[string][]string `yaml:"safe_kwargs"`
+	RequiresFlag  *Flag               `yaml:"requires_flag"`
+	HandlerReturn bool                `yaml:"handler_return"`
+	// TextOnly sinks need the input as text, not an object a helper
+	// built from it: a redirect to url_for(..., next=x) or a session
+	// entry holding a form object is not the flaw.
+	TextOnly bool `yaml:"text_only"`
 	// RequestOnly sinks are reported only for request sources, not for
 	// library parameters: a library that fetches the URL it is given is
 	// doing its job.
@@ -101,16 +188,33 @@ type Sink struct {
 	Methods        map[string]Target `yaml:"-"`
 }
 
-// Sanitizer makes values safe for some kinds.
+// Flag is a flag set on argument Arg by a call such as
+// parser.setFeature(Flag, True).
+type Flag struct {
+	Arg    int      `yaml:"arg"`
+	Flag   string   `yaml:"flag"`
+	Setter []string `yaml:"setters"`
+}
+
+// Sanitizer makes values safe for some kinds. Methods are method names
+// called on the value (Python: x.isdigit() returns no part of x).
 type Sanitizer struct {
 	KindsRaw []string `yaml:"kinds"`
 	Calls    []string `yaml:"calls"`
+	Methods  []string `yaml:"methods"`
 }
 
 type specFile struct {
-	Sources    Sources     `yaml:"sources"`
-	Sinks      []*Sink     `yaml:"sinks"`
-	Sanitizers []Sanitizer `yaml:"sanitizers"`
+	Sources     Sources     `yaml:"sources"`
+	Sinks       []*Sink     `yaml:"sinks"`
+	Sanitizers  []Sanitizer `yaml:"sanitizers"`
+	Guards      []*Guard    `yaml:"guards"`
+	Normalizers []string    `yaml:"normalizers"`
+	Responses   Responses   `yaml:"responses"`
+	Escapes     []*Escape   `yaml:"escapes"`
+	URLParsers  []string    `yaml:"url_parsers"`
+	ShellFlags  []string    `yaml:"shell_flags"`
+	TextCalls   []string    `yaml:"text_calls"`
 }
 
 func parseTarget(s string) (Target, error) {
@@ -119,8 +223,12 @@ func parseTarget(s string) (Target, error) {
 	if !ok {
 		return t, nil
 	}
-	if arg == "*" {
+	switch arg {
+	case "*":
 		t.Arg = -1
+		return t, nil
+	case "self":
+		t.Arg = ArgReceiver
 		return t, nil
 	}
 	n, err := strconv.Atoi(arg)
@@ -149,7 +257,25 @@ func Parse(data []byte) (*Spec, error) {
 	if err := yaml.Unmarshal(data, &f); err != nil {
 		return nil, err
 	}
-	s := &Spec{Sources: f.Sources, Sinks: f.Sinks, Sanitizers: f.Sanitizers, sanitizeCall: map[string]Kind{}}
+	s := &Spec{Sources: f.Sources, Sinks: f.Sinks, Sanitizers: f.Sanitizers, Guards: f.Guards, Normalizers: f.Normalizers, Responses: f.Responses, Escapes: f.Escapes, URLParsers: f.URLParsers, ShellFlags: f.ShellFlags, TextCalls: f.TextCalls, sanitizeCall: map[string]Kind{}, sanitizeMethod: map[string]Kind{}}
+	for _, g := range s.Guards {
+		for _, n := range g.KindsRaw {
+			k, ok := kindByName[n]
+			if !ok {
+				return nil, fmt.Errorf("guard: unknown kind %q", n)
+			}
+			g.Kinds |= k
+		}
+	}
+	for _, x := range s.Escapes {
+		for _, n := range x.KindsRaw {
+			k, ok := kindByName[n]
+			if !ok {
+				return nil, fmt.Errorf("escape: unknown kind %q", n)
+			}
+			x.Kinds |= k
+		}
+	}
 	for _, k := range s.Sinks {
 		var ok bool
 		if k.Kind, ok = kindByName[k.KindStr]; !ok || k.Kind == All {
@@ -178,6 +304,9 @@ func Parse(data []byte) (*Spec, error) {
 		for _, c := range z.Calls {
 			s.sanitizeCall[c] |= kinds
 		}
+		for _, m := range z.Methods {
+			s.sanitizeMethod[m] |= kinds
+		}
 	}
 	return s, nil
 }
@@ -193,6 +322,9 @@ func Load(lang string) (*Spec, error) {
 
 // Sanitizes returns the kinds a call to the resolved callee name makes safe.
 func (s *Spec) Sanitizes(name string) Kind { return s.sanitizeCall[name] }
+
+// SanitizesMethod returns the kinds a method of that name makes safe.
+func (s *Spec) SanitizesMethod(name string) Kind { return s.sanitizeMethod[name] }
 
 // Step is one point on the way from a source to a sink.
 type Step struct {

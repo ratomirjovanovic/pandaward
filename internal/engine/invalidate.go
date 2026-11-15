@@ -29,7 +29,7 @@ func adapterWatches(adapter, p string) bool {
 		return isCodeLang(lang) || inventory.IsAgentInstructions(p) || inventory.IsMCPConfig(p)
 	case "builtin-taint":
 		// package.json decides whether the project is a library.
-		return lang == "javascript" || lang == "typescript" || base == "package.json"
+		return lang == "javascript" || lang == "typescript" || lang == "python" || base == "package.json"
 	case "builtin-cicd":
 		return strings.Contains(p, ".github/workflows/")
 	case "builtin-infra":
