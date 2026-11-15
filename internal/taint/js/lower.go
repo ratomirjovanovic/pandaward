@@ -67,6 +67,34 @@ func prototypes(list []Stmt) map[string][]*Prop {
 			}
 		}
 	}
+	// Methods a constructor assigns to its own prototype in its body
+	// (function X () { X.prototype.m = function () {} }) are methods too.
+	for _, s := range list {
+		var fn *Func
+		switch s := s.(type) {
+		case *FuncDecl:
+			fn = s.Func
+		}
+		if fn == nil || fn.Name == "" {
+			continue
+		}
+		for _, bs := range fn.Body {
+			es, ok := bs.(*ExprStmt)
+			if !ok {
+				continue
+			}
+			a, ok := es.X.(*Assign)
+			if !ok || a.Op != "=" {
+				continue
+			}
+			parts := strings.Split(memberPath(a.Target), ".")
+			if len(parts) == 3 && parts[0] == fn.Name && parts[1] == "prototype" {
+				if f, ok := a.Value.(*Func); ok {
+					out[fn.Name] = append(out[fn.Name], &Prop{Pos: a.Pos, Key: parts[2], Value: f})
+				}
+			}
+		}
+	}
 	// Only a constructor of the list makes a class: function X () {},
 	// X = function () {} or var X = function () {}.
 	ctors := map[string]bool{}
@@ -121,6 +149,9 @@ type loop struct {
 }
 
 type lowerer struct {
+	// valEnd is the last line of the value an assignment to a property
+	// writes, which a finding at the store covers.
+	valEnd  int
 	mod     *ir.Module
 	resolve Resolver
 	// protos holds the prototype methods of constructor functions:
@@ -796,6 +827,18 @@ func (l *lowerer) exprStmt(x Expr) {
 		return
 	}
 	l.expr(x)
+	// process.exit() ends the program: what follows a check that exits is
+	// reached only when the check passed.
+	if c, ok := x.(*Call); ok {
+		switch memberPath(c.Callee) {
+		case "process.exit", "process.abort", "process.reallyExit":
+			if l.cur == nil {
+				l.cur = l.newBlock()
+			}
+			l.cur.Term = ir.Term{Kind: ir.Raise, Pos: at(c.Line)}
+			l.cur = nil
+		}
+	}
 }
 
 // exportChain reports an assignment a = b = v one of whose targets is a
@@ -838,7 +881,9 @@ func (l *lowerer) assignChain(a *Assign) ir.Operand {
 	}
 	dst := exportDst(memberPath(a.Target))
 	if dst == "" {
+		l.valEnd = lastLine(a.Value)
 		l.assign(a.Target, v, a.Line)
+		l.valEnd = 0
 		return v
 	}
 	l.emit(&ir.Instr{Op: ir.Copy, Pos: at(a.Line), Dst: dst, A: v})
@@ -937,7 +982,7 @@ func (l *lowerer) assign(target Expr, v ir.Operand, line int) {
 			l.emit(&ir.Instr{Op: ir.SetIndex, Pos: at(line), A: obj, B: l.expr(t.Computed), C: v})
 			return
 		}
-		l.emit(&ir.Instr{Op: ir.Store, Pos: at(line), A: obj, Name: t.Prop, B: v})
+		l.emit(&ir.Instr{Op: ir.Store, Pos: ir.Pos{Line: line, End: l.valEnd}, A: obj, Name: t.Prop, B: v})
 	case *Assign:
 		// a default: [x = d] or {a = d}
 		l.assign(t.Target, v, line)
@@ -1151,7 +1196,9 @@ func (l *lowerer) expr(e Expr) ir.Operand {
 		default:
 			v = l.value(ir.Bin, e.Line, strings.TrimSuffix(e.Op, "="), l.expr(e.Target), l.expr(e.Value))
 		}
+		l.valEnd = lastLine(e.Value)
 		l.assign(e.Target, v, e.Line)
+		l.valEnd = 0
 		return v
 	case *Cond:
 		t := l.temp()

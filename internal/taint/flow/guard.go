@@ -44,6 +44,40 @@ func (f *fnRun) refine(st State, cond ir.Operand, edge bool) State {
 	mark := func(name string, kinds taint.Kind) {
 		update(name, func(v *Value) { v.Safe |= kinds })
 	}
+	// markOp marks the checked operand: a variable, or a field read from
+	// one (config.name), whose field alone becomes safe.
+	markOp := func(o ir.Operand, kinds taint.Kind) {
+		if name := f.root(o); name != "" {
+			mark(name, kinds)
+			return
+		}
+		d := f.fn.Defs[o.Var]
+		if d == nil || d.Op != ir.Load || d.A.Var == "" || ir.IsTemp(d.A.Var) {
+			return
+		}
+		base, ok := st[d.A.Var]
+		if out != nil {
+			base, ok = out[d.A.Var]
+		}
+		if !ok {
+			return
+		}
+		fv := f.load(base, d.Name, 0)
+		if fv.T == nil {
+			return
+		}
+		if out == nil {
+			out = st.copy()
+		}
+		nb := base.copy()
+		if nb.Fields == nil {
+			nb.Fields = map[string]*Value{}
+		}
+		nf := fv.copy()
+		nf.Safe |= kinds
+		nb.Fields["."+d.Name] = nf
+		out[d.A.Var] = nb
+	}
 	flag := func(name, fl string) {
 		update(name, func(v *Value) {
 			if v.Fields == nil {
@@ -71,7 +105,7 @@ func (f *fnRun) refine(st State, cond ir.Operand, edge bool) State {
 			}
 			for _, c := range g.Contains {
 				if strings.Contains(needle, c) {
-					mark(f.root(hay), g.Kinds)
+					markOp(hay, g.Kinds)
 					break
 				}
 			}
@@ -134,11 +168,11 @@ func (f *fnRun) refine(st State, cond ir.Operand, edge bool) State {
 			}
 		case len(g.Methods) > 0 && d.Op == ir.Call && edge && contains(g.Methods, d.Name):
 			// letters and digits are harmless, but still the client's data
-			mark(f.root(d.A), g.Kinds&^taint.Trust)
+			markOp(d.A, g.Kinds&^taint.Trust)
 		case len(g.Calls) > 0 && d.Op == ir.Call && edge && len(d.Args) > 0 && f.calls(d, st, g.Calls):
-			mark(f.root(d.Args[0]), g.Kinds)
+			markOp(d.Args[0], g.Kinds)
 		case g.Allowlist && isIn && !absent && constant(f.val(st, d.B)) && f.val(st, d.B).C == nil:
-			mark(f.root(d.A), g.Kinds)
+			markOp(d.A, g.Kinds)
 		case g.Netloc:
 			// url.netloc in [...] on this edge, url = urlparse(x)
 			var host ir.Operand
@@ -174,7 +208,7 @@ func (f *fnRun) refine(st State, cond ir.Operand, edge bool) State {
 	}
 	val := func(o ir.Operand) *Value { return f.val(st, o) }
 	if o, kinds, ok := f.valueCheck(f.fn, val, d, edge, 0); ok {
-		mark(f.root(o), kinds)
+		markOp(o, kinds)
 	}
 	if out == nil {
 		return st

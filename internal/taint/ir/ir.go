@@ -98,7 +98,19 @@ func (o Operand) String() string {
 
 // IsTemp reports a temporary of the lowering, as opposed to a variable of
 // the source.
-func IsTemp(name string) bool { return strings.HasPrefix(name, "$") }
+func IsTemp(name string) bool {
+	// A temporary is $ and a number; $config and $ are names of the source
+	// (jQuery code writes them).
+	if len(name) < 2 || name[0] != '$' {
+		return false
+	}
+	for i := 1; i < len(name); i++ {
+		if name[i] < '0' || name[i] > '9' {
+			return false
+		}
+	}
+	return true
+}
 
 // Op is an instruction's operation.
 type Op uint8
