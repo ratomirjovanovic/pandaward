@@ -5,6 +5,7 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 ## [Unreleased]
 
 ### Added
+- A Sponsor button (`.github/FUNDING.yml`) and a Sponsoring section in the README (#424).
 - GitHub Discussions for questions, ideas and show and tell, with forms that ask for the version, how PandaWard runs and the rule or control; the issue chooser, README, CONTRIBUTING, the new SUPPORT.md and the site link to them (#412).
 - Request wrapper classes are followed by the Java rules: a class of the project that keeps the servlet request in a field and returns its data from `String` methods (`wrapper.getTheParameter("x")`) adds those methods to the request sources; methods that do not use the request stay clean. On the OWASP Benchmark for Java with Opengrep, with #398, the average moves from 0.723 to 0.818 and every injection category finds all its vulnerable cases. With Semgrep CE, which cannot follow the wrapper's value within the calling method's helpers, cmdi, ldapi and xpathi lose up to 0.08 to false positives (#400).
 - Weak hash and cipher algorithms named in a `.properties` file are found: when the Semgrep rules run, PandaWard writes an extra rule for each key whose value is a weak hash (MD5, SHA-1, ...) or cipher (DES, RC4, ECB, ...) that follows `getProperty("<key>")` to `MessageDigest.getInstance` or `Cipher.getInstance`. On the OWASP Benchmark for Java the hash and crypto categories reach 1.000 and the average with Opengrep moves from 0.723 to 0.774 (#398).

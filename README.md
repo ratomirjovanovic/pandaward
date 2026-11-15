@@ -485,6 +485,10 @@ Tell us, and the rule gets fixed. PandaWard is open source and its rules improve
 
 Ask questions, propose ideas and show what you built in [Discussions](https://github.com/ratomirjovanovic/pandaward/discussions); releases and changes in detection are announced there too. [SUPPORT.md](SUPPORT.md) says where each kind of question or report goes.
 
+## Sponsoring
+
+PandaWard is free, open source and runs only on your machine, and it will stay that way: there is no paid tier, no hosted service and no feature held back. If it saves you or your team time, you can [sponsor its development on GitHub](https://github.com/sponsors/ratomirjovanovic). Sponsorship pays for the detection engines, the public benchmarks and keeping releases, packages and documentation current. It changes nothing in what the tool does or where your code goes.
+
 ## Contributing and security
 
 Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md). Please report vulnerabilities in PandaWard itself privately as described in [SECURITY.md](SECURITY.md). What changed in each version is in [CHANGELOG.md](CHANGELOG.md).
