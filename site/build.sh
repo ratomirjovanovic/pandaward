@@ -193,7 +193,7 @@ d = dest / ("main-run-%d" % run["id"])
 d.mkdir(parents=True, exist_ok=True)
 for name, data in found.items():
     (d / name).write_bytes(data)
-meta = {"label": "main", "date": run["created_at"][:10],
+meta = {"label": "main " + run["head_sha"][:7], "date": run["created_at"][:10], "time": run["created_at"],
         "url": "https://github.com/ratomirjovanovic/pandaward/commit/" + run["head_sha"][:7]}
 (d / "meta.json").write_text(json.dumps(meta), encoding="utf-8")
 print("main snapshot from run %d: %s" % (run["id"], ", ".join(sorted(found))))

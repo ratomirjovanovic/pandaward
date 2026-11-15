@@ -24,7 +24,7 @@ const page = `<!doctype html>
 <main class="wrap">
   <section>
     <h1>Benchmarks</h1>
-    <p class="sub">What PandaWard finds on public, labelled test suites it did not write, measured the same way for every release. These are baselines, not claims: the <a href="https://github.com/ratomirjovanovic/pandaward/blob/main/docs/BENCHMARKS.md">method and interpretation</a> say what each number measures and where PandaWard is still weak, such as the built-in rules on Java and Python, which have no taint engine yet, and half of the CVEs. No other product is compared here, because none was run with the same suites, versions and configuration.</p>
+    <p class="sub">What PandaWard finds on public, labelled test suites it did not write, measured the same way for every release. These are baselines, not claims: the <a href="https://github.com/ratomirjovanovic/pandaward/blob/main/docs/BENCHMARKS.md">method and interpretation</a> say what each number measures and where PandaWard is still weak, such as the built-in rules on Java and Python, which have no taint engine yet, and the 95 CVEs it still misses. No other product is compared here, because none was run with the same suites, versions and configuration.</p>
     <p class="sub">Latest: <b>{{.Latest.Label}}</b>, {{.Latest.Date}} (<a href="{{.Latest.URL}}">source</a>). Score = true positive rate minus false positive rate per category (Youden's index): 0 is no better than not running the tool, 1 is perfect.</p>
   </section>
 
