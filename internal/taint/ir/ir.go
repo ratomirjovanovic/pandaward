@@ -14,7 +14,11 @@ import (
 )
 
 // Pos is a 1-based line and column.
-type Pos struct{ Line, Col int }
+type Pos struct {
+	Line, Col int
+	// End is the last line of a call whose arguments span lines, or 0.
+	End int
+}
 
 // ConstKind is the kind of a constant.
 type ConstKind uint8

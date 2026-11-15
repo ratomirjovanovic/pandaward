@@ -23,7 +23,11 @@ func jsFlows(t *testing.T, src string) []string {
 	p.Library = true
 	var out []string
 	for _, x := range p.AnalyzeOne(js.Lower(f, "app.js", nil), strings.Split(src, "\n")) {
-		out = append(out, fmt.Sprintf("%s:%d", x.Sink.ID, x.Line))
+		at := fmt.Sprintf("%s:%d", x.Sink.ID, x.Line)
+		if x.EndLine > x.Line {
+			at += fmt.Sprintf("-%d", x.EndLine)
+		}
+		out = append(out, at)
 	}
 	return out
 }
@@ -38,6 +42,20 @@ func TestJSNestedExports(t *testing.T) {
   };
 }());`
 	if got := strings.Join(jsFlows(t, src), " "); got != "taint.js-command-injection:4" {
+		t.Errorf("got %q", got)
+	}
+}
+
+// TestJSMultiLineCall checks that a finding at a call covers the lines of
+// its arguments.
+func TestJSMultiLineCall(t *testing.T) {
+	src := `const sh = require('execa').shell
+module.exports = function (port) {
+  return sh(
+    'lsof -i tcp:' + port
+  )
+}`
+	if got := strings.Join(jsFlows(t, src), " "); got != "taint.js-command-injection:3-4" {
 		t.Errorf("got %q", got)
 	}
 }

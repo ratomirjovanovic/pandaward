@@ -1080,9 +1080,26 @@ func (l *lowerer) call(e *Call) ir.Operand {
 		in.A = l.expr(e.Callee)
 	}
 	in.Args, in.Keys = l.exprs(e.Args)
+	for _, a := range e.Args {
+		in.Pos.End = max(in.Pos.End, lastLine(a))
+	}
 	in.Dst = l.temp()
 	l.emit(in)
 	return ir.V(in.Dst)
+}
+
+// lastLine is the last line an expression starts a node on, outside the
+// functions it holds: a finding on a multi-line argument covers all of it.
+func lastLine(x Expr) int {
+	end := 0
+	Inspect(x, func(n Node) bool {
+		if _, isFn := n.(*Func); isFn && n != Node(x) {
+			return false
+		}
+		end = max(end, n.Ln())
+		return true
+	})
+	return end
 }
 
 // class lowers a class into a class body function holding its methods.

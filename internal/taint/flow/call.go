@@ -566,7 +566,7 @@ func (f *fnRun) sinks(c *call, st State) {
 			if truth, known := knownTruth(sh); !ok || !known || !truth {
 				// [shell, "-c", command, ...] runs command in a shell too.
 				if cmd := f.shellList(c, t.t.Arg); cmd != nil && cmd.tainted(s.Kind) {
-					f.found(s, c.in.Pos.Line, cmd)
+					f.foundSpan(s, c.in.Pos, cmd.T)
 				}
 				continue
 			}
@@ -585,7 +585,7 @@ func (f *fnRun) sinks(c *call, st State) {
 		}
 		for _, v := range vals {
 			if v.tainted(s.Kind) && !(s.TextOnly && v.Opaque) {
-				f.found(s, c.in.Pos.Line, v)
+				f.foundSpan(s, c.in.Pos, v.T)
 				break
 			}
 			if s.UnlessConstant && v.T == nil && !isPure(v) {
@@ -768,6 +768,13 @@ func (f *fnRun) routeCall(c *call) {
 }
 
 func (f *fnRun) foundAt(s *taint.Sink, line int, t *taint.Trace) {
+	f.foundSpan(s, ir.Pos{Line: line}, t)
+}
+
+// foundSpan is foundAt for a call whose arguments may span lines up to
+// pos.End, which the finding covers.
+func (f *fnRun) foundSpan(s *taint.Sink, pos ir.Pos, t *taint.Trace) {
+	line := pos.Line
 	if s.RequestOnly && t != nil && t.Root().Library {
 		return // a library that opens the path it is given does its job
 	}
@@ -786,6 +793,6 @@ func (f *fnRun) foundAt(s *taint.Sink, line int, t *taint.Trace) {
 			steps[i].File = ""
 		}
 	}
-	f.p.findings[k] = taint.Finding{Sink: s, File: f.mod.Path, Line: line, EndLine: line, Steps: steps, Library: t != nil && t.Root().Library}
+	f.p.findings[k] = taint.Finding{Sink: s, File: f.mod.Path, Line: line, EndLine: max(line, pos.End), Steps: steps, Library: t != nil && t.Root().Library}
 	f.p.order = append(f.p.order, k)
 }
