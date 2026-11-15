@@ -53,6 +53,7 @@ func main() {
 	only := flag.String("cve", "", "comma-separated CVE ids")
 	scan := flag.Bool("scan", false, "instead: print the findings in application code under the directories given as arguments (no library mode)")
 	cpu := flag.String("cpuprofile", "", "write a CPU profile to this file")
+	show = flag.Bool("show", false, "print the findings of each analyzed file")
 	irEngine := flag.Bool("ir", false, "measure the IR engine (internal/taint/flow, rules/taint/jsir.yaml) instead of jsflow")
 	flag.Parse()
 	useIR = *irEngine
@@ -192,11 +193,25 @@ func analyze(spec *taint.Spec, dir string, c cve) (map[string][]taint.Finding, b
 		}
 		out[f] = jsflow.Analyze(file, spec, jsflow.Options{Library: true})
 	}
+	if *show {
+		for f, fs := range out {
+			for _, x := range fs {
+				src := ""
+				if len(x.Steps) > 0 {
+					src = x.Steps[0].What
+				}
+				fmt.Printf("    %s %s:%d %s <- %s\n", filepath.Base(dir), f, x.Line, x.Sink.ID, src)
+			}
+		}
+	}
 	return out, found
 }
 
-// useIR selects the IR engine (-ir).
-var useIR bool
+// useIR selects the IR engine (-ir); show prints findings (-show).
+var (
+	useIR bool
+	show  *bool
+)
 
 var irEng *flow.Engine
 
