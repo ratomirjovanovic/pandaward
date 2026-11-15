@@ -251,6 +251,14 @@ func (l *lowerer) classBody(c *ClassDecl, qname string, outer *classInfo, parent
 		l.emit(&ir.Instr{Op: ir.Copy, Pos: at(ec.Pos), Dst: ec.Name, A: ir.C(ir.Str, ec.Name)})
 	}
 	hasCtor := false
+	// Nested classes first: Java sees every member of a class, whatever
+	// its order, and the methods' scope is recorded at their definition.
+	for _, m := range c.Members {
+		if m, ok := m.(*ClassDecl); ok {
+			nested := l.classBody(m, qname+"."+m.Name, ci, fn)
+			l.emit(&ir.Instr{Op: ir.Func, Pos: at(m.Pos), Dst: m.Name, Fn: nested})
+		}
+	}
 	for _, m := range c.Members {
 		switch m := m.(type) {
 		case *Method:
@@ -261,9 +269,6 @@ func (l *lowerer) classBody(c *ClassDecl, qname string, outer *classInfo, parent
 				name = "__init__"
 			}
 			l.emit(&ir.Instr{Op: ir.Func, Pos: at(m.Pos), Dst: name, Fn: mf})
-		case *ClassDecl:
-			nested := l.classBody(m, qname+"."+m.Name, ci, fn)
-			l.emit(&ir.Instr{Op: ir.Func, Pos: at(m.Pos), Dst: m.Name, Fn: nested})
 		}
 	}
 	if !hasCtor && (len(instanceInit) > 0 || len(c.Components) > 0) {
@@ -317,6 +322,10 @@ func (l *lowerer) method(m *Method, ci *classInfo, classFn *ir.Function, instanc
 	}
 	for _, a := range m.Annotations {
 		fn.Decorators = append(fn.Decorators, annotation(a))
+	}
+	if m.Body == nil {
+		// abstract or an interface method: an implementation runs instead
+		fn.Decorators = append(fn.Decorators, ir.Decorator{Name: "abstract"})
 	}
 	for _, p := range m.Params {
 		kind := ""
@@ -1183,6 +1192,23 @@ func (l *lowerer) newExpr(e *New) ir.Operand {
 		return ir.V(t)
 	}
 	args := l.exprs(e.Args)
+	base := l.typeName(e.Type)
+	short := base[strings.LastIndexByte(base, '.')+1:]
+	switch {
+	case e.Body == nil && listTypes[short] && len(args) == 0:
+		t := l.temp()
+		l.emit(&ir.Instr{Op: ir.Build, Pos: at(e.Pos), Dst: t, Name: "list"})
+		return ir.V(t)
+	case e.Body == nil && mapTypes[short] && len(args) == 0 && short != "Properties":
+		t := l.temp()
+		l.emit(&ir.Instr{Op: ir.Build, Pos: at(e.Pos), Dst: t, Name: "dict"})
+		return ir.V(t)
+	case e.Body == nil && builderTypes[short]:
+		if len(args) == 1 {
+			return l.value(ir.Bin, e.Pos, "+", ir.C(ir.Str, ""), args[0])
+		}
+		return ir.C(ir.Str, "")
+	}
 	if e.Body != nil {
 		l.nlambda++
 		body := l.classBody(e.Body, l.mod.Name+"$"+strconv.Itoa(l.nlambda), l.class, l.fn)

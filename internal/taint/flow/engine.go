@@ -343,6 +343,10 @@ func fixedRoute(fn *ir.Function) string {
 	return ""
 }
 
+// textTypes are declared types whose values are text.
+var textTypes = map[string]bool{"String": true, "java.lang.String": true, "CharSequence": true, "char[]": true, "byte[]": true,
+	"String[]": true, "StringBuilder": true, "StringBuffer": true}
+
 // javaScalar are Java types whose values cannot carry text.
 var javaScalar = map[string]bool{"int": true, "long": true, "short": true, "byte": true, "boolean": true, "double": true, "float": true, "char": true,
 	"Integer": true, "Long": true, "Short": true, "Byte": true, "Boolean": true, "Double": true, "Float": true, "java.util.UUID": true}
@@ -633,6 +637,11 @@ func (f *fnRun) instr(in *ir.Instr, st State) {
 		if in.Name != "" && in.Name != "Object" && v.Inst != in.Name && f.p.classes[v.Inst] == nil && !javaScalar[in.Name] {
 			v = v.copy()
 			v.Inst = in.Name
+		}
+		// A value declared as text is text, whatever call returned it.
+		if v.Opaque && textTypes[in.Name] {
+			v = v.copy()
+			v.Opaque = false
 		}
 		st[in.Dst] = v
 	case ir.Call:

@@ -255,7 +255,7 @@ func (f *fnRun) project(c *call, st State) (*Value, bool) {
 	case c.recv.Fn != nil && isClass(c.recv.Fn):
 		fn = p.method(c.recv.Fn, in.Name, 0) // Class.method(...)
 	}
-	if fn == nil {
+	if fn == nil || decorated(fn, "abstract") {
 		return nil, false
 	}
 	if isClass(fn) {
