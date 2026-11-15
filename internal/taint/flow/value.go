@@ -33,6 +33,10 @@ type Value struct {
 	// Opaque marks tainted data returned by a function the engine does not
 	// model: an object built from the input rather than the input as text.
 	Opaque bool
+	// W is where a weak digest or predictable number in the value comes
+	// from, and WK which of the two (taint.WeakHash, taint.WeakRandom).
+	W  *taint.Trace
+	WK taint.Kind
 }
 
 var empty = &Value{}
@@ -81,14 +85,21 @@ func (v *Value) copy() *Value {
 // taintOf keeps only the taint of v: data derived from it that is neither
 // constant nor a known object.
 func taintOf(v *Value) *Value {
-	if v == nil || v.T == nil {
+	if v == nil || v.T == nil && v.W == nil {
 		return empty
 	}
-	return &Value{T: v.T, Safe: v.Safe, Opaque: v.Opaque}
+	return &Value{T: v.T, Safe: v.Safe, Opaque: v.Opaque, W: v.W, WK: v.WK}
 }
 
 // mix adds the taint of x to v (a value being built from both).
 func mix(v, x *Value) *Value {
+	if x != nil && x.W != nil && v.WK&x.WK != x.WK {
+		v = v.copy()
+		if v.W == nil {
+			v.W = x.W
+		}
+		v.WK |= x.WK
+	}
 	if x == nil || x.T == nil {
 		return v
 	}
@@ -137,6 +148,10 @@ func joinDepth(a, b *Value, widen bool, depth int) *Value {
 	}
 	if a.Q == b.Q {
 		r.Q = a.Q
+	}
+	r.W, r.WK = a.W, a.WK|b.WK
+	if r.W == nil {
+		r.W = b.W
 	}
 	if a.Inst == b.Inst {
 		r.Inst = a.Inst
@@ -187,7 +202,7 @@ func covers(old, v *Value) bool {
 	if old.Q != "" && old.Q != v.Q || old.Inst != "" && old.Inst != v.Inst || old.Fn != nil && old.Fn != v.Fn || old.From != "" && old.From != v.From {
 		return false
 	}
-	if old.Norm && !v.Norm {
+	if old.Norm && !v.Norm || old.WK&v.WK != v.WK {
 		return false
 	}
 	return old.Fields == nil && v.Fields == nil && !old.Known
@@ -205,7 +220,7 @@ func equal(a, b *Value) bool {
 	if b == nil {
 		b = empty
 	}
-	if (a.T != nil) != (b.T != nil) || a.Safe != b.Safe || a.Q != b.Q || a.Inst != b.Inst || a.Norm != b.Norm || a.Fn != b.Fn || a.Known != b.Known || a.From != b.From || a.Opaque != b.Opaque {
+	if (a.T != nil) != (b.T != nil) || a.Safe != b.Safe || a.Q != b.Q || a.Inst != b.Inst || a.Norm != b.Norm || a.Fn != b.Fn || a.Known != b.Known || a.From != b.From || a.Opaque != b.Opaque || a.WK != b.WK {
 		return false
 	}
 	if (a.C == nil) != (b.C == nil) || a.C != nil && *a.C != *b.C {

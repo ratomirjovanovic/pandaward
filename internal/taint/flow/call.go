@@ -68,6 +68,14 @@ func (f *fnRun) receiverName(in *ir.Instr) string {
 func (f *fnRun) call(in *ir.Instr, st State) *Value {
 	c := f.resolve(in, st)
 	if f.report {
+		f.weakSinks(c)
+	}
+	return f.weakSource(c, f.callResolved(c, st))
+}
+
+func (f *fnRun) callResolved(c *call, st State) *Value {
+	in := c.in
+	if f.report {
 		f.sinks(c, st)
 	}
 	f.flags(c, st)
@@ -545,11 +553,21 @@ func contains(list []string, s string) bool {
 }
 
 func (f *fnRun) found(s *taint.Sink, line int, v *Value) {
+	f.foundAt(s, line, v.T)
+}
+
+// foundAt records a finding at a sink with the trace that reached it, or
+// with the sink alone when nil.
+func (f *fnRun) foundAt(s *taint.Sink, line int, t *taint.Trace) {
 	k := f.mod.Path + "|" + s.ID + ":" + strconv.Itoa(line)
 	if _, ok := f.p.findings[k]; ok {
 		return
 	}
-	tr := v.T.AddStep(taint.Step{Line: line, What: f.text(line), File: f.mod.Path})
+	step := taint.Step{Line: line, What: f.text(line), File: f.mod.Path}
+	tr := t.AddStep(step)
+	if t == nil {
+		tr = taint.FromSteps([]taint.Step{step}, false)
+	}
 	steps := tr.Steps()
 	for i := range steps {
 		if steps[i].File == f.mod.Path {

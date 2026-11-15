@@ -263,6 +263,30 @@ sinks:
       - django.http.HttpResponse
       - django.utils.safestring.mark_safe
 
+  - id: taint.py-weak-random
+    kind: weakrandom
+    control: E-004
+    cwe: "CWE-330"
+    title: Predictable random value used as a secret
+    message: A value from the random module, which is predictable, is used as a token, session value or cookie value.
+    fix: Use the secrets module (secrets.token_urlsafe, secrets.token_bytes) for anything an attacker must not guess.
+
+  - id: taint.py-weak-hash
+    kind: weakhash
+    control: E-004
+    cwe: "CWE-328"
+    title: Weak hash stored as a password
+    message: An MD5 or SHA-1 digest is stored where a password or credential is kept; these hashes are fast to brute force.
+    fix: Hash passwords with a slow, salted function (argon2, bcrypt, scrypt or hashlib.pbkdf2_hmac).
+
+  - id: taint.py-insecure-cookie
+    kind: cookie
+    control: B-002
+    cwe: "CWE-614"
+    title: Cookie set without its security flags
+    message: A cookie is set with secure=False or httponly=False, so it is sent over plain HTTP or readable by scripts.
+    fix: Set secure=True and httponly=True (and samesite) when setting cookies that carry session or user data.
+
 sanitizers:
   - kinds: [all]
     calls: [int, float, bool, len, hash, id, ord, abs, round, isinstance, callable, uuid.UUID, ipaddress.ip_address, json.dumps]
@@ -371,6 +395,20 @@ lookups:
   - prefetch_related
   - values
   - values_list
+
+# Weak digests and predictable numbers, and where they must not end up.
+weak:
+  hash_calls: [hashlib.md5, hashlib.sha1, Crypto.Hash.MD5.new, Crypto.Hash.SHA1.new, Cryptodome.Hash.MD5.new, Cryptodome.Hash.SHA1.new]
+  # hashlib.new(name) with one of these names
+  hash_new: [hashlib.new]
+  hash_algorithms: [md5, sha1, md4, MD5, SHA1, sha-1]
+  random_calls: [random.random, random.randint, random.randrange, random.getrandbits, random.randbytes, random.choice, random.choices, random.sample, random.uniform, random.normalvariate, random.gauss, random.triangular, random.betavariate, random.expovariate]
+  # A key, attribute or file name containing one of these marks a secret
+  # (for random values) or a stored password (for digests).
+  secret_names: [token, secret, password, passwd, nonce, salt, otp, session, remember, csrf, reset, apikey]
+  password_names: [password, passwd, pwd, credential, passphrase]
+  cookie_setters: [set_cookie]
+  cookie_flags: [secure, httponly]
 
 # A list starting with a shell and -c runs its next element as a shell
 # command (subprocess.run(["sh", "-c", cmd])).
