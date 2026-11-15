@@ -3,3 +3,9 @@ contact_links:
   - name: Report a vulnerability in PandaWard itself
     url: https://github.com/ratomirjovanovic/pandaward/security/advisories/new
     about: Please report security problems in PandaWard privately.
+  - name: Ask a question
+    url: https://github.com/ratomirjovanovic/pandaward/discussions/new?category=q-a
+    about: How to install, configure or read results. Answers stay findable for others.
+  - name: Suggest an idea
+    url: https://github.com/ratomirjovanovic/pandaward/discussions/new?category=ideas
+    about: New languages, frameworks, checks or workflow changes, to discuss before an issue.

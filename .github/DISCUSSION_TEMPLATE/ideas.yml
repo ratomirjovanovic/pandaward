@@ -1,0 +1,31 @@
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ideas shape the roadmap. The ones with a clear problem and a concrete example are the easiest to act on.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What is hard, slow or missing today? Which project, language or framework is it about?
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idea
+      description: What should PandaWard do? A short code sample, command or expected output helps.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Detection (rules, taint engine, new language or framework)
+        - Claude Code plugin, hooks, skills or MCP
+        - Reports, ledger, coverage
+        - Runtime testing
+        - Benchmarks
+        - Install, CI, packaging
+        - Other

@@ -84,6 +84,7 @@ sh tools/cvebench/run.sh --engine builtin,taint,semgrep,opengrep   # hours; resu
 <footer><div class="wrap">
   <a href="../">PandaWard</a> ·
   <a href="https://github.com/ratomirjovanovic/pandaward/blob/main/docs/BENCHMARKS.md">Benchmark method</a> ·
+  <a href="https://github.com/ratomirjovanovic/pandaward/discussions">Discussions</a> ·
   <a href="https://github.com/ratomirjovanovic/pandaward">Source</a>
 </div></footer>
 </body>

@@ -481,6 +481,10 @@ CLI: `brew uninstall pensec && brew untap ratomirjovanovic/pensec`, then install
 
 Tell us, and the rule gets fixed. PandaWard is open source and its rules improve from these reports. The first `/pandaward:start` in a project asks once whether you want to send them; with `batch`, PandaWard collects them after triage and sends them in one step after you confirm. It groups the false positives you closed by rule and finds missed issues itself: problems a reviewer found and you confirmed that no rule caught. A report holds rule metadata, counts and file types only. With the GitHub CLI signed in, `pandaward feedback submit` files the reports (or adds to an open report about the same rule); without it, you get prefilled issue links. By hand: `pandaward feedback false-positive <PW-ID>`, `pandaward feedback false-negative --rule <id>` or `/pandaward:feedback`. Reports are prioritized automatically and every fix adds a benchmark case. See [docs/FEEDBACK.md](docs/FEEDBACK.md).
 
+## Community
+
+Ask questions, propose ideas and show what you built in [Discussions](https://github.com/ratomirjovanovic/pandaward/discussions); releases and changes in detection are announced there too. [SUPPORT.md](SUPPORT.md) says where each kind of question or report goes.
+
 ## Contributing and security
 
 Contributions are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md). Please report vulnerabilities in PandaWard itself privately as described in [SECURITY.md](SECURITY.md). What changed in each version is in [CHANGELOG.md](CHANGELOG.md).
