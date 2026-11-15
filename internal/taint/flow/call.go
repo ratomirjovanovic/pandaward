@@ -31,6 +31,11 @@ func (f *fnRun) resolve(in *ir.Instr, st State) *call {
 		if c.recv.Inst != "" {
 			c.names = append(c.names, c.recv.Inst+"."+in.Name)
 		}
+		// A name nothing is known of (db in db.query(...), declared
+		// elsewhere) is a receiver like any other.
+		if c.method == "" && f.javascript() && c.recv.Fn == nil && !f.e.namedCall(c.names) {
+			c.method = in.Name
+		}
 	} else {
 		c.recv = empty
 		if q := f.val(st, in.A).Q; q != "" {

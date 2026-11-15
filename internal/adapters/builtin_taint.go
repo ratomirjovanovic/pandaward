@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path"
 	"strings"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"github.com/ratomirjovanovic/pandaward/internal/taint/flow"
 	"github.com/ratomirjovanovic/pandaward/internal/taint/ir"
 	javaparse "github.com/ratomirjovanovic/pandaward/internal/taint/java"
+	"github.com/ratomirjovanovic/pandaward/internal/taint/js"
 	"github.com/ratomirjovanovic/pandaward/internal/taint/jsflow"
 	pyparse "github.com/ratomirjovanovic/pandaward/internal/taint/py"
 	"github.com/ratomirjovanovic/pandaward/internal/version"
@@ -87,18 +89,28 @@ func (a taintAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 		resolved[key] = r
 		return r
 	}
-	proj := jsflow.NewProject(spec, jsflow.Options{Library: library}, paths, src, resolve)
-	for _, p := range paths {
-		if ctx.Err() != nil {
-			return res, finish(run, model.ExitTimeout, "cancelled", len(res.Signals))
-		}
-		for _, fd := range proj.Analyze(p) {
-			if f := c.Inv.FileByPath(fd.File); f != nil {
-				res.Signals = append(res.Signals, taintSignal(fd, f, a.Name()))
+	var parseErrors int
+	if os.Getenv("PANDAWARD_JS_ENGINE") == "jsflow" {
+		// The AST engine, kept to compare against the IR engine.
+		proj := jsflow.NewProject(spec, jsflow.Options{Library: library}, paths, src, resolve)
+		for _, p := range paths {
+			if ctx.Err() != nil {
+				return res, finish(run, model.ExitTimeout, "cancelled", len(res.Signals))
+			}
+			for _, fd := range proj.Analyze(p) {
+				if f := c.Inv.FileByPath(fd.File); f != nil {
+					res.Signals = append(res.Signals, taintSignal(fd, f, a.Name()))
+				}
 			}
 		}
+		parseErrors = proj.ParseErrors
+	} else {
+		var err error
+		if parseErrors, err = a.javascript(ctx, c, &res, paths, resolve, library); err != nil {
+			return res, finish(run, model.ExitError, err.Error(), len(res.Signals))
+		}
 	}
-	files, parseErrors := len(paths), proj.ParseErrors
+	files := len(paths)
 	pyFiles, pyErrors, err := a.python(ctx, c, &res)
 	if err != nil {
 		return res, finish(run, model.ExitError, err.Error(), len(res.Signals))
@@ -126,6 +138,83 @@ func (a taintAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 		detail += fmt.Sprintf(" (%d with syntax the parser skipped)", javaErrors)
 	}
 	return res, finish(run, model.ExitOK, detail, len(res.Signals))
+}
+
+// javascript runs the IR engine (#406) on the JavaScript and TypeScript
+// files as one project: a call of a function another file exports follows
+// that function. The structural findings (prototype pollution, escaping)
+// are found by shape, by the code jsflow keeps for them.
+func (a taintAdapter) javascript(ctx context.Context, c *Context, res *Result, paths []string, resolve func(from, spec string) string, library bool) (parseErrors int, err error) {
+	spec, err := taint.Load("jsir")
+	if err != nil {
+		return 0, err
+	}
+	// The engine splits qualified names at dots, so a module is named by
+	// its path with the dots (of the extension, of "route.test") replaced.
+	byName := map[string]string{}
+	modName := func(p string) string {
+		n := strings.ReplaceAll(p, ".", "_dot_")
+		byName[n] = p
+		return n
+	}
+	parsed := map[string]*ir.Module{}
+	files := map[string]*js.File{}
+	parse := func(p string) *js.File {
+		if f, ok := files[p]; ok {
+			return f
+		}
+		inv := c.Inv.FileByPath(p)
+		if inv == nil {
+			return nil
+		}
+		jf := js.Parse(inv.Path, strings.Join(inv.Lines, "\n"), js.OptionsFor(inv.Path))
+		if len(jf.Errors) > 0 {
+			parseErrors++
+		}
+		files[p] = jf
+		return jf
+	}
+	proj := flow.New(spec).NewProject(func(name string) (*ir.Module, []string) {
+		p, ok := byName[name]
+		if !ok {
+			return nil, nil
+		}
+		f := c.Inv.FileByPath(p)
+		if m, ok := parsed[p]; ok {
+			return m, f.Lines
+		}
+		jf := parse(p)
+		if jf == nil {
+			return nil, nil
+		}
+		m := js.Lower(jf, name, func(sp string) string {
+			if r := resolve(p, sp); r != "" {
+				return modName(r)
+			}
+			return ""
+		})
+		parsed[p] = m
+		return m, f.Lines
+	})
+	proj.Library = library
+	for _, p := range paths {
+		if ctx.Err() != nil {
+			return parseErrors, nil
+		}
+		fds := proj.Module(modName(p))
+		if jf := parse(p); jf != nil {
+			fds = append(fds, jsflow.Structural(jf, spec, jsflow.Options{Library: library})...)
+		}
+		for _, fd := range fds {
+			if fd.File == "" {
+				fd.File = p
+			}
+			if f := c.Inv.FileByPath(fd.File); f != nil && !IsTestPath(f.Path) {
+				res.Signals = append(res.Signals, taintSignal(fd, f, a.Name()))
+			}
+		}
+	}
+	return parseErrors, nil
 }
 
 // python runs the IR engine (#406) on the Python files as one project: a

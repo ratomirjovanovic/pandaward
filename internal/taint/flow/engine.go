@@ -6,6 +6,7 @@
 package flow
 
 import (
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -612,7 +613,7 @@ func (f *fnRun) val(st State, o ir.Operand) *Value {
 	// A name the module body reads but never sets is a global (RegExp,
 	// document, eval), named as a free name of a function is.
 	if f.fn == f.mod.Init && !ir.IsTemp(o.Var) && !f.setInModule(o.Var) {
-		return &Value{Q: o.Var}
+		return f.lookup(o.Var)
 	}
 	return empty
 }
@@ -645,6 +646,11 @@ func (f *fnRun) lookup(name string) *Value {
 	}
 	if v, ok := f.exit[name]; ok {
 		return v
+	}
+	// req read where nothing declares it (a global, a helper's closure) is
+	// the request all the same.
+	if f.e.reqQ != "" && f.javascript() && f.e.reqNames[name] && !f.e.reqWeak[name] {
+		return &Value{Q: f.e.reqQ}
 	}
 	return &Value{Q: name}
 }
@@ -1183,3 +1189,25 @@ func unary(op string, a *Value) *Value {
 
 // urlHostParts are the properties of a URL that name its site.
 var urlHostParts = map[string]bool{"origin": true, "host": true, "hostname": true, "protocol": true, "port": true}
+
+// namedCall reports whether a sink or a source is specified for one of
+// the qualified names of a call.
+func (e *Engine) namedCall(names []string) bool {
+	for _, n := range names {
+		if len(e.calls[n]) > 0 || e.spec.Returns[n] != "" || e.pureCalls[n] {
+			return true
+		}
+	}
+	return false
+}
+
+// javascript reports that the module being analyzed is JavaScript or
+// TypeScript, where a name nothing declares is a global of the page or of
+// the runtime.
+func (f *fnRun) javascript() bool {
+	switch path.Ext(f.mod.Path) {
+	case ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts", ".vue", ".svelte":
+		return true
+	}
+	return false
+}
