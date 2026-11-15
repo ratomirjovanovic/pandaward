@@ -6,6 +6,7 @@
 package flow
 
 import (
+	"path"
 	"regexp"
 	"strconv"
 	"strings"
@@ -49,6 +50,13 @@ type Engine struct {
 	pureCalls    map[string]bool
 	decoders     map[string]bool
 	pureMethods  map[string]bool
+	// reqNames are parameter names that hold the request (JavaScript:
+	// req, ctx), reqWeak names that do only in a handler, which also takes
+	// the response; helperParams carry a path from the request in a
+	// function that takes the request and the response.
+	reqNames, reqWeak, helperParams map[string]bool
+	reqQ                            string
+	hypothetical                    map[string]bool
 }
 
 // New prepares an engine for a specification.
@@ -57,6 +65,11 @@ func New(spec *taint.Spec) *Engine {
 		srcAttrs: set(spec.Sources.Attributes), srcCalls: set(spec.Sources.Calls), params: set(spec.Sources.Params),
 		routes: set(spec.Sources.RouteDecorators), normalizers: set(spec.Normalizers), responses: set(spec.Responses.Calls), setters: map[string]bool{}, urlParsers: set(spec.URLParsers), textCalls: set(spec.TextCalls), lookups: set(spec.Lookups)}
 	e.weak = newWeak(spec)
+	e.hypothetical = set(spec.Sources.Hypothetical)
+	e.reqNames, e.reqWeak, e.helperParams = set(spec.Sources.Request.Names), set(spec.Sources.Request.Weak), set(spec.Sources.HelperParams)
+	if len(spec.Sources.RouteCalls) > 0 {
+		e.reqQ = spec.Sources.RouteCalls[0].Request
+	}
 	e.paramAnns = set(spec.Sources.ParamAnnotations)
 	e.weakAlgs = map[string][]weakAlg{}
 	for _, s := range spec.Sinks {
@@ -124,6 +137,11 @@ type run struct {
 	envs  map[*ir.Function]State
 	// exit is the module body's state at its end.
 	exit State
+	// stored are the functions a nested function of the module exports
+	// (exports.f = fn inside (function () { ... })()), by name.
+	stored map[string]*Value
+	// set are the names the module body sets (setInModule).
+	set  map[string]bool
 	html bool
 	// done are the functions analyzed as roots.
 	done map[*ir.Function]bool
@@ -133,7 +151,7 @@ type run struct {
 // own; lines are the source lines, for the steps of each flow.
 func (e *Engine) Analyze(m *ir.Module, lines []string) []taint.Finding {
 	p := e.NewProject(func(string) (*ir.Module, []string) { return nil, nil })
-	return p.analyze(p.add(m, lines))
+	return p.analyze(p.add(m, lines), 0)
 }
 
 // imports reports a module body that imports mod or one of its members.
@@ -244,8 +262,24 @@ func (r *run) root(fn *ir.Function) {
 	route := r.isRoute(fn)
 	typed := typedParams(fn)
 	entry := State{}
+	req, handler := r.e.requestParams(fn)
 	for _, p := range fn.Params {
 		v := &Value{Inst: p.Ann}
+		// this of a JavaScript method: the instance of its class, named as
+		// instances are, so scopes recorded in other analyses join.
+		if p.Name == "this" && p.Ann != "" {
+			if cn := className(r.mod, &ir.Function{Class: p.Ann}); r.p.classes[cn] != nil {
+				v.Inst = cn
+			}
+		}
+		if req[p.Name] {
+			entry[p.Name] = &Value{Q: r.e.reqQ}
+			continue
+		}
+		if handler && r.e.helperParams[p.Name] {
+			entry[p.Name] = &Value{T: r.newSource(p.Pos.Line, "parameter "+p.Name+" next to the request")}
+			continue
+		}
 		if numericType[p.Ann] || javaScalar[p.Ann] {
 			v.Inst = ""
 		}
@@ -264,6 +298,36 @@ func (r *run) root(fn *ir.Function) {
 	}
 	r.function(fn, entry, route)
 }
+
+// requestParams returns the parameters of fn that hold the request, by
+// name, and whether fn also takes the response, as a handler or a helper
+// of one does (serveStatic(req, res, path)).
+func (e *Engine) requestParams(fn *ir.Function) (map[string]bool, bool) {
+	if e.reqQ == "" || len(e.reqNames) == 0 {
+		return nil, false
+	}
+	res := false
+	for _, p := range fn.Params {
+		res = res || responseNames[p.Name]
+	}
+	var req map[string]bool
+	for _, p := range fn.Params {
+		if e.reqNames[p.Name] && (!e.reqWeak[p.Name] || res || requestTypes[p.Ann]) {
+			if req == nil {
+				req = map[string]bool{}
+			}
+			req[p.Name] = true
+		}
+	}
+	return req, res && req != nil
+}
+
+// requestTypes are annotations that make a weak name a request: the
+// route handlers of Next.js (GET(request: Request)).
+var requestTypes = map[string]bool{"Request": true, "NextRequest": true}
+
+// responseNames are parameter names of a handler's response.
+var responseNames = map[string]bool{"res": true, "response": true, "reply": true, "h": true}
 
 func (r *run) newSource(line int, what string) *taint.Trace {
 	t := taint.NewSource(line, what, false)
@@ -316,6 +380,7 @@ func (r *run) analyzeFn(fn *ir.Function, entry State, route bool) (ret, self *Va
 			f.block(b, s, func(*ir.Block, State) {})
 		}
 	}
+	f.uncalled()
 	if fn == r.mod.Init {
 		r.exit = State{}
 		for _, b := range fn.Blocks {
@@ -545,7 +610,28 @@ func (f *fnRun) val(st State, o ir.Operand) *Value {
 	if v, ok := st[o.Var]; ok {
 		return v
 	}
+	// A name the module body reads but never sets is a global (RegExp,
+	// document, eval), named as a free name of a function is.
+	if f.fn == f.mod.Init && !ir.IsTemp(o.Var) && !f.setInModule(o.Var) {
+		return f.lookup(o.Var)
+	}
 	return empty
+}
+
+// setInModule reports a name the module body sets somewhere.
+func (r *run) setInModule(name string) bool {
+	if r.set == nil {
+		r.set = map[string]bool{}
+		for _, b := range r.mod.Init.Blocks {
+			for _, in := range b.Instrs {
+				r.set[in.Dst] = true
+			}
+		}
+		for _, p := range r.mod.Init.Params {
+			r.set[p.Name] = true
+		}
+	}
+	return r.set[name]
 }
 
 // lookup finds a variable of an enclosing scope or the module, or names a
@@ -560,6 +646,11 @@ func (f *fnRun) lookup(name string) *Value {
 	}
 	if v, ok := f.exit[name]; ok {
 		return v
+	}
+	// req read where nothing declares it (a global, a helper's closure) is
+	// the request all the same.
+	if f.e.reqQ != "" && f.javascript() && f.e.reqNames[name] && !f.e.reqWeak[name] {
+		return &Value{Q: f.e.reqQ}
 	}
 	return &Value{Q: name}
 }
@@ -609,6 +700,11 @@ func (f *fnRun) instr(in *ir.Instr, st State) {
 		f.set(st, in.Dst, purified(unary(in.Name, a), a), line)
 	case ir.Load:
 		v := f.load(f.val(st, in.A), in.Name, line)
+		// The host of a request's own URL is where the user already is.
+		if v.T != nil && urlHostParts[in.Name] {
+			v = v.copy()
+			v.Safe |= taint.Redirect
+		}
 		if v.T == nil && f.chained(in) {
 			v = f.source(line, "")
 		}
@@ -622,6 +718,9 @@ func (f *fnRun) instr(in *ir.Instr, st State) {
 			v := f.val(st, in.B)
 			if f.report {
 				f.weakStore(in.Name, v, line)
+				f.propSinks(in, f.val(st, in.A), v)
+				f.export(base.Q, in.Name, v)
+				f.prototypeMethod(in, v)
 			}
 			base.Fields["."+in.Name] = v
 			st[in.A.Var] = mix(base, v)
@@ -666,6 +765,9 @@ func (f *fnRun) load(base *Value, name string, line int) *Value {
 	if fv, ok := base.Fields["."+name]; ok {
 		return fv
 	}
+	if fv, ok := base.Fields[name]; ok && base.Inst == "dict" {
+		return fv // obj.x of an object literal { x: ... }
+	}
 	if base.Q != "" {
 		// a static field of a class of the project
 		if r := f.p.module(base.Q); r != nil {
@@ -676,6 +778,11 @@ func (f *fnRun) load(base *Value, name string, line int) *Value {
 		q := base.Q + "." + name
 		if f.e.srcAttrs[q] {
 			return f.source(line, q)
+		}
+		if f.e.hypothetical[q] {
+			t := taint.NewSource(line, f.text(line), true)
+			t.File = f.mod.Path
+			return &Value{T: t, Q: q}
 		}
 		r := taintOf(base).copy()
 		r.Q = q
@@ -724,6 +831,9 @@ func (f *fnRun) index(in *ir.Instr, st State) *Value {
 	if k.C != nil {
 		if fv, ok := base.Fields[key(k.C)]; ok {
 			return fv
+		}
+		if fv, ok := base.Fields["."+k.C.Val]; ok && k.C.Kind == ir.Str {
+			return fv // obj["x"] of obj.x = ...
 		}
 		if base.C != nil && base.C.Kind == ir.Str && k.C.Kind == ir.Int {
 			if i, err := strconv.Atoi(k.C.Val); err == nil {
@@ -1075,4 +1185,29 @@ func unary(op string, a *Value) *Value {
 		}
 	}
 	return taintOf(a)
+}
+
+// urlHostParts are the properties of a URL that name its site.
+var urlHostParts = map[string]bool{"origin": true, "host": true, "hostname": true, "protocol": true, "port": true}
+
+// namedCall reports whether a sink or a source is specified for one of
+// the qualified names of a call.
+func (e *Engine) namedCall(names []string) bool {
+	for _, n := range names {
+		if len(e.calls[n]) > 0 || e.spec.Returns[n] != "" || e.pureCalls[n] {
+			return true
+		}
+	}
+	return false
+}
+
+// javascript reports that the module being analyzed is JavaScript or
+// TypeScript, where a name nothing declares is a global of the page or of
+// the runtime.
+func (f *fnRun) javascript() bool {
+	switch path.Ext(f.mod.Path) {
+	case ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts", ".vue", ".svelte":
+		return true
+	}
+	return false
 }

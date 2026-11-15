@@ -118,18 +118,37 @@ type Sources struct {
 	// attributes are then qualified by that name), and decorators that
 	// register a route handler, whose parameters are path values.
 	Attributes []string `yaml:"attributes"`
+	// Hypothetical are attributes whose data the person running the
+	// program usually chooses (process.argv): their findings are
+	// hypotheses, which sinks that need a request ignore.
+	Hypothetical []string `yaml:"hypothetical"`
 	// Chains are attribute paths whose end is untrusted wherever it is
 	// read, such as a language model's reply (choices.[].message.content).
 	Chains          []string `yaml:"chains"`
 	Calls           []string `yaml:"calls"`
 	Params          []string `yaml:"params"`
 	RouteDecorators []string `yaml:"route_decorators"`
+	// RouteCalls register a handler function: its first parameter is the
+	// request (Q Request) and its second the response (class Response)
+	// (JavaScript: app.get(path, handler), http.createServer(handler)).
+	RouteCalls []RouteCall `yaml:"route_calls"`
 	// ParamAnnotations mark a parameter as request data (Java:
 	// RequestParam, PathVariable, QueryParam, ...).
 	ParamAnnotations []string `yaml:"param_annotations"`
 	// HTMLReturnFrameworks are modules whose import makes a route
 	// handler's return value an HTML response.
 	HTMLReturnFrameworks []string `yaml:"html_return_frameworks"`
+}
+
+// RouteCall is a call that registers a request handler: a method in
+// Methods called on a receiver named or of a class in Receivers, or a
+// call of one of Calls.
+type RouteCall struct {
+	Receivers []string `yaml:"receivers"`
+	Methods   []string `yaml:"methods"`
+	Calls     []string `yaml:"calls"`
+	Request   string   `yaml:"request"`
+	Response  string   `yaml:"response"`
 }
 
 // Guard is a test that makes a value safe for Kinds on one branch: the
@@ -154,6 +173,9 @@ type Guard struct {
 	// Calls are library checks that return true only for a safe first
 	// argument.
 	Calls []string `yaml:"calls"`
+	// AnchoredRegex: a match of a regular expression anchored at both
+	// ends that admits no arbitrary character (JavaScript re.test(x)).
+	AnchoredRegex bool `yaml:"anchored_regex"`
 }
 
 // Escape is x.replace(Old, new) with a new that does not contain Old.

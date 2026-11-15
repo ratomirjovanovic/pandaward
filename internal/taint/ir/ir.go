@@ -14,7 +14,11 @@ import (
 )
 
 // Pos is a 1-based line and column.
-type Pos struct{ Line, Col int }
+type Pos struct {
+	Line, Col int
+	// End is the last line of a call whose arguments span lines, or 0.
+	End int
+}
 
 // ConstKind is the kind of a constant.
 type ConstKind uint8
@@ -236,6 +240,10 @@ type Module struct {
 	Name  string
 	Init  *Function
 	Funcs []*Function // every function, the module body first
+	// Exports are the names of the module body that other modules can
+	// import, when the language tells them from its other names
+	// (JavaScript); nil means every name (Python).
+	Exports map[string]bool
 }
 
 // NewBlock adds a block to f.

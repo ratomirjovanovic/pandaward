@@ -31,6 +31,11 @@ func (f *fnRun) resolve(in *ir.Instr, st State) *call {
 		if c.recv.Inst != "" {
 			c.names = append(c.names, c.recv.Inst+"."+in.Name)
 		}
+		// A name nothing is known of (db in db.query(...), declared
+		// elsewhere) is a receiver like any other.
+		if c.method == "" && f.javascript() && c.recv.Fn == nil && !f.e.namedCall(c.names) {
+			c.method = in.Name
+		}
 	} else {
 		c.recv = empty
 		if q := f.val(st, in.A).Q; q != "" {
@@ -69,8 +74,25 @@ func (f *fnRun) call(in *ir.Instr, st State) *Value {
 	c := f.resolve(in, st)
 	if f.report {
 		f.weakSinks(c)
+		f.routeCall(c)
+		f.eventCall(c)
+		f.jsxSinks(c)
 	}
 	r := f.weakSource(c, f.callResolved(c, st))
+	// new URL("/login", request.url): the address is the base's host with
+	// a path the code chose, which is not a redirect to another site.
+	if contains(c.names, "URL") && len(c.args) == 2 && c.args[0].T == nil && r.T != nil {
+		r = r.copy()
+		r.Safe |= taint.Redirect
+	}
+	// new RegExp("^[a-z]+$") is the pattern, as a /literal/ is.
+	if contains(c.names, "RegExp") && len(c.args) >= 1 && c.args[0].C != nil && c.args[0].C.Kind == ir.Str {
+		flags := ""
+		if len(c.args) > 1 && c.args[1].C != nil {
+			flags = c.args[1].C.Val
+		}
+		return constVal(&ir.Const{Kind: ir.Other, Val: "/" + c.args[0].C.Val + "/" + flags})
+	}
 	for _, n := range c.names {
 		if contains(f.e.spec.Weak.RandomFill, n) && len(in.Args) > 0 {
 			if name := f.root(in.Args[0]); name != "" {
@@ -89,6 +111,12 @@ func (f *fnRun) call(in *ir.Instr, st State) *Value {
 				break
 			}
 		}
+	}
+	// $(sel).find(x).closest(y): a jQuery method returns the selection,
+	// except the ones that read a value from it.
+	if c.recv.Inst == "jQuery" && in.Name != "" && !jqueryValues[in.Name] && !(in.Name == "html" && len(c.args) == 0) && r.Inst == "" {
+		r = r.copy()
+		r.Inst = "jQuery"
 	}
 	// Properties.getProperty(key, default) reads the project's files.
 	if in.Name == "getProperty" && len(c.args) >= 1 && c.args[0].C != nil && r.T == nil {
@@ -168,6 +196,7 @@ func (f *fnRun) callResolved(c *call, st State) *Value {
 			return r
 		}
 	}
+	f.callbacks(c)
 	if r := f.container(c, st); r != nil {
 		return r
 	}
@@ -204,6 +233,9 @@ func (f *fnRun) callResolved(c *call, st State) *Value {
 				kinds |= x.Kinds
 			}
 		}
+	}
+	if in.Name == "replace" && len(c.args) >= 2 && stripsDotDot(c.args[0].C, c.args[1].C) {
+		kinds |= taint.Path
 	}
 	if kinds != 0 && r.T != nil {
 		r = r.copy()
@@ -543,7 +575,7 @@ func (f *fnRun) sinks(c *call, st State) {
 	if c.method != "" {
 		recvName := f.receiverName(c.in)
 		for _, t := range f.e.methods[c.method] {
-			if rs := t.sink.MethodReceivers[c.method]; len(rs) > 0 && !contains(rs, recvName) {
+			if rs := t.sink.MethodReceivers[c.method]; len(rs) > 0 && !contains(rs, recvName) && !(c.recv.Inst == "jQuery" && contains(rs, "$")) {
 				continue
 			}
 			if contains(t.sink.ReceiversNot, recvName) {
@@ -556,10 +588,14 @@ func (f *fnRun) sinks(c *call, st State) {
 		s := t.sink
 		if t.shell {
 			sh, ok := c.kw["shell"]
+			if !ok && len(c.args) > 0 {
+				// JavaScript: spawn(cmd, args, { shell: true })
+				sh, ok = c.args[len(c.args)-1].Fields["shell"]
+			}
 			if truth, known := knownTruth(sh); !ok || !known || !truth {
 				// [shell, "-c", command, ...] runs command in a shell too.
 				if cmd := f.shellList(c, t.t.Arg); cmd != nil && cmd.tainted(s.Kind) {
-					f.found(s, c.in.Pos.Line, cmd)
+					f.foundSpan(s, c.in.Pos, cmd.T)
 				}
 				continue
 			}
@@ -578,7 +614,7 @@ func (f *fnRun) sinks(c *call, st State) {
 		}
 		for _, v := range vals {
 			if v.tainted(s.Kind) && !(s.TextOnly && v.Opaque) {
-				f.found(s, c.in.Pos.Line, v)
+				f.foundSpan(s, c.in.Pos, v.T)
 				break
 			}
 			if s.UnlessConstant && v.T == nil && !isPure(v) {
@@ -672,7 +708,201 @@ func (f *fnRun) foundUnknown(s *taint.Sink, line int) {
 
 // foundAt records a finding at a sink with the trace that reached it, or
 // with the sink alone when nil.
+// propSinks reports a store into a property that is a sink, such as
+// el.innerHTML = x or location.href = x: the property alone, or with the
+// receiver's name or qualified name.
+func (f *fnRun) propSinks(in *ir.Instr, base, v *Value) {
+	if !v.dangerous() {
+		return
+	}
+	recv := f.receiverName(&ir.Instr{Name: in.Name, A: in.A})
+	for _, s := range f.e.spec.Sinks {
+		for _, p := range s.Props {
+			if p == in.Name || recv != "" && p == recv+"."+in.Name || base.Q != "" && p == base.Q+"."+in.Name {
+				if v.tainted(s.Kind) {
+					f.found(s, in.Pos.Line, v)
+				}
+			}
+		}
+	}
+}
+
+// jsxSinks reports an attribute path of a JSX element (jsx(tag, attrs))
+// that is a sink, such as dangerouslySetInnerHTML.__html.
+func (f *fnRun) jsxSinks(c *call) {
+	if len(c.names) == 0 || c.names[0] != "jsx" || len(c.args) < 2 {
+		return
+	}
+	for _, s := range f.e.spec.Sinks {
+		for _, path := range s.JSX {
+			v := c.args[1]
+			for _, part := range strings.Split(path, ".") {
+				next, ok := v.Fields[part]
+				if !ok {
+					// Not written as an attribute: only a spread
+					// ({...props}) can still carry it.
+					if sp, ok := v.Fields["..."]; ok {
+						if n, ok := sp.Fields[part]; ok {
+							v = n
+							continue
+						}
+						v = taintOf(sp)
+					} else {
+						v = empty
+					}
+					break
+				}
+				v = next
+			}
+			if v.tainted(s.Kind) {
+				f.found(s, c.in.Pos.Line, v)
+			}
+		}
+	}
+}
+
+// elementCallbacks are methods whose callback gets an element of the
+// receiver as its first argument.
+var elementCallbacks = map[string]bool{"forEach": true, "map": true, "filter": true, "some": true, "every": true, "find": true,
+	"findIndex": true, "flatMap": true, "each": true, "then": true, "replace": false}
+
+// callbacks analyzes the functions a call of code the engine does not see
+// receives (new Promise(function (resolve) {...}), list.forEach(fn),
+// p.then(fn)): they run with the caller's scope, and their sinks count.
+//
+// A function written in place (its parent is this function) does not
+// count toward the call depth: it is nesting in the source, as in
+// new Promise(() => process.nextTick(() => exec(cmd))), which bounds it.
+func (f *fnRun) callbacks(c *call) {
+	if !f.report {
+		return
+	}
+	for _, a := range callbackFns(c.all) {
+		if a.Fn == nil || isClass(a.Fn) || f.p.owner[a.Fn] == nil || f.p.active[a.Fn] {
+			continue
+		}
+		inPlace := a.Fn.Parent == f.fn
+		if !inPlace && f.p.depth >= maxCallDepth {
+			continue
+		}
+		args := &call{in: &ir.Instr{}, kw: map[string]*Value{}}
+		if elementCallbacks[c.in.Name] {
+			args.args = []*Value{iterate(c.recv)}
+		}
+		if inPlace {
+			f.p.depth--
+		}
+		f.invoke(a.Fn, nil, args)
+		if inPlace {
+			f.p.depth++
+		}
+	}
+}
+
+// callbackFns returns the arguments of a call that are functions, and the
+// functions in arguments that are lists or object literals, as in
+// async.series([fn, fn], done) or run({ task: fn }).
+func callbackFns(args []*Value) []*Value {
+	var out []*Value
+	for _, a := range args {
+		switch {
+		case a.Fn != nil:
+			out = append(out, a)
+		case a.Inst == "dict":
+			for _, k := range sortedKeys(a.Fields) {
+				if a.Fields[k].Fn != nil {
+					out = append(out, a.Fields[k])
+				}
+			}
+		default:
+			for _, e := range a.Elems {
+				if e.Fn != nil {
+					out = append(out, e)
+				}
+			}
+		}
+	}
+	return out
+}
+
+// stripsDotDot reports a replace() whose pattern is a JavaScript regular
+// expression matching parent directory segments (/\.\.\//g) and whose
+// replacement is empty: it removes them from a path.
+func stripsDotDot(re, repl *ir.Const) bool {
+	return re != nil && repl != nil && re.Kind == ir.Other && strings.HasPrefix(re.Val, "/") &&
+		strings.Contains(re.Val, `\.\.`) && repl.Kind == ir.Str && repl.Val == ""
+}
+
+// jqueryValues are jQuery methods that return a value read from the
+// selection rather than the selection.
+var jqueryValues = map[string]bool{"text": true, "val": true, "attr": true, "prop": true, "data": true, "css": true, "is": true,
+	"hasClass": true, "index": true, "get": true, "toArray": true, "serialize": true, "serializeArray": true, "width": true,
+	"height": true, "offset": true, "position": true, "scrollTop": true, "scrollLeft": true, "outerWidth": true, "outerHeight": true}
+
+// socketLifecycle events carry no message from a peer.
+var socketLifecycle = map[string]bool{"connect": true, "connection": true, "disconnect": true, "close": true, "open": true,
+	"error": true, "end": true, "reconnect": true, "ready": true, "listening": true}
+
+// eventCall analyzes the listeners of events whose data another party
+// chooses: socket.on('chat', msg => ...) on a socket, and events such as
+// an archive's entry on any emitter.
+func (f *fnRun) eventCall(c *call) {
+	if c.in.Name != "on" && c.in.Name != "once" && c.in.Name != "addListener" || len(c.args) < 2 {
+		return
+	}
+	ev := c.args[0].C
+	if ev == nil || ev.Kind != ir.Str {
+		return
+	}
+	recv := f.receiverName(c.in)
+	if recv == "" {
+		recv = c.recv.Q
+	}
+	if i := strings.LastIndexByte(recv, '.'); i >= 0 {
+		recv = recv[i+1:]
+	}
+	if !contains(f.e.spec.Sources.Events, ev.Val) && !(contains(f.e.spec.Sources.Sockets, recv) && !socketLifecycle[ev.Val]) {
+		return
+	}
+	for _, a := range c.args[1:] {
+		if a.Fn != nil && !isClass(a.Fn) {
+			f.p.listener(a.Fn, f.newSource(c.in.Pos.Line, "'"+ev.Val+"' event data"))
+		}
+	}
+}
+
+// routeCall analyzes the handlers a call registers.
+func (f *fnRun) routeCall(c *call) {
+	for _, rc := range f.e.spec.Sources.RouteCalls {
+		match := false
+		for _, n := range c.names {
+			match = match || contains(rc.Calls, n)
+		}
+		if !match && contains(rc.Methods, c.in.Name) {
+			match = contains(rc.Receivers, f.receiverName(c.in)) || contains(rc.Receivers, c.recv.Inst)
+		}
+		if !match {
+			continue
+		}
+		for _, a := range c.all {
+			if a.Fn != nil && !isClass(a.Fn) {
+				f.p.handler(a.Fn, rc)
+			}
+		}
+	}
+}
+
 func (f *fnRun) foundAt(s *taint.Sink, line int, t *taint.Trace) {
+	f.foundSpan(s, ir.Pos{Line: line}, t)
+}
+
+// foundSpan is foundAt for a call whose arguments may span lines up to
+// pos.End, which the finding covers.
+func (f *fnRun) foundSpan(s *taint.Sink, pos ir.Pos, t *taint.Trace) {
+	line := pos.Line
+	if s.RequestOnly && t != nil && t.Root().Library {
+		return // a library that opens the path it is given does its job
+	}
 	k := f.mod.Path + "|" + s.ID + ":" + strconv.Itoa(line)
 	if _, ok := f.p.findings[k]; ok {
 		return
@@ -688,6 +918,37 @@ func (f *fnRun) foundAt(s *taint.Sink, line int, t *taint.Trace) {
 			steps[i].File = ""
 		}
 	}
-	f.p.findings[k] = taint.Finding{Sink: s, File: f.mod.Path, Line: line, EndLine: line, Steps: steps}
+	f.p.findings[k] = taint.Finding{Sink: s, File: f.mod.Path, Line: line, EndLine: max(line, pos.End), Steps: steps, Library: t != nil && t.Root().Library}
 	f.p.order = append(f.p.order, k)
+}
+
+// uncalled analyzes the functions fn writes in place that nothing called
+// while it was analyzed, such as funcs[k] = function (cb) {...} that a
+// library runs later, with the scope fn gave them, when that scope holds
+// untrusted data. Like callbacks written in place, they do not use up the
+// call depth.
+func (f *fnRun) uncalled() {
+	for _, b := range f.fn.Blocks {
+		for _, in := range b.Instrs {
+			if in.Op != ir.Func || in.Fn.Parent != f.fn || isClass(in.Fn) || f.p.invoked[in.Fn] || f.p.active[in.Fn] || f.p.handlers[in.Fn] {
+				continue
+			}
+			if !taintedScope(f.envs[in.Fn]) {
+				continue
+			}
+			f.p.depth--
+			f.invoke(in.Fn, nil, &call{in: &ir.Instr{}, kw: map[string]*Value{}})
+			f.p.depth++
+		}
+	}
+}
+
+// taintedScope reports a scope that holds untrusted data.
+func taintedScope(env State) bool {
+	for _, v := range env {
+		if v.T != nil || taintOf(v).T != nil {
+			return true
+		}
+	}
+	return false
 }

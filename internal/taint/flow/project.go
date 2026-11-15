@@ -43,37 +43,180 @@ type Project struct {
 	classes  map[string]*ir.Function
 	findings map[string]taint.Finding
 	order    []string
+	// Library makes the parameters of exported functions sources, for a
+	// published package (hypotheses).
+	Library  bool
+	handlers map[*ir.Function]bool
 	memo     map[string]callResult
 	active   map[*ir.Function]bool
-	depth    int
-	calls    int
+	// invoked are the functions analyzed for a call (uncalled).
+	invoked map[*ir.Function]bool
+	depth   int
+	calls   int
 }
 
 // NewProject starts the analysis of a project whose modules load returns.
 func (e *Engine) NewProject(load Loader) *Project {
 	return &Project{e: e, load: load, runs: map[string]*run{}, byMod: map[*ir.Module]*run{}, none: map[string]bool{}, owner: map[*ir.Function]*run{},
-		classes: map[string]*ir.Function{}, findings: map[string]taint.Finding{}, memo: map[string]callResult{}, active: map[*ir.Function]bool{}}
+		classes: map[string]*ir.Function{}, findings: map[string]taint.Finding{}, memo: map[string]callResult{}, active: map[*ir.Function]bool{}, handlers: map[*ir.Function]bool{},
+		invoked: map[*ir.Function]bool{}}
+}
+
+// handler analyzes a function a route call registers, with the request
+// and response the call gives it.
+func (p *Project) handler(fn *ir.Function, rc taint.RouteCall) {
+	owner := p.owner[fn]
+	if owner == nil || p.handlers[fn] || p.depth >= maxCallDepth {
+		return
+	}
+	p.handlers[fn] = true
+	entry := State{}
+	for i, prm := range fn.Params {
+		switch i {
+		case 0:
+			entry[prm.Name] = &Value{Q: rc.Request}
+		case 1:
+			entry[prm.Name] = &Value{Inst: rc.Response}
+		default:
+			entry[prm.Name] = &Value{}
+		}
+	}
+	p.depth++
+	owner.function(fn, entry, false)
+	p.depth--
+}
+
+// listener analyzes a function an event call registers, with the event's
+// data in its parameters.
+func (p *Project) listener(fn *ir.Function, t *taint.Trace) {
+	owner := p.owner[fn]
+	if owner == nil || p.handlers[fn] {
+		return
+	}
+	p.handlers[fn] = true
+	entry := State{}
+	for _, prm := range fn.Params {
+		entry[prm.Name] = &Value{T: t}
+	}
+	owner.function(fn, entry, false)
+}
+
+// exported analyzes the functions a module exports with their parameters
+// as sources: in a published package the caller decides what they hold.
+// Each exported function gets its own budget of calls, so that a large
+// script of many does not starve the last ones.
+func (p *Project) exported(r *run) {
+	all := State{}
+	for name, v := range r.stored {
+		all[name] = v
+	}
+	for name, v := range r.exit {
+		if r.mod.Exports == nil || r.mod.Exports[name] {
+			all[name] = v
+		}
+	}
+	// module.exports = obj exports the functions of the object.
+	if v, ok := all["default"]; ok && v.Inst == "dict" {
+		for k, fv := range v.Fields {
+			if _, ok := all[k]; !ok && fv.Fn != nil && !strings.HasPrefix(k, ".") && !strings.HasPrefix(k, "#") {
+				all[k] = fv
+			}
+		}
+	}
+	for _, name := range sortedKeys(all) {
+		v := all[name]
+		// module.exports = new Client(): the methods of the instance, as
+		// the module built it.
+		if class := p.classes[v.Inst]; v.Fn == nil && class != nil && p.owner[class] == r && !strings.HasPrefix(name, "$") {
+			for _, m := range r.mod.Funcs {
+				if m.Parent == class && !strings.HasSuffix(m.Name, ".__init__") && len(m.Params) > 0 {
+					entry := State{m.Params[0].Name: v}
+					p.calls = 0
+					r.function(m, p.exportedParams(r, m, name, entry), false)
+				}
+			}
+			continue
+		}
+		if v.Fn == nil || strings.HasPrefix(name, "$") || p.owner[v.Fn] != r {
+			continue
+		}
+		params := func(fn *ir.Function, entry State) State { return p.exportedParams(r, fn, name, entry) }
+		if !isClass(v.Fn) {
+			p.calls = 0
+			r.function(v.Fn, params(v.Fn, State{}), false)
+			continue
+		}
+		// An exported class: built with arguments from the caller, then
+		// each method called with arguments from the caller.
+		class := v.Fn
+		inst := &Value{Inst: className(r.mod, class)}
+		if init := p.method(class, "__init__", 0); init != nil {
+			p.calls = 0
+			if _, self, _ := r.analyzeFn(init, params(init, State{init.Params[0].Name: inst}), false); self != nil {
+				inst = self.copy()
+				inst.Inst = className(r.mod, class)
+			}
+		}
+		for _, m := range r.mod.Funcs {
+			if m.Parent == class && !strings.HasSuffix(m.Name, ".__init__") && len(m.Params) > 0 {
+				entry := State{}
+				if !decorated(m, "staticmethod") {
+					entry[m.Params[0].Name] = inst
+				}
+				p.calls = 0
+				r.function(m, params(m, entry), false)
+			}
+		}
+	}
+}
+
+// exportedParams sets the parameters of an exported function that entry
+// does not set to sources: the caller of a published package decides
+// what they hold.
+func (p *Project) exportedParams(r *run, fn *ir.Function, name string, entry State) State {
+	for _, prm := range fn.Params {
+		if _, set := entry[prm.Name]; set {
+			continue
+		}
+		t := taint.NewSource(prm.Pos.Line, "parameter "+prm.Name+" of exported "+name, true)
+		t.File = r.mod.Path
+		entry[prm.Name] = &Value{T: t}
+	}
+	return entry
 }
 
 // SetProperties gives the engine the keys and values of the project's
 // .properties files, which Properties.getProperty(key, default) reads.
 func (p *Project) SetProperties(props map[string]string) { p.e.props = props }
 
+// AnalyzeOne analyzes a module that is not loaded by name, such as a
+// single file.
+func (p *Project) AnalyzeOne(m *ir.Module, lines []string) []taint.Finding {
+	before := len(p.order)
+	return p.analyze(p.add(m, lines), before)
+}
+
 // Module analyzes every function of a module and returns the flows found
 // since the previous call, in this module or in the modules it calls.
 func (p *Project) Module(name string) []taint.Finding {
+	before := len(p.order)
 	r := p.module(name)
 	if r == nil {
 		return nil
 	}
-	return p.analyze(r)
+	return p.analyze(r, before)
 }
 
-func (p *Project) analyze(r *run) []taint.Finding {
-	before := len(p.order)
+// analyze roots every function of a module and returns the findings
+// recorded since before, which counts the ones loading the module made:
+// add analyzes the module body, and with it the handlers it registers.
+func (p *Project) analyze(r *run, before int) []taint.Finding {
 	p.calls = 0
 	for _, fn := range r.mod.Funcs {
 		r.root(fn)
+	}
+	if p.Library {
+		p.exported(r)
 	}
 	keys := append([]string(nil), p.order[before:]...)
 	sort.Strings(keys)
@@ -153,9 +296,14 @@ func (p *Project) resolve(q string, hops int) *ir.Function {
 		return nil
 	}
 	parts := strings.Split(q, ".")
-	// A module named after its class (Java): the name is the class.
+	// A module named after its class (Java): the name is the class; a
+	// module whose default export is a function (JavaScript
+	// module.exports = fn).
 	if r := p.module(q); r != nil {
 		if v, ok := r.exit[parts[len(parts)-1]]; ok && v.Fn != nil {
+			return v.Fn
+		}
+		if v, ok := r.exit["default"]; ok && v.Fn != nil {
 			return v.Fn
 		}
 	}
@@ -255,6 +403,18 @@ func (f *fnRun) project(c *call, st State) (*Value, bool) {
 	case c.recv.Fn != nil && isClass(c.recv.Fn):
 		fn = p.method(c.recv.Fn, in.Name, 0) // Class.method(...)
 	}
+	if fn == nil && in.Name != "" {
+		// a method stored in an object: obj.m() with { m() {...} }
+		for _, k := range []string{"." + in.Name, in.Name} {
+			if v, ok := c.recv.Fields[k]; ok && v.Fn != nil {
+				fn = v.Fn
+				if len(fn.Params) > 0 && fn.Params[0].Name == "this" {
+					self = c.recv
+				}
+				break
+			}
+		}
+	}
 	if fn == nil || decorated(fn, "abstract") {
 		return nil, false
 	}
@@ -340,6 +500,7 @@ func (f *fnRun) invoke(fn *ir.Function, self *Value, c *call) (ret, selfOut *Val
 		return nil, nil, false, false
 	}
 	p.calls++
+	p.invoked[fn] = true
 	p.active[fn] = true
 	p.depth++
 	ret, selfOut, validates = owner.analyzeFn(fn, entry, false)
@@ -460,5 +621,56 @@ func encode(sb *strings.Builder, v *Value, depth int) {
 			sb.WriteString(",")
 		}
 		sb.WriteString("}")
+	}
+}
+
+// export records a function stored into the module's exports by code the
+// lowering does not see as a module export: exports.f = fn inside a
+// function, such as the (function () { ... })() a module wraps itself in,
+// or f = exports.f = fn.
+// prototypeMethod records a function stored as a method of a prototype,
+// X.prototype.m = function () {...}: a library's callers reach its
+// methods through the instances it hands out, so they count as exported.
+func (f *fnRun) prototypeMethod(in *ir.Instr, v *Value) {
+	d := f.fn.Defs[in.A.Var]
+	if v.Fn == nil || d == nil || d.Op != ir.Load || d.Name != "prototype" {
+		return
+	}
+	owner := f.receiverName(d)
+	if owner == "" {
+		owner = "?"
+	}
+	k := owner + ".prototype." + in.Name
+	if f.stored == nil {
+		f.stored = map[string]*Value{}
+	}
+	if _, ok := f.stored[k]; !ok {
+		f.stored[k] = v
+	}
+}
+
+func (f *fnRun) export(q, name string, v *Value) {
+	var names map[string]*Value
+	switch {
+	case q == "exports" || q == "module.exports":
+		names = map[string]*Value{name: v}
+	case q == "module" && name == "exports":
+		names = map[string]*Value{"default": v}
+		for k, fv := range v.Fields {
+			if v.Inst == "dict" {
+				names[strings.TrimPrefix(k, ".")] = fv
+			}
+		}
+	}
+	for k, fv := range names {
+		if fv.Fn == nil {
+			continue
+		}
+		if f.stored == nil {
+			f.stored = map[string]*Value{}
+		}
+		if _, ok := f.stored[k]; !ok {
+			f.stored[k] = fv
+		}
 	}
 }
