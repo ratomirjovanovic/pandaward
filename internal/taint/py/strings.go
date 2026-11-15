@@ -3,6 +3,7 @@ package py
 import (
 	"strconv"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -78,14 +79,20 @@ func unescape(s string) string {
 			for j < len(s) && j < i+3 && s[j] >= '0' && s[j] <= '7' {
 				j++
 			}
-			v, _ := strconv.ParseUint(s[i:j], 8, 32)
-			b.WriteRune(rune(v))
+			v, _ := strconv.ParseUint(s[i:j], 8, 32) // at most 0o777
+			if v <= unicode.MaxRune {
+				b.WriteRune(rune(v))
+			}
 			i = j - 1
 		case 'x', 'u', 'U':
 			n := map[byte]int{'x': 2, 'u': 4, 'U': 8}[e]
 			if i+n < len(s) {
 				if v, err := strconv.ParseUint(s[i+1:i+1+n], 16, 32); err == nil {
-					b.WriteRune(rune(v))
+					if v <= unicode.MaxRune {
+						b.WriteRune(rune(v))
+					} else {
+						b.WriteRune(unicode.ReplacementChar)
+					}
 					i += n
 					continue
 				}
