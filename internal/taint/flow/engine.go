@@ -55,6 +55,7 @@ type Engine struct {
 	// function that takes the request and the response.
 	reqNames, reqWeak, helperParams map[string]bool
 	reqQ                            string
+	hypothetical                    map[string]bool
 }
 
 // New prepares an engine for a specification.
@@ -63,6 +64,7 @@ func New(spec *taint.Spec) *Engine {
 		srcAttrs: set(spec.Sources.Attributes), srcCalls: set(spec.Sources.Calls), params: set(spec.Sources.Params),
 		routes: set(spec.Sources.RouteDecorators), normalizers: set(spec.Normalizers), responses: set(spec.Responses.Calls), setters: map[string]bool{}, urlParsers: set(spec.URLParsers), textCalls: set(spec.TextCalls), lookups: set(spec.Lookups)}
 	e.weak = newWeak(spec)
+	e.hypothetical = set(spec.Sources.Hypothetical)
 	e.reqNames, e.reqWeak, e.helperParams = set(spec.Sources.Request.Names), set(spec.Sources.Request.Weak), set(spec.Sources.HelperParams)
 	if len(spec.Sources.RouteCalls) > 0 {
 		e.reqQ = spec.Sources.RouteCalls[0].Request
@@ -761,6 +763,11 @@ func (f *fnRun) load(base *Value, name string, line int) *Value {
 		q := base.Q + "." + name
 		if f.e.srcAttrs[q] {
 			return f.source(line, q)
+		}
+		if f.e.hypothetical[q] {
+			t := taint.NewSource(line, f.text(line), true)
+			t.File = f.mod.Path
+			return &Value{T: t, Q: q}
 		}
 		r := taintOf(base).copy()
 		r.Q = q

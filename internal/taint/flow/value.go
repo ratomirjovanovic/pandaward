@@ -159,6 +159,22 @@ func taintOf(v *Value) *Value {
 	return &Value{T: v.T, Safe: v.Safe, Opaque: v.Opaque, W: v.W, WK: v.WK}
 }
 
+// pickTrace returns the trace of a value built from or joined of two
+// tainted values: the one of the side the result is not safe for, else
+// one from a request rather than from a library's caller (whose findings
+// are hypotheses that sinks needing a request ignore), else a's.
+func pickTrace(a, b *Value) *taint.Trace {
+	switch {
+	case a.Safe&^b.Safe != 0:
+		return b.T
+	case b.Safe&^a.Safe != 0:
+		return a.T
+	case a.T.Root().Library && !b.T.Root().Library:
+		return b.T
+	}
+	return a.T
+}
+
 // mix adds the taint of x to v (a value being built from both).
 func mix(v, x *Value) *Value {
 	if x != nil && x.W != nil && v.WK&x.WK != x.WK {
@@ -176,13 +192,12 @@ func mix(v, x *Value) *Value {
 		r.T, r.Safe, r.Opaque = x.T, x.Safe, x.Opaque
 		return r
 	}
-	if v.Safe&x.Safe == v.Safe && (x.Opaque || !v.Opaque) {
+	t := pickTrace(v, x)
+	if t == v.T && v.Safe&x.Safe == v.Safe && (x.Opaque || !v.Opaque) {
 		return v
 	}
 	r := v.copy()
-	if v.Safe&^x.Safe != 0 {
-		r.T = x.T // the trace of the part that is not safe
-	}
+	r.T = t
 	r.Safe &= x.Safe
 	r.Opaque = v.Opaque && x.Opaque
 	return r
@@ -208,11 +223,7 @@ func joinDepth(a, b *Value, widen bool, depth int) *Value {
 	r := &Value{}
 	switch {
 	case a.T != nil && b.T != nil:
-		r.T, r.Safe, r.Opaque = a.T, a.Safe&b.Safe, a.Opaque && b.Opaque
-		if a.Safe&^b.Safe != 0 {
-			// the trace of the side the join is not safe for
-			r.T = b.T
-		}
+		r.T, r.Safe, r.Opaque = pickTrace(a, b), a.Safe&b.Safe, a.Opaque && b.Opaque
 	case a.T != nil:
 		r.T, r.Safe, r.Opaque = a.T, a.Safe, a.Opaque
 	case b.T != nil:

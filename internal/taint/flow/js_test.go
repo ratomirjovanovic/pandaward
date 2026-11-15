@@ -261,6 +261,22 @@ Panel.prototype.color = function (c) {
 	}
 }
 
+// TestJSHypotheses checks that command line arguments are hypotheses:
+// reported at a command, ignored by a path sink, and not hiding the
+// request when a path is built from both.
+func TestJSHypotheses(t *testing.T) {
+	src := `var fs = require('fs'), path = require('path'), exec = require('child_process').exec
+var dir = process.argv[2]
+exec('ls ' + dir)
+fs.readFile(dir)
+require('http').createServer(function (req, res) {
+  fs.readFile(path.join(dir, req.url))
+})`
+	if got := strings.Join(jsFlows(t, src), " "); got != "taint.js-command-injection:3 taint.js-path-traversal:6" {
+		t.Errorf("got %q", got)
+	}
+}
+
 // TestJSRouteHandlers checks that the flows in a handler the module body
 // registers are reported: loading the module analyzes its body, and the
 // handler with it.

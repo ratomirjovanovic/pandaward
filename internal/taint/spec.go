@@ -118,6 +118,10 @@ type Sources struct {
 	// attributes are then qualified by that name), and decorators that
 	// register a route handler, whose parameters are path values.
 	Attributes []string `yaml:"attributes"`
+	// Hypothetical are attributes whose data the person running the
+	// program usually chooses (process.argv): their findings are
+	// hypotheses, which sinks that need a request ignore.
+	Hypothetical []string `yaml:"hypothetical"`
 	// Chains are attribute paths whose end is untrusted wherever it is
 	// read, such as a language model's reply (choices.[].message.content).
 	Chains          []string `yaml:"chains"`

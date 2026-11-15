@@ -38,7 +38,19 @@ sources:
     - window.location.hash
     - window.location.search
     - window.location.href
-    - process.argv
+    # Koa 1 middleware reads the request through this.
+    - this.request.query
+    - this.request.body
+    - this.request.url
+    - this.request.originalUrl
+    - this.request.path
+    - this.request.querystring
+    - this.request.header
+    - this.request.headers
+  # Command line arguments: the person running a program usually chooses
+  # them, so their findings are hypotheses (a command line that runs
+  # another command with them), which request-only sinks ignore.
+  hypothetical: [process.argv]
   calls:
     - express.request.get
     - express.request.header
@@ -215,7 +227,11 @@ sinks:
     title: Redirect target built from untrusted input
     message: Input chooses where the user is redirected, so a link can send users to another site.
     fix: Redirect only to relative paths or to an allowlist of hosts.
-    calls: [express.response.redirect]
+    # res.redirect(url), and ctx.redirect or this.redirect in Koa
+    calls: [express.response.redirect, express.request.redirect, this.redirect]
+    methods: [redirect#0]
+    method_receivers:
+      redirect: [res, response, reply]
     props: [location.href, window.location.href]
     request_only: true
 
@@ -275,6 +291,9 @@ text_calls: [decodeURIComponent, decodeURI, unescape, String, querystring.parse,
 decoders: [decodeURIComponent, decodeURI, unescape, Buffer.from, atob]
 
 guards:
+  # Library checks that a path stays inside a directory.
+  - kinds: [path]
+    calls: [path-is-inside, is-path-inside, is-path-inside.default]
   # A value that matches an anchored pattern of listed characters, or is
   # one of a list of constants, cannot change a command, query, path or
   # page (also through a function that returns such a check).
