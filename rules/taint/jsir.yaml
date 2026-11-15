@@ -43,6 +43,13 @@ sources:
     - express.request.get
     - express.request.header
     - express.request.param
+  # Parameters with these names hold the request (weak names only in a
+  # function that also takes the response); in such a function the helper
+  # parameters carry a path from the request (serveStatic(req, res, path)).
+  request:
+    names: [req, request, ctx, event]
+    weak_names: [request, event]
+  helper_params: [path, pathname, file, filename, filePath, filepath, uri, url, relativePath, relPath, p]
   route_calls:
     - receivers: [app, router, server, api, routes, route, r, fastify, express, express.Router, express]
       methods: [get, post, put, patch, delete, del, all, use, options, head, route]

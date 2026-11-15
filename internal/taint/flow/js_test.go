@@ -78,6 +78,24 @@ module.exports = stats`
 	}
 }
 
+// TestJSRequestByName checks parameters that hold the request by name, the
+// path parameter of a helper that takes the request and the response, and
+// the default import of a package.
+func TestJSRequestByName(t *testing.T) {
+	src := `import send from 'send'
+var fs = require('fs')
+module.exports = function (options) {
+  return function (req, res, next) { fs.stat(req.url, next) }
+}
+export function serveStatic (req, res, path) {
+  send(req, path).pipe(res)
+}
+function fetchIt (request) { fs.readFile(request.url) }`
+	if got := strings.Join(jsFlows(t, src), " "); got != "taint.js-path-traversal:4 taint.js-path-traversal:7" {
+		t.Errorf("got %q", got)
+	}
+}
+
 // TestJSRouteHandlers checks that the flows in a handler the module body
 // registers are reported: loading the module analyzes its body, and the
 // handler with it.

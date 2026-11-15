@@ -49,6 +49,12 @@ type Engine struct {
 	pureCalls    map[string]bool
 	decoders     map[string]bool
 	pureMethods  map[string]bool
+	// reqNames are parameter names that hold the request (JavaScript:
+	// req, ctx), reqWeak names that do only in a handler, which also takes
+	// the response; helperParams carry a path from the request in a
+	// function that takes the request and the response.
+	reqNames, reqWeak, helperParams map[string]bool
+	reqQ                            string
 }
 
 // New prepares an engine for a specification.
@@ -57,6 +63,10 @@ func New(spec *taint.Spec) *Engine {
 		srcAttrs: set(spec.Sources.Attributes), srcCalls: set(spec.Sources.Calls), params: set(spec.Sources.Params),
 		routes: set(spec.Sources.RouteDecorators), normalizers: set(spec.Normalizers), responses: set(spec.Responses.Calls), setters: map[string]bool{}, urlParsers: set(spec.URLParsers), textCalls: set(spec.TextCalls), lookups: set(spec.Lookups)}
 	e.weak = newWeak(spec)
+	e.reqNames, e.reqWeak, e.helperParams = set(spec.Sources.Request.Names), set(spec.Sources.Request.Weak), set(spec.Sources.HelperParams)
+	if len(spec.Sources.RouteCalls) > 0 {
+		e.reqQ = spec.Sources.RouteCalls[0].Request
+	}
 	e.paramAnns = set(spec.Sources.ParamAnnotations)
 	e.weakAlgs = map[string][]weakAlg{}
 	for _, s := range spec.Sinks {
@@ -247,8 +257,17 @@ func (r *run) root(fn *ir.Function) {
 	route := r.isRoute(fn)
 	typed := typedParams(fn)
 	entry := State{}
+	req, handler := r.e.requestParams(fn)
 	for _, p := range fn.Params {
 		v := &Value{Inst: p.Ann}
+		if req[p.Name] {
+			entry[p.Name] = &Value{Q: r.e.reqQ}
+			continue
+		}
+		if handler && r.e.helperParams[p.Name] {
+			entry[p.Name] = &Value{T: r.newSource(p.Pos.Line, "parameter "+p.Name+" next to the request")}
+			continue
+		}
 		if numericType[p.Ann] || javaScalar[p.Ann] {
 			v.Inst = ""
 		}
@@ -267,6 +286,32 @@ func (r *run) root(fn *ir.Function) {
 	}
 	r.function(fn, entry, route)
 }
+
+// requestParams returns the parameters of fn that hold the request, by
+// name, and whether fn also takes the response, as a handler or a helper
+// of one does (serveStatic(req, res, path)).
+func (e *Engine) requestParams(fn *ir.Function) (map[string]bool, bool) {
+	if e.reqQ == "" || len(e.reqNames) == 0 {
+		return nil, false
+	}
+	res := false
+	for _, p := range fn.Params {
+		res = res || responseNames[p.Name]
+	}
+	var req map[string]bool
+	for _, p := range fn.Params {
+		if e.reqNames[p.Name] && (!e.reqWeak[p.Name] || res) {
+			if req == nil {
+				req = map[string]bool{}
+			}
+			req[p.Name] = true
+		}
+	}
+	return req, res && req != nil
+}
+
+// responseNames are parameter names of a handler's response.
+var responseNames = map[string]bool{"res": true, "response": true, "reply": true, "h": true}
 
 func (r *run) newSource(line int, what string) *taint.Trace {
 	t := taint.NewSource(line, what, false)

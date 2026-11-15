@@ -114,6 +114,16 @@ func (l *lowerer) moduleOf(spec string) string {
 	return strings.TrimPrefix(spec, "node:")
 }
 
+// defaultOf names the default export of a module: mod.default for a file
+// of the project, and the package itself for a package, which is most
+// often CommonJS (import send from 'send' is require('send')).
+func (l *lowerer) defaultOf(spec, mod string) string {
+	if l.resolve(spec) == "" && !strings.HasPrefix(spec, ".") && !strings.HasPrefix(spec, "/") {
+		return mod
+	}
+	return mod + ".default"
+}
+
 // function lowers a function body into a new Function.
 func (l *lowerer) function(name string, line int, params []Expr, body []Stmt, exprBody Expr, parent *ir.Function, class string, module bool) *ir.Function {
 	fn := &ir.Function{Name: name, Pos: at(line), Parent: parent, Class: class}
@@ -518,7 +528,7 @@ func (l *lowerer) stmt(s Stmt) {
 			switch sp.Imported {
 			case "*":
 			case "default":
-				name = mod + ".default"
+				name = l.defaultOf(s.Source, mod)
 			default:
 				name = mod + "." + sp.Imported
 			}
@@ -562,7 +572,7 @@ func (l *lowerer) export(s *Export) {
 		for _, sp := range s.Specs {
 			name := mod + "." + sp.Local
 			if sp.Local == "default" {
-				name = mod + ".default"
+				name = l.defaultOf(s.From, mod)
 			}
 			l.bind(sp.Exported, &ir.Instr{Op: ir.Import, Pos: at(s.Line), Name: name})
 		}
