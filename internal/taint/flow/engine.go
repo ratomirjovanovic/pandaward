@@ -343,6 +343,14 @@ func fixedRoute(fn *ir.Function) string {
 	return ""
 }
 
+// isClassName reports a qualified class name, whose last part starts
+// with a capital letter, as opposed to the name of a factory method a
+// value was returned by (Runtime.getRuntime).
+func isClassName(q string) bool {
+	last := q[strings.LastIndexByte(q, '.')+1:]
+	return last != "" && last[0] >= 'A' && last[0] <= 'Z'
+}
+
 // textTypes are declared types whose values are text.
 var textTypes = map[string]bool{"String": true, "java.lang.String": true, "CharSequence": true, "char[]": true, "byte[]": true,
 	"String[]": true, "StringBuilder": true, "StringBuffer": true}
@@ -636,7 +644,7 @@ func (f *fnRun) instr(in *ir.Instr, st State) {
 		v := f.val(st, in.A)
 		// The declared type names the class, unless the value is an
 		// instance of a class of the project, whose methods are analyzed.
-		if in.Name != "" && in.Name != "Object" && v.Inst != in.Name && f.p.classes[v.Inst] == nil && !javaScalar[in.Name] {
+		if in.Name != "" && in.Name != "Object" && v.Inst != in.Name && f.p.classes[v.Inst] == nil && !javaScalar[in.Name] && !isClassName(v.Inst) {
 			v = v.copy()
 			v.Inst = in.Name
 		}

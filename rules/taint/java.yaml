@@ -269,6 +269,8 @@ returns:
   java.util.Base64.getDecoder: java.util.Base64.Decoder
   java.util.Base64.getEncoder: java.util.Base64.Encoder
   java.util.Base64.getUrlDecoder: java.util.Base64.Decoder
+  java.security.SecureRandom.getInstance: java.security.SecureRandom
+  java.security.SecureRandom.getInstanceStrong: java.security.SecureRandom
 
 # Calls that return text derived from their arguments.
 text_calls:
@@ -307,6 +309,7 @@ normalizers:
   - java.nio.file.Path.toAbsolutePath
 
 weak:
+  random_fill: [java.util.Random.nextBytes]
   random_calls: [java.util.Random.nextInt, java.util.Random.nextLong, java.util.Random.nextFloat, java.util.Random.nextDouble, java.util.Random.nextGaussian, java.util.Random.nextBoolean, Math.random, java.lang.Math.random]
   secret_names: [token, secret, password, passwd, nonce, salt, otp, session, remember, csrf, reset, apikey]
   password_names: [password, passwd, pwd, credential, passphrase]

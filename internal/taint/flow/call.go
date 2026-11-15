@@ -71,7 +71,17 @@ func (f *fnRun) call(in *ir.Instr, st State) *Value {
 		f.weakSinks(c)
 	}
 	r := f.weakSource(c, f.callResolved(c, st))
-	if r.Inst == "" || r.Inst == r.Q {
+	for _, n := range c.names {
+		if contains(f.e.spec.Weak.RandomFill, n) && len(in.Args) > 0 {
+			if name := f.root(in.Args[0]); name != "" {
+				v := st[name].copy()
+				v.W = f.newSource(in.Pos.Line, f.text(in.Pos.Line))
+				v.WK |= taint.WeakRandom
+				st[name] = v
+			}
+		}
+	}
+	{
 		for _, n := range c.names {
 			if t, ok := f.e.spec.Returns[n]; ok {
 				r = r.copy()

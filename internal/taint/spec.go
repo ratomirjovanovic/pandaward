@@ -298,6 +298,9 @@ type Weak struct {
 	PasswordNames []string `yaml:"password_names"`
 	CookieSetters []string `yaml:"cookie_setters"`
 	CookieFlags   []string `yaml:"cookie_flags"`
+	// RandomFill are calls that fill their first argument with predictable
+	// bytes (Java: Random.nextBytes).
+	RandomFill []string `yaml:"random_fill"`
 	// SecretStores are callee#nameArg#valueArg: a call that stores a
 	// value under a name (Java: new Cookie(name, value)).
 	SecretStores []string `yaml:"secret_stores"`
