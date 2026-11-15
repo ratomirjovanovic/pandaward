@@ -64,14 +64,14 @@ func (f *fnRun) refine(st State, cond ir.Operand, edge bool) State {
 	absent := isIn && (d.Name == "in") != edge
 	for _, g := range f.e.spec.Guards {
 		switch {
-		case len(g.Contains) > 0 && absent:
-			needle := f.val(st, d.A)
-			if needle.C == nil || needle.C.Kind != ir.Str {
+		case len(g.Contains) > 0:
+			needle, hay, ok := f.lacks(st, d, edge)
+			if !ok {
 				continue
 			}
 			for _, c := range g.Contains {
-				if strings.Contains(needle.C.Val, c) {
-					mark(f.root(d.B), g.Kinds)
+				if strings.Contains(needle, c) {
+					mark(f.root(hay), g.Kinds)
 					break
 				}
 			}
@@ -160,6 +160,61 @@ func (f *fnRun) refine(st State, cond ir.Operand, edge bool) State {
 	}
 	return out
 }
+
+// lacks reports a check that holds on this edge when hay does not contain
+// the constant needle: needle not in hay, and in JavaScript
+// !hay.includes(needle), hay.indexOf(needle) === -1 (or < 0) and
+// !/needle/.test(hay).
+func (f *fnRun) lacks(st State, d *ir.Instr, edge bool) (string, ir.Operand, bool) {
+	str := func(o ir.Operand) (string, bool) {
+		v := f.val(st, o)
+		if v.C == nil || v.C.Kind != ir.Str {
+			return "", false
+		}
+		return v.C.Val, true
+	}
+	switch {
+	case d.Op == ir.Bin && (d.Name == "in" || d.Name == "not in") && (d.Name == "in") != edge:
+		if s, ok := str(d.A); ok {
+			return s, d.B, true
+		}
+	case d.Op == ir.Call && d.Name == "includes" && len(d.Args) == 1 && !edge:
+		if s, ok := str(d.Args[0]); ok {
+			return s, d.A, true
+		}
+	case d.Op == ir.Call && d.Name == "test" && len(d.Args) == 1 && !edge:
+		// /\.\./.test(p): the pattern's literal text, unescaped
+		re := f.val(st, d.A)
+		if re.C != nil && re.C.Kind == ir.Other && strings.HasPrefix(re.C.Val, "/") {
+			return strings.ReplaceAll(re.C.Val, `\`, ""), d.Args[0], true
+		}
+	case d.Op == ir.Bin:
+		call, other, op := f.fn.Defs[d.A.Var], d.B, d.Name
+		if call == nil || call.Op != ir.Call {
+			call, other, op = f.fn.Defs[d.B.Var], d.A, flipCompare[d.Name]
+		}
+		if call == nil || call.Op != ir.Call || call.Name != "indexOf" || len(call.Args) != 1 {
+			break
+		}
+		n, isNum := intConst(f.val(st, other))
+		if !isNum {
+			break
+		}
+		// indexOf(...) is -1 on this edge
+		minus := op == "==" && n == -1 || op == "<" && n == 0 || op == "<=" && n == -1
+		found := op == "!=" && n == -1 || op == ">=" && n == 0 || op == ">" && n == -1
+		if !(minus && edge || found && !edge) {
+			break
+		}
+		if s, ok := str(call.Args[0]); ok {
+			return s, call.A, true
+		}
+	}
+	return "", ir.Operand{}, false
+}
+
+// flipCompare is the comparison with its operands swapped.
+var flipCompare = map[string]string{"==": "==", "!=": "!=", "<": ">", ">": "<", "<=": ">=", ">=": "<="}
 
 // calls reports a call instruction whose qualified callee is in list.
 func (f *fnRun) calls(d *ir.Instr, st State, list []string) bool {

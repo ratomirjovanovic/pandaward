@@ -96,6 +96,27 @@ function fetchIt (request) { fs.readFile(request.url) }`
 	}
 }
 
+// TestJSPathGuards checks the JavaScript checks that a path has no parent
+// segments, and replace() calls that remove them.
+func TestJSPathGuards(t *testing.T) {
+	head := "var fs = require('fs')\nfunction serve (req, res, p) {\n"
+	for _, c := range []struct{ body, want string }{
+		{"  fs.readFile(p)\n", "taint.js-path-traversal:3"},
+		{"  if (p.indexOf('..') !== -1) return\n  fs.readFile(p)\n", ""},
+		{"  if (p.indexOf('..') === -1) fs.readFile(p)\n", ""},
+		{"  if (-1 < p.indexOf('..')) return\n  fs.readFile(p)\n", ""},
+		{"  if (p.indexOf('..') === -1) return\n  fs.readFile(p)\n", "taint.js-path-traversal:4"},
+		{"  if (!p.includes('..')) fs.readFile(p)\n", ""},
+		{`  if (/\.\./.test(p)) return` + "\n  fs.readFile(p)\n", ""},
+		{`  fs.readFile(p.replace(/\.\.\//g, ''))` + "\n", ""},
+	} {
+		src := head + c.body + "}"
+		if got := strings.Join(jsFlows(t, src), " "); got != c.want {
+			t.Errorf("got %q, want %q\n%s", got, c.want, src)
+		}
+	}
+}
+
 // TestJSRouteHandlers checks that the flows in a handler the module body
 // registers are reported: loading the module analyzes its body, and the
 // handler with it.

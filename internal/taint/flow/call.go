@@ -208,6 +208,9 @@ func (f *fnRun) callResolved(c *call, st State) *Value {
 			}
 		}
 	}
+	if in.Name == "replace" && len(c.args) >= 2 && stripsDotDot(c.args[0].C, c.args[1].C) {
+		kinds |= taint.Path
+	}
 	if kinds != 0 && r.T != nil {
 		r = r.copy()
 		r.Safe |= kinds
@@ -770,6 +773,13 @@ func callbackFns(args []*Value) []*Value {
 		}
 	}
 	return out
+}
+
+// stripsDotDot reports p.replace(/\.\.\//g, ”): a JavaScript regular
+// expression that removes parent directory segments from a path.
+func stripsDotDot(re, repl *ir.Const) bool {
+	return re != nil && repl != nil && re.Kind == ir.Other && strings.HasPrefix(re.Val, "/") &&
+		strings.Contains(re.Val, `\.\.`) && repl.Kind == ir.Str && repl.Val == ""
 }
 
 // routeCall analyzes the handlers a call registers.
