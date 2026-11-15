@@ -694,6 +694,11 @@ func (f *fnRun) instr(in *ir.Instr, st State) {
 		f.set(st, in.Dst, purified(unary(in.Name, a), a), line)
 	case ir.Load:
 		v := f.load(f.val(st, in.A), in.Name, line)
+		// The host of a request's own URL is where the user already is.
+		if v.T != nil && urlHostParts[in.Name] {
+			v = v.copy()
+			v.Safe |= taint.Redirect
+		}
 		if v.T == nil && f.chained(in) {
 			v = f.source(line, "")
 		}
@@ -1175,3 +1180,6 @@ func unary(op string, a *Value) *Value {
 	}
 	return taintOf(a)
 }
+
+// urlHostParts are the properties of a URL that name its site.
+var urlHostParts = map[string]bool{"origin": true, "host": true, "hostname": true, "protocol": true, "port": true}

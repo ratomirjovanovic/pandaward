@@ -323,6 +323,17 @@ export function POST(request: Request) {
 	if got := strings.Join(jsFlowsIn(t, "route.ts", src), " "); got != "taint.js-open-redirect:5" {
 		t.Errorf("got %q", got)
 	}
+	// The host of the request's own URL and a path the code chose are not
+	// a redirect to another site.
+	safe := `import { NextResponse } from "next/server"
+export function GET(request: Request) {
+  const { origin } = new URL(request.url)
+  if (origin) return NextResponse.redirect(new URL("/login", request.url))
+  return NextResponse.redirect(origin + "/home")
+}`
+	if got := jsFlowsIn(t, "route.ts", safe); len(got) != 0 {
+		t.Errorf("safe: got %v", got)
+	}
 	page := `export default function Page() {
   const shop = new URLSearchParams(window.location.search).get('shop') ?? ''
   return (

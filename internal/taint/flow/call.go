@@ -74,6 +74,12 @@ func (f *fnRun) call(in *ir.Instr, st State) *Value {
 		f.jsxSinks(c)
 	}
 	r := f.weakSource(c, f.callResolved(c, st))
+	// new URL("/login", request.url): the address is the base's host with
+	// a path the code chose, which is not a redirect to another site.
+	if contains(c.names, "URL") && len(c.args) == 2 && c.args[0].T == nil && r.T != nil {
+		r = r.copy()
+		r.Safe |= taint.Redirect
+	}
 	// new RegExp("^[a-z]+$") is the pattern, as a /literal/ is.
 	if contains(c.names, "RegExp") && len(c.args) >= 1 && c.args[0].C != nil && c.args[0].C.Kind == ir.Str {
 		flags := ""
