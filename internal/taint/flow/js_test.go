@@ -28,6 +28,20 @@ func jsFlows(t *testing.T, src string) []string {
 	return out
 }
 
+// TestJSNestedExports checks that a function a module exports from inside
+// the function it wraps itself in is analyzed as exported.
+func TestJSNestedExports(t *testing.T) {
+	src := `(function () {
+  var exec = require('child_process').exec, findLoad;
+  findLoad = exports.findLoad = function findLoad(arg, cb) {
+    exec('wmic path ' + arg, cb);
+  };
+}());`
+	if got := strings.Join(jsFlows(t, src), " "); got != "taint.js-command-injection:4" {
+		t.Errorf("got %q", got)
+	}
+}
+
 // TestJSRouteHandlers checks that the flows in a handler the module body
 // registers are reported: loading the module analyzes its body, and the
 // handler with it.

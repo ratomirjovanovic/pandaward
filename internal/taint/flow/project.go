@@ -86,8 +86,15 @@ func (p *Project) handler(fn *ir.Function, rc taint.RouteCall) {
 // exported analyzes the functions a module exports with their parameters
 // as sources: in a published package the caller decides what they hold.
 func (p *Project) exported(r *run) {
-	for _, name := range sortedKeys(r.exit) {
-		v := r.exit[name]
+	all := State{}
+	for name, v := range r.stored {
+		all[name] = v
+	}
+	for name, v := range r.exit {
+		all[name] = v
+	}
+	for _, name := range sortedKeys(all) {
+		v := all[name]
 		if v.Fn == nil || strings.HasPrefix(name, "$") || p.owner[v.Fn] != r {
 			continue
 		}
@@ -563,5 +570,35 @@ func encode(sb *strings.Builder, v *Value, depth int) {
 			sb.WriteString(",")
 		}
 		sb.WriteString("}")
+	}
+}
+
+// export records a function stored into the module's exports by code the
+// lowering does not see as a module export: exports.f = fn inside a
+// function, such as the (function () { ... })() a module wraps itself in,
+// or f = exports.f = fn.
+func (f *fnRun) export(q, name string, v *Value) {
+	var names map[string]*Value
+	switch {
+	case q == "exports" || q == "module.exports":
+		names = map[string]*Value{name: v}
+	case q == "module" && name == "exports":
+		names = map[string]*Value{"default": v}
+		for k, fv := range v.Fields {
+			if v.Inst == "dict" {
+				names[strings.TrimPrefix(k, ".")] = fv
+			}
+		}
+	}
+	for k, fv := range names {
+		if fv.Fn == nil {
+			continue
+		}
+		if f.stored == nil {
+			f.stored = map[string]*Value{}
+		}
+		if _, ok := f.stored[k]; !ok {
+			f.stored[k] = fv
+		}
 	}
 }

@@ -124,7 +124,10 @@ type run struct {
 	envs  map[*ir.Function]State
 	// exit is the module body's state at its end.
 	exit State
-	html bool
+	// stored are the functions a nested function of the module exports
+	// (exports.f = fn inside (function () { ... })()), by name.
+	stored map[string]*Value
+	html   bool
 	// done are the functions analyzed as roots.
 	done map[*ir.Function]bool
 }
@@ -623,6 +626,7 @@ func (f *fnRun) instr(in *ir.Instr, st State) {
 			if f.report {
 				f.weakStore(in.Name, v, line)
 				f.propSinks(in, f.val(st, in.A), v)
+				f.export(base.Q, in.Name, v)
 			}
 			base.Fields["."+in.Name] = v
 			st[in.A.Var] = mix(base, v)
