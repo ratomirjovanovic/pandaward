@@ -212,6 +212,8 @@ type Function struct {
 	Parent     *Function
 	// Class is the name of the class whose body defines the function.
 	Class string
+	// Bases are the dotted names of a class body's base classes.
+	Bases []string
 	// Defs maps each temporary to the instruction that sets it.
 	Defs map[string]*Instr
 }

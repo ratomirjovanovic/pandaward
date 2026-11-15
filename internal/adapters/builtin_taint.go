@@ -12,6 +12,7 @@ import (
 	"github.com/ratomirjovanovic/pandaward/internal/redact"
 	"github.com/ratomirjovanovic/pandaward/internal/taint"
 	"github.com/ratomirjovanovic/pandaward/internal/taint/flow"
+	"github.com/ratomirjovanovic/pandaward/internal/taint/ir"
 	"github.com/ratomirjovanovic/pandaward/internal/taint/jsflow"
 	pyparse "github.com/ratomirjovanovic/pandaward/internal/taint/py"
 	"github.com/ratomirjovanovic/pandaward/internal/version"
@@ -117,53 +118,61 @@ func (a taintAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 	return res, finish(run, model.ExitOK, detail, len(res.Signals))
 }
 
-// python runs the IR engine (#406) on the Python files, one module at a
-// time.
+// python runs the IR engine (#406) on the Python files as one project: a
+// call of a function or class another module of the project defines is
+// followed into it. Test files are not analyzed on their own, but a module
+// they hold can still be imported.
 func (a taintAdapter) python(ctx context.Context, c *Context, res *Result) (files, parseErrors int, err error) {
-	var spec *taint.Spec
-	var eng *flow.Engine
+	var paths []string
 	for _, f := range c.Inv.Files {
-		if f.Lang != "python" || IsTestPath(f.Path) {
+		if f.Lang == "python" {
+			paths = append(paths, f.Path)
+		}
+	}
+	if len(paths) == 0 {
+		return 0, 0, nil
+	}
+	spec, err := taint.Load("python")
+	if err != nil {
+		return 0, 0, err
+	}
+	index := pyparse.NewFiles(paths)
+	// A module asked for under two names is the same module.
+	parsed := map[string]*ir.Module{}
+	proj := flow.New(spec).NewProject(func(name string) (*ir.Module, []string) {
+		p := index.Lookup(name)
+		f := c.Inv.FileByPath(p)
+		if f == nil {
+			return nil, nil
+		}
+		if m, ok := parsed[p]; ok {
+			return m, f.Lines
+		}
+		pf := pyparse.Parse(f.Path, strings.Join(f.Lines, "\n"))
+		if len(pf.Errors) > 0 {
+			parseErrors++
+		}
+		mod, pkg := index.Name(f.Path)
+		m := pyparse.Lower(pf, mod, pkg)
+		parsed[p] = m
+		return m, f.Lines
+	})
+	for _, p := range paths {
+		if IsTestPath(p) {
 			continue
 		}
 		if ctx.Err() != nil {
 			return files, parseErrors, nil
 		}
-		if eng == nil {
-			if spec, err = taint.Load("python"); err != nil {
-				return 0, 0, err
-			}
-			eng = flow.New(spec)
-		}
 		files++
-		src := strings.Join(f.Lines, "\n")
-		pf := pyparse.Parse(f.Path, src)
-		if len(pf.Errors) > 0 {
-			parseErrors++
-		}
-		name, pkg := pyModuleName(f.Path)
-		for _, fd := range eng.Analyze(pyparse.Lower(pf, name, pkg), f.Lines) {
-			res.Signals = append(res.Signals, taintSignal(fd, f, a.Name()))
+		name, _ := index.Name(p)
+		for _, fd := range proj.Module(name) {
+			if f := c.Inv.FileByPath(fd.File); f != nil && !IsTestPath(f.Path) {
+				res.Signals = append(res.Signals, taintSignal(fd, f, a.Name()))
+			}
 		}
 	}
 	return files, parseErrors, nil
-}
-
-// pyModuleName returns the dotted module name of a file relative to the
-// project root, and whether it is a package's __init__.py.
-func pyModuleName(p string) (string, bool) {
-	p = strings.TrimSuffix(p, ".py")
-	pkg := false
-	if path.Base(p) == "__init__" {
-		p, pkg = path.Dir(p), true
-		if p == "." {
-			return "", true
-		}
-	}
-	for _, prefix := range []string{"src/", "lib/"} {
-		p = strings.TrimPrefix(p, prefix)
-	}
-	return strings.ReplaceAll(p, "/", "."), pkg
 }
 
 // taintSignal turns a flow into a signal whose message shows the path.

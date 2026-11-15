@@ -7,7 +7,6 @@ package flow
 
 import (
 	"regexp"
-	"sort"
 	"strconv"
 	"strings"
 
@@ -40,13 +39,14 @@ type Engine struct {
 	setters     map[string]bool
 	urlParsers  map[string]bool
 	textCalls   map[string]bool
+	lookups     map[string]bool
 }
 
 // New prepares an engine for a specification.
 func New(spec *taint.Spec) *Engine {
 	e := &Engine{spec: spec, calls: map[string][]sinkTarget{}, methods: map[string][]sinkTarget{}, stores: map[string]*taint.Sink{},
 		srcAttrs: set(spec.Sources.Attributes), srcCalls: set(spec.Sources.Calls), params: set(spec.Sources.Params),
-		routes: set(spec.Sources.RouteDecorators), normalizers: set(spec.Normalizers), responses: set(spec.Responses.Calls), setters: map[string]bool{}, urlParsers: set(spec.URLParsers), textCalls: set(spec.TextCalls)}
+		routes: set(spec.Sources.RouteDecorators), normalizers: set(spec.Normalizers), responses: set(spec.Responses.Calls), setters: map[string]bool{}, urlParsers: set(spec.URLParsers), textCalls: set(spec.TextCalls), lookups: set(spec.Lookups)}
 	for _, s := range spec.Sinks {
 		for n, t := range s.Calls {
 			e.calls[n] = append(e.calls[n], sinkTarget{s, t, false})
@@ -83,35 +83,22 @@ func set(list []string) map[string]bool {
 // run is the analysis of one module.
 type run struct {
 	e     *Engine
+	p     *Project
 	mod   *ir.Module
 	lines []string
 	envs  map[*ir.Function]State
 	// exit is the module body's state at its end.
-	exit     State
-	html     bool
-	findings map[string]taint.Finding
+	exit State
+	html bool
+	// done are the functions analyzed as roots.
+	done map[*ir.Function]bool
 }
 
-// Analyze returns the flows from sources to sinks in a module; lines are
-// the source lines, for the steps of each flow.
+// Analyze returns the flows from sources to sinks in one module on its
+// own; lines are the source lines, for the steps of each flow.
 func (e *Engine) Analyze(m *ir.Module, lines []string) []taint.Finding {
-	r := &run{e: e, mod: m, lines: lines, envs: map[*ir.Function]State{}, findings: map[string]taint.Finding{}}
-	for _, fw := range e.spec.Sources.HTMLReturnFrameworks {
-		r.html = r.html || imports(m.Init, fw)
-	}
-	for _, fn := range m.Funcs {
-		r.function(fn)
-	}
-	keys := make([]string, 0, len(r.findings))
-	for k := range r.findings {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	out := make([]taint.Finding, 0, len(keys))
-	for _, k := range keys {
-		out = append(out, r.findings[k])
-	}
-	return out
+	p := e.NewProject(func(string) (*ir.Module, []string) { return nil, nil })
+	return p.analyze(p.add(m, lines))
 }
 
 // imports reports a module body that imports mod or one of its members.
@@ -143,6 +130,9 @@ type fnRun struct {
 	fn     *ir.Function
 	route  bool
 	report bool
+	// ret and self are the returned value and self at the returns, joined
+	// in the report pass.
+	ret, self *Value
 	// shared are the temporaries read outside the block that sets them;
 	// the others are dropped at the end of their block.
 	shared map[string]bool
@@ -203,8 +193,14 @@ func (r *run) isRoute(fn *ir.Function) bool {
 	return false
 }
 
-func (r *run) function(fn *ir.Function) {
-	f := &fnRun{run: r, fn: fn, route: r.isRoute(fn), shared: sharedTemps(fn)}
+// root analyzes a function on its own: its parameters hold whatever a
+// caller passes, except route parameters, which are sources.
+func (r *run) root(fn *ir.Function) {
+	if r.done[fn] {
+		return
+	}
+	r.done[fn] = true
+	route := r.isRoute(fn)
 	typed := typedParams(fn)
 	entry := State{}
 	for _, p := range fn.Params {
@@ -212,11 +208,24 @@ func (r *run) function(fn *ir.Function) {
 		if r.e.params[p.Name] {
 			v.Q = p.Name
 		}
-		if f.route && p.Name != "self" && p.Name != "cls" && !typed[p.Name] && !numericType[p.Ann] {
-			v.T = taint.NewSource(p.Pos.Line, "route parameter "+p.Name, false)
+		if route && p.Name != "self" && p.Name != "cls" && !typed[p.Name] && !numericType[p.Ann] {
+			v.T = r.newSource(p.Pos.Line, "route parameter "+p.Name)
 		}
 		entry[p.Name] = v
 	}
+	r.function(fn, entry, route)
+}
+
+func (r *run) newSource(line int, what string) *taint.Trace {
+	t := taint.NewSource(line, what, false)
+	t.File = r.mod.Path
+	return t
+}
+
+// function analyzes fn from an entry state and returns the value it
+// returns and the value of self when it returns.
+func (r *run) function(fn *ir.Function, entry State, route bool) (ret, self *Value) {
+	f := &fnRun{run: r, fn: fn, route: route, shared: sharedTemps(fn)}
 	in := map[*ir.Block]State{fn.Entry(): entry}
 	visits := map[*ir.Block]int{}
 	work := []*ir.Block{fn.Entry()}
@@ -257,6 +266,7 @@ func (r *run) function(fn *ir.Function) {
 			}
 		}
 	}
+	return f.ret, f.self
 }
 
 // routeParam matches a typed path parameter such as <int:id>.
@@ -339,6 +349,12 @@ func (f *fnRun) block(b *ir.Block, s State, push func(*ir.Block, State)) {
 		push(t.Succs[0], f.refine(st, t.Cond, true))
 		push(t.Succs[1], f.refine(st, t.Cond, false))
 	case ir.Return:
+		if f.report {
+			f.ret = joinFirst(f.ret, f.val(st, t.Value))
+			if v, ok := st["self"]; ok {
+				f.self = joinFirst(f.self, v)
+			}
+		}
 		if f.report && f.route && f.html && f.e.handlerSink != nil {
 			body := f.val(st, t.Value)
 			if body.Known && len(body.Elems) > 0 {
@@ -351,6 +367,14 @@ func (f *fnRun) block(b *ir.Block, s State, push func(*ir.Block, State)) {
 			}
 		}
 	}
+}
+
+// joinFirst joins v into acc, taking v as it is when acc is unset.
+func joinFirst(acc, v *Value) *Value {
+	if acc == nil {
+		return v
+	}
+	return join(acc, v, false)
 }
 
 // known returns the truth of a value when it is known.
@@ -406,13 +430,13 @@ func (f *fnRun) set(st State, dst string, v *Value, line int) {
 	}
 	if !ir.IsTemp(dst) && v.T != nil {
 		v = v.copy()
-		v.T = v.T.Add(line, f.text(line))
+		v.T = v.T.AddStep(taint.Step{Line: line, What: f.text(line), File: f.mod.Path})
 	}
 	st[dst] = v
 }
 
 func (f *fnRun) source(line int, q string) *Value {
-	return &Value{T: taint.NewSource(line, f.text(line), false), Q: q}
+	return &Value{T: f.newSource(line, f.text(line)), Q: q}
 }
 
 func (f *fnRun) instr(in *ir.Instr, st State) {
