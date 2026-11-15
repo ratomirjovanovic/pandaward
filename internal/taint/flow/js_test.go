@@ -129,6 +129,8 @@ func TestJSExportForms(t *testing.T) {
 	for _, c := range []struct{ body, want string }{
 		{"function run (a) { exec(a) }\nexports.ok = function () { run('ls') }", ""},
 		{"function run (a) { exec(a) }\nexports = module.exports = run", "taint.js-command-injection:2"},
+		// a program that imports and exports nothing has no API
+		{"function run (a) { exec(a) }", ""},
 		{"function View (a) { exec(a) }\nexport default memo(View)", "taint.js-command-injection:2"},
 		{"function run (a) { exec(a) }\nclass C { go (b) { run(b) } }\nmodule.exports = new C()", "taint.js-command-injection:2"},
 		{"function run (a) { exec(a) }\nclass C { go () { run('ls') } }\nmodule.exports = new C()", ""},
