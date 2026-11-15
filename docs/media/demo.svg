@@ -25,7 +25,7 @@ text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",mo
 <text x="16" y="101">  private:  ~/acme-shop/.pandaward/private (gitignored ledger and evidence)</text>
 <text x="16" y="120">  profile:  local-passive (no network traffic to any target)</text>
 <text x="16" y="139"></text>
-<text x="16" y="158">Inventory: 9 text files, 15 assets, git 41e9812a5bc2</text>
+<text x="16" y="158">Inventory: 9 text files, 15 assets, git 2b1de7ee45c9</text>
 <text x="16" y="177">Languages: dockerfile:1 javascript:1 json:2 python:1 terraform:1 xml:1 yaml:2</text>
 <text x="16" y="196">Detected: admin_routes(1) android(1) auth(2) auth_routes(1) deploy_config(2) dockerfile(1) gi...</text>
 <text x="16" y="215">Sensitive files recorded by name only (content not read): 1</text>
@@ -35,24 +35,25 @@ text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",mo
 <g class="f s1">
 <text x="16" y="44"><tspan class="p">$ </tspan><tspan class="c">pandaward scan</tspan></text>
 <text x="16" y="63"></text>
-<text x="16" y="82">Assessment asmt_0001_20261111T122002Z: COMPLETE</text>
+<text x="16" y="82">Assessment asmt_0001_20261115T075557Z: COMPLETE</text>
 <text x="16" y="101">Adapters:</text>
 <text x="16" y="120">  builtin-inventory  OK           3 signals  15 assets</text>
 <text x="16" y="139">  builtin-secrets    OK           3 signals  16 secret formats checked; 1 sensitive file name...</text>
 <text x="16" y="158">  builtin-code       OK          13 signals  code heuristics</text>
-<text x="16" y="177">  builtin-cicd       OK           5 signals  1 workflows</text>
-<text x="16" y="196">  builtin-infra      OK           4 signals  dockerfile/compose/k8s/terraform checks</text>
-<text x="16" y="215">  builtin-supply     OK           1 signals  lockfiles, install scripts, requirement pins, MC...</text>
-<text x="16" y="234">  builtin-mobile     OK           3 signals  android manifest, iOS plist and entitlements, mo...</text>
-<text x="16" y="253">  gitleaks           OK           2 signals  exit 0</text>
-<text x="16" y="272">  semgrep            BLOCKED      0 signals  semgrep or opengrep is not installed (optional; ...</text>
-<text x="16" y="291">  osv-scanner        BLOCKED      0 signals  osv-scanner needs network access: it sends the p...</text>
-<text x="16" y="310">  trivy              BLOCKED      0 signals  trivy is not installed (optional; run `pandaward...</text>
-<text x="16" y="329">Controls: BLOCKED 20, FAIL 14, INCONCLUSIVE 1, NOT_APPLICABLE 14, PASS 8, SUSPECTED 10</text>
-<text x="16" y="348">Decisive coverage: 22/53 applicable controls (42%). Edges: 15 (0 verified, 5 failed, 10 open)</text>
-<text x="16" y="367">Findings: 34 open (34 new, 0 reopened, 0 remediated in this run)</text>
-<text x="16" y="386"></text>
-<text x="16" y="405">BLOCKED/UNSUPPORTED/SUSPECTED controls are not secure; see `pandaward status` and `pandaward ...</text>
+<text x="16" y="177">  builtin-taint      OK           4 signals  1 JavaScript/TypeScript files</text>
+<text x="16" y="196">  builtin-cicd       OK           5 signals  1 workflows</text>
+<text x="16" y="215">  builtin-infra      OK           4 signals  dockerfile/compose/k8s/terraform checks</text>
+<text x="16" y="234">  builtin-supply     OK           1 signals  lockfiles, install scripts, requirement pins, MC...</text>
+<text x="16" y="253">  builtin-mobile     OK           3 signals  android manifest, iOS plist and entitlements, mo...</text>
+<text x="16" y="272">  gitleaks           OK           2 signals  exit 0</text>
+<text x="16" y="291">  semgrep            BLOCKED      0 signals  semgrep or opengrep is not installed (optional; ...</text>
+<text x="16" y="310">  osv-scanner        BLOCKED      0 signals  osv-scanner needs network access: it sends the p...</text>
+<text x="16" y="329">  trivy              BLOCKED      0 signals  trivy is not installed (optional; run `pandaward...</text>
+<text x="16" y="348">Controls: BLOCKED 20, FAIL 14, INCONCLUSIVE 1, NOT_APPLICABLE 14, PASS 8, SUSPECTED 10</text>
+<text x="16" y="367">Decisive coverage: 22/53 applicable controls (42%). Edges: 15 (0 verified, 5 failed, 10 open)</text>
+<text x="16" y="386">Findings: 34 open (34 new, 0 reopened, 0 remediated in this run)</text>
+<text x="16" y="405"></text>
+<text x="16" y="424">BLOCKED/UNSUPPORTED/SUSPECTED controls are not secure; see `pandaward status` and `pandaward ...</text>
 </g>
 <g class="f s2">
 <text x="16" y="44"><tspan class="p">$ </tspan><tspan class="c">pandaward findings</tspan></text>
@@ -79,7 +80,7 @@ text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",mo
 </g>
 <g class="f s3">
 <text x="16" y="44"><tspan class="p">$ </tspan><tspan class="c">pandaward graph</tspan></text>
-<text x="16" y="63">Domains (asmt_0001_20261111T122002Z)</text>
+<text x="16" y="63">Domains (asmt_0001_20261115T075557Z)</text>
 <text x="16" y="82">  A Asset inventory, architecture and threat model     SUSPECTED 1, PASS 1, BLOCKED 1, INCONC...</text>
 <text x="16" y="101">  B Authentication, sessions and identity              SUSPECTED 1, PASS 1, BLOCKED 2</text>
 <text x="16" y="120">  C Authorization, roles and tenant isolation          BLOCKED 3, NOT_APPLICABLE 1</text>
@@ -102,7 +103,7 @@ text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",mo
 </g>
 <g class="f s4">
 <text x="16" y="44"><tspan class="p">$ </tspan><tspan class="c">pandaward fix-plan</tspan></text>
-<text x="16" y="63">Fix plan for acme-shop (asmt_0001_20261111T122002Z). Nothing is changed automatically.</text>
+<text x="16" y="63">Fix plan for acme-shop (asmt_0001_20261115T075557Z). Nothing is changed automatically.</text>
 <text x="16" y="82"></text>
 <text x="16" y="101">1. [critical] pull_request_target checks out untrusted PR code  (N-003, 1 location(s))</text>
 <text x="16" y="120">   Fix: Use pull_request for building untrusted code, or split into an unprivileged build and...</text>
@@ -115,12 +116,12 @@ text{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",mo
 <text x="16" y="253">   - PW-0034 src/server.js:2</text>
 <text x="16" y="272">   Retest: Apply the fix, then run `pandaward retest`; the finding becomes REMEDIATED only wh...</text>
 <text x="16" y="291"></text>
-<text x="16" y="310">3. [high] Dynamic code evaluation  (D-001, 1 location(s))</text>
-<text x="16" y="329">   Fix: Replace eval/new Function with explicit parsing or a lookup table; never evaluate str...</text>
-<text x="16" y="348">   - PW-0015 src/server.js:8</text>
+<text x="16" y="310">3. [high] Administrative or database port open to the internet  (J-004, 1 location(s))</text>
+<text x="16" y="329">   Fix: Restrict the source to a VPN/bastion range or use a managed access proxy.</text>
+<text x="16" y="348">   - PW-0028 infra/main.tf:6</text>
 <text x="16" y="367">   Retest: Apply the fix, then run `pandaward retest`; the finding becomes REMEDIATED only wh...</text>
 <text x="16" y="386"></text>
-<text x="16" y="405">4. [high] CORS allows any origin with credentials  (H-002, 1 location(s))</text>
-<text x="16" y="424">... 87 more lines</text>
+<text x="16" y="405">4. [high] Untrusted input written as HTML  (H-001, 1 location(s))</text>
+<text x="16" y="424">... 102 more lines</text>
 </g>
 </svg>
