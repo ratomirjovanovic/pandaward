@@ -436,7 +436,7 @@ func (p *parser) escapedChar(c rune) rune {
 			}
 			v, err := strconv.ParseUint(string(p.src[start:p.pos]), 16, 32)
 			p.pos++
-			if err != nil {
+			if err != nil || v > maxRune {
 				return c
 			}
 			r = rune(v)
@@ -458,7 +458,7 @@ func (p *parser) hex(n int, fallback rune) rune {
 		return fallback
 	}
 	v, err := strconv.ParseUint(string(p.src[p.pos:p.pos+n]), 16, 32)
-	if err != nil {
+	if err != nil || v > maxRune {
 		return fallback
 	}
 	p.pos += n
