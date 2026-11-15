@@ -33,51 +33,51 @@
       }
     },
     "owasp/java/opengrep": {
-      "average_score_covered": 0.7232309331734178,
+      "average_score_covered": 0.8177682802168246,
       "categories": {
-        "cmdi": 0.6726984126984127,
-        "crypto": 0.7461538461538462,
-        "hash": 0.689922480620155,
-        "ldapi": 0.6701388888888888,
-        "pathtraver": 0.561292119186856,
+        "cmdi": 0.736,
+        "crypto": 1,
+        "hash": 1,
+        "ldapi": 0.75,
+        "pathtraver": 0.6444444444444444,
         "securecookie": 1,
-        "sqli": 0.6788793103448276,
-        "trustbound": 0.40235360044830487,
+        "sqli": 0.728448275862069,
+        "trustbound": 0.5348837209302326,
         "weakrand": 1,
-        "xpathi": 0.7833333333333333,
-        "xss": 0.7507682732329716
+        "xpathi": 0.75,
+        "xss": 0.8516746411483254
       }
     },
     "owasp/java/pandaward": {
-      "average_score_covered": 0.7232309331734178,
+      "average_score_covered": 0.8177682802168246,
       "categories": {
-        "cmdi": 0.6726984126984127,
-        "crypto": 0.7461538461538462,
-        "hash": 0.689922480620155,
-        "ldapi": 0.6701388888888888,
-        "pathtraver": 0.561292119186856,
+        "cmdi": 0.736,
+        "crypto": 1,
+        "hash": 1,
+        "ldapi": 0.75,
+        "pathtraver": 0.6444444444444444,
         "securecookie": 1,
-        "sqli": 0.6788793103448276,
-        "trustbound": 0.40235360044830487,
+        "sqli": 0.728448275862069,
+        "trustbound": 0.5348837209302326,
         "weakrand": 1,
-        "xpathi": 0.7833333333333333,
-        "xss": 0.7507682732329716
+        "xpathi": 0.75,
+        "xss": 0.8516746411483254
       }
     },
     "owasp/java/semgrep": {
-      "average_score_covered": 0.4672112211576838,
+      "average_score_covered": 0.5275080029405413,
       "categories": {
-        "cmdi": 0.20247619047619048,
-        "crypto": 0.7461538461538462,
-        "hash": 0.689922480620155,
-        "ldapi": 0.28935185185185186,
-        "pathtraver": 0.15310498468393208,
+        "cmdi": 0.19384126984126993,
+        "crypto": 1,
+        "hash": 1,
+        "ldapi": 0.2754629629629629,
+        "pathtraver": 0.19910888331940968,
         "securecookie": 1,
-        "sqli": 0.24391480730223125,
-        "trustbound": 0.22667413841412165,
+        "sqli": 0.26331135902636926,
+        "trustbound": 0.3126926309890725,
         "weakrand": 1,
-        "xpathi": 0.2833333333333333,
-        "xss": 0.3043917998988602
+        "xpathi": 0.19999999999999996,
+        "xss": 0.35817092620686974
       }
     },
     "owasp/python/builtin": {
