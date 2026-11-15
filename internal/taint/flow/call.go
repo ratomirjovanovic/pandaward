@@ -70,7 +70,57 @@ func (f *fnRun) call(in *ir.Instr, st State) *Value {
 	if f.report {
 		f.weakSinks(c)
 	}
-	return f.weakSource(c, f.callResolved(c, st))
+	r := f.weakSource(c, f.callResolved(c, st))
+	for _, n := range c.names {
+		if contains(f.e.spec.Weak.RandomFill, n) && len(in.Args) > 0 {
+			if name := f.root(in.Args[0]); name != "" {
+				v := st[name].copy()
+				v.W = f.newSource(in.Pos.Line, f.text(in.Pos.Line))
+				v.WK |= taint.WeakRandom
+				st[name] = v
+			}
+		}
+	}
+	{
+		for _, n := range c.names {
+			if t, ok := f.e.spec.Returns[n]; ok {
+				r = r.copy()
+				r.Inst = t
+				break
+			}
+		}
+	}
+	// Properties.getProperty(key, default) reads the project's files.
+	if in.Name == "getProperty" && len(c.args) >= 1 && c.args[0].C != nil && r.T == nil {
+		if v, ok := f.e.props[c.args[0].C.Val]; ok {
+			return strVal(v)
+		}
+		if len(c.args) == 2 && c.args[1].C != nil {
+			return c.args[1]
+		}
+	}
+	if f.pureCall(c) {
+		inputs := append([]*Value{}, c.all...)
+		if c.in.Name != "" && c.method != "" {
+			inputs = append(inputs, c.recv)
+		}
+		r = purified(r, inputs...)
+	}
+	return r
+}
+
+// pureCall reports a call that only transforms its input, so its result
+// comes from constants when its input does.
+func (f *fnRun) pureCall(c *call) bool {
+	if c.method != "" {
+		return f.e.pureMethods[c.method]
+	}
+	for _, n := range c.names {
+		if f.e.pureCalls[n] {
+			return true
+		}
+	}
+	return false
 }
 
 func (f *fnRun) callResolved(c *call, st State) *Value {
@@ -99,7 +149,15 @@ func (f *fnRun) callResolved(c *call, st State) *Value {
 		kinds |= f.e.spec.SanitizesMethod(c.method)
 	}
 	if kinds == taint.All {
+		// A number or an escaped text is safe to use anywhere, but it is
+		// still the client's data: storing it in the session crosses the
+		// trust boundary.
 		r := &Value{}
+		for _, a := range append([]*Value{c.recv}, c.all...) {
+			if a.T != nil && r.T == nil {
+				r.T, r.Safe = a.T, taint.All&^taint.Trust
+			}
+		}
 		if len(c.names) > 0 {
 			r.Inst = c.names[0]
 		}
@@ -152,6 +210,11 @@ func (f *fnRun) callResolved(c *call, st State) *Value {
 		r.Safe |= kinds
 	}
 	for _, n := range c.names {
+		if f.e.decoders[n] && r.T != nil && r.Safe != 0 {
+			// decoded bytes can be anything again
+			r = r.copy()
+			r.Safe = 0
+		}
 		if f.e.urlParsers[n] && len(in.Args) > 0 {
 			r = r.copy()
 			r.From = f.root(in.Args[0])
@@ -402,10 +465,43 @@ func (f *fnRun) fold(c *call) *Value {
 	s := c.recv.C.Val
 	strs := make([]string, 0, len(c.args))
 	for _, a := range c.args {
-		if a.C == nil || a.C.Kind != ir.Str {
+		if a.C == nil {
 			return nil
 		}
 		strs = append(strs, a.C.Val)
+	}
+	ints := make([]int, 0, len(c.args))
+	for _, a := range c.args {
+		if n, ok := intConst(a); ok {
+			ints = append(ints, n)
+		}
+	}
+	r := []rune(s)
+	switch c.in.Name {
+	case "charAt":
+		if len(ints) == 1 && ints[0] >= 0 && ints[0] < len(r) {
+			return strVal(string(r[ints[0]]))
+		}
+	case "substring":
+		if len(ints) == len(c.args) && len(ints) >= 1 {
+			lo, hi := ints[0], len(r)
+			if len(ints) == 2 {
+				hi = ints[1]
+			}
+			if lo >= 0 && lo <= hi && hi <= len(r) {
+				return strVal(string(r[lo:hi]))
+			}
+		}
+	case "length":
+		if len(c.args) == 0 {
+			return intVal(int64(len(r)))
+		}
+	case "toUpperCase":
+		return strVal(strings.ToUpper(s))
+	case "toLowerCase":
+		return strVal(strings.ToLower(s))
+	case "trim":
+		return strVal(strings.TrimSpace(s))
 	}
 	switch c.in.Name {
 	case "upper":
@@ -485,6 +581,12 @@ func (f *fnRun) sinks(c *call, st State) {
 				f.found(s, c.in.Pos.Line, v)
 				break
 			}
+			if s.UnlessConstant && v.T == nil && !isPure(v) {
+				// Not from the request, but not from constants either: a
+				// hypothesis, as a pattern rule would report it.
+				f.foundUnknown(s, c.in.Pos.Line)
+				break
+			}
 		}
 	}
 }
@@ -554,6 +656,18 @@ func contains(list []string, s string) bool {
 
 func (f *fnRun) found(s *taint.Sink, line int, v *Value) {
 	f.foundAt(s, line, v.T)
+}
+
+// foundUnknown records a finding at a sink whose input has no known
+// origin.
+func (f *fnRun) foundUnknown(s *taint.Sink, line int) {
+	f.foundAt(s, line, nil)
+	k := f.mod.Path + "|" + s.ID + ":" + strconv.Itoa(line)
+	fd := f.p.findings[k]
+	if fd.Steps != nil && len(fd.Steps) == 1 {
+		fd.Library = true
+		f.p.findings[k] = fd
+	}
 }
 
 // foundAt records a finding at a sink with the trace that reached it, or

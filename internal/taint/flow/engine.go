@@ -25,23 +25,30 @@ type sinkTarget struct {
 
 // Engine analyzes modules against one specification.
 type Engine struct {
-	spec        *taint.Spec
-	calls       map[string][]sinkTarget
-	methods     map[string][]sinkTarget
-	stores      map[string]*taint.Sink
-	handlerSink *taint.Sink
-	srcAttrs    map[string]bool
-	srcCalls    map[string]bool
-	params      map[string]bool
-	routes      map[string]bool
-	normalizers map[string]bool
-	responses   map[string]bool
-	setters     map[string]bool
-	urlParsers  map[string]bool
-	textCalls   map[string]bool
-	lookups     map[string]bool
-	weak        weak
-	chains      [][]string
+	spec         *taint.Spec
+	calls        map[string][]sinkTarget
+	methods      map[string][]sinkTarget
+	stores       map[string]*taint.Sink
+	handlerSink  *taint.Sink
+	srcAttrs     map[string]bool
+	srcCalls     map[string]bool
+	params       map[string]bool
+	routes       map[string]bool
+	normalizers  map[string]bool
+	responses    map[string]bool
+	setters      map[string]bool
+	urlParsers   map[string]bool
+	textCalls    map[string]bool
+	lookups      map[string]bool
+	paramAnns    map[string]bool
+	weakAlgs     map[string][]weakAlg
+	props        map[string]string
+	secretStores []secretStore
+	weak         weak
+	chains       [][]string
+	pureCalls    map[string]bool
+	decoders     map[string]bool
+	pureMethods  map[string]bool
 }
 
 // New prepares an engine for a specification.
@@ -50,6 +57,28 @@ func New(spec *taint.Spec) *Engine {
 		srcAttrs: set(spec.Sources.Attributes), srcCalls: set(spec.Sources.Calls), params: set(spec.Sources.Params),
 		routes: set(spec.Sources.RouteDecorators), normalizers: set(spec.Normalizers), responses: set(spec.Responses.Calls), setters: map[string]bool{}, urlParsers: set(spec.URLParsers), textCalls: set(spec.TextCalls), lookups: set(spec.Lookups)}
 	e.weak = newWeak(spec)
+	e.paramAnns = set(spec.Sources.ParamAnnotations)
+	e.weakAlgs = map[string][]weakAlg{}
+	for _, s := range spec.Sinks {
+		if s.WeakAlgorithms == nil {
+			continue
+		}
+		for _, c := range s.WeakAlgorithms.Calls {
+			name, arg, _ := strings.Cut(c, "#")
+			n, _ := strconv.Atoi(arg)
+			e.weakAlgs[name] = append(e.weakAlgs[name], weakAlg{s, n})
+		}
+	}
+	for _, st := range spec.Weak.SecretStores {
+		parts := strings.Split(st, "#")
+		if len(parts) == 3 {
+			k, _ := strconv.Atoi(parts[1])
+			v, _ := strconv.Atoi(parts[2])
+			e.secretStores = append(e.secretStores, secretStore{parts[0], k, v})
+		}
+	}
+	e.pureCalls, e.pureMethods = set(spec.Pure.Calls), set(spec.Pure.Methods)
+	e.decoders = set(spec.Decoders)
 	for _, c := range spec.Sources.Chains {
 		e.chains = append(e.chains, strings.Split(c, "."))
 	}
@@ -136,6 +165,9 @@ type fnRun struct {
 	fn     *ir.Function
 	route  bool
 	report bool
+	// path is the route of a handler without path parameters: what
+	// request.path holds while it runs.
+	path string
 	// ret and self are the returned value and self at the returns, joined
 	// in the report pass.
 	ret, self *Value
@@ -213,12 +245,20 @@ func (r *run) root(fn *ir.Function) {
 	typed := typedParams(fn)
 	entry := State{}
 	for _, p := range fn.Params {
-		v := &Value{}
+		v := &Value{Inst: p.Ann}
+		if numericType[p.Ann] || javaScalar[p.Ann] {
+			v.Inst = ""
+		}
 		if r.e.params[p.Name] {
 			v.Q = p.Name
 		}
-		if route && p.Name != "self" && p.Name != "cls" && !typed[p.Name] && !numericType[p.Ann] {
+		if route && p.Name != "self" && p.Name != "cls" && p.Name != "this" && !typed[p.Name] && !numericType[p.Ann] && !javaScalar[p.Ann] {
 			v.T = r.newSource(p.Pos.Line, "route parameter "+p.Name)
+		}
+		for _, d := range p.Decorators {
+			if r.e.paramAnns[d.Name] && !javaScalar[p.Ann] {
+				v.T = r.newSource(p.Pos.Line, "@"+d.Name+" "+p.Name)
+			}
 		}
 		entry[p.Name] = v
 	}
@@ -243,6 +283,9 @@ func (r *run) function(fn *ir.Function, entry State, route bool) (ret, self *Val
 // only with arguments it accepted.
 func (r *run) analyzeFn(fn *ir.Function, entry State, route bool) (ret, self *Value, validates bool) {
 	f := &fnRun{run: r, fn: fn, route: route, shared: sharedTemps(fn)}
+	if route {
+		f.path = fixedRoute(fn)
+	}
 	in := map[*ir.Block]State{fn.Entry(): entry}
 	visits := map[*ir.Block]int{}
 	work := []*ir.Block{fn.Entry()}
@@ -285,6 +328,36 @@ func (r *run) analyzeFn(fn *ir.Function, entry State, route bool) (ret, self *Va
 	}
 	return f.ret, f.self, f.raises && !f.returns
 }
+
+// fixedRoute returns the path of a route decorator without parameters
+// (@app.route('/about')), or "".
+func fixedRoute(fn *ir.Function) string {
+	for _, d := range fn.Decorators {
+		if d.Call && len(d.Args) > 0 && strings.HasPrefix(d.Args[0], "/") {
+			if strings.ContainsAny(d.Args[0], "<{") {
+				return ""
+			}
+			return d.Args[0]
+		}
+	}
+	return ""
+}
+
+// isClassName reports a qualified class name, whose last part starts
+// with a capital letter, as opposed to the name of a factory method a
+// value was returned by (Runtime.getRuntime).
+func isClassName(q string) bool {
+	last := q[strings.LastIndexByte(q, '.')+1:]
+	return last != "" && last[0] >= 'A' && last[0] <= 'Z'
+}
+
+// textTypes are declared types whose values are text.
+var textTypes = map[string]bool{"String": true, "java.lang.String": true, "CharSequence": true, "char[]": true, "byte[]": true,
+	"String[]": true, "StringBuilder": true, "StringBuffer": true}
+
+// javaScalar are Java types whose values cannot carry text.
+var javaScalar = map[string]bool{"int": true, "long": true, "short": true, "byte": true, "boolean": true, "double": true, "float": true, "char": true,
+	"Integer": true, "Long": true, "Short": true, "Byte": true, "Boolean": true, "Double": true, "Float": true, "java.util.UUID": true}
 
 // routeParam matches a typed path parameter such as <int:id>.
 var routeParam = regexp.MustCompile(`<(\w+):(\w+)>`)
@@ -376,8 +449,10 @@ func (f *fnRun) block(b *ir.Block, s State, push func(*ir.Block, State)) {
 			if !t.Value.IsZero() && !(v.C != nil && v.C.Kind == ir.None) {
 				f.returns = true
 			}
-			if v, ok := st["self"]; ok {
-				f.self = joinFirst(f.self, v)
+			for _, name := range []string{"self", "this"} {
+				if v, ok := st[name]; ok {
+					f.self = joinFirst(f.self, v)
+				}
 			}
 		}
 		if f.report && f.route && f.html && f.e.handlerSink != nil {
@@ -523,9 +598,15 @@ func (f *fnRun) instr(in *ir.Instr, st State) {
 			f.envs[in.Fn] = st.copy()
 		}
 	case ir.Bin:
-		f.set(st, in.Dst, binary(in.Name, f.val(st, in.A), f.val(st, in.B)), line)
+		a, b := f.val(st, in.A), f.val(st, in.B)
+		r := purified(binary(in.Name, a, b), a, b)
+		if in.Name == "+" {
+			r = hinted(r, a, b)
+		}
+		f.set(st, in.Dst, r, line)
 	case ir.Unary:
-		f.set(st, in.Dst, unary(in.Name, f.val(st, in.A)), line)
+		a := f.val(st, in.A)
+		f.set(st, in.Dst, purified(unary(in.Name, a), a), line)
 	case ir.Load:
 		v := f.load(f.val(st, in.A), in.Name, line)
 		if v.T == nil && f.chained(in) {
@@ -546,23 +627,52 @@ func (f *fnRun) instr(in *ir.Instr, st State) {
 			st[in.A.Var] = mix(base, v)
 		}
 	case ir.Index:
-		f.set(st, in.Dst, f.index(in, st), line)
+		r := f.index(in, st)
+		if in.Name == "slice" {
+			r = purified(r, f.val(st, in.A), f.val(st, in.B), f.val(st, in.C))
+		} else {
+			r = purified(r, f.val(st, in.A), f.val(st, in.B))
+		}
+		f.set(st, in.Dst, r, line)
 	case ir.SetIndex:
 		f.setIndex(in, st)
 	case ir.Build:
 		f.set(st, in.Dst, f.build(in, st), line)
 	case ir.Iter:
 		f.set(st, in.Dst, iterate(f.val(st, in.A)), line)
+	case ir.Cast:
+		v := f.val(st, in.A)
+		// The declared type names the class, unless the value is an
+		// instance of a class of the project, whose methods are analyzed.
+		if in.Name != "" && in.Name != "Object" && v.Inst != in.Name && f.p.classes[v.Inst] == nil && !javaScalar[in.Name] && !isClassName(v.Inst) {
+			v = v.copy()
+			v.Inst = in.Name
+		}
+		// A value declared as text is text, whatever call returned it.
+		if v.Opaque && textTypes[in.Name] {
+			v = v.copy()
+			v.Opaque = false
+		}
+		st[in.Dst] = v
 	case ir.Call:
 		f.set(st, in.Dst, f.call(in, st), line)
 	}
 }
 
 func (f *fnRun) load(base *Value, name string, line int) *Value {
+	if name == "path" && f.path != "" && strings.HasSuffix(base.Q, "request") {
+		return strVal(f.path)
+	}
 	if fv, ok := base.Fields["."+name]; ok {
 		return fv
 	}
 	if base.Q != "" {
+		// a static field of a class of the project
+		if r := f.p.module(base.Q); r != nil {
+			if v, ok := r.exit[name]; ok {
+				return v
+			}
+		}
 		q := base.Q + "." + name
 		if f.e.srcAttrs[q] {
 			return f.source(line, q)
@@ -738,9 +848,10 @@ func (f *fnRun) build(in *ir.Instr, st State) *Value {
 	case "str":
 		r := &Value{}
 		var sb strings.Builder
-		allConst := true
+		allConst, allPure := true, true
 		for _, a := range in.Args {
 			v := f.val(st, a)
+			allPure = allPure && isPure(v)
 			r = mix(r, v)
 			if v.C != nil && v.C.Kind == ir.Str {
 				sb.WriteString(v.C.Val)
@@ -753,9 +864,10 @@ func (f *fnRun) build(in *ir.Instr, st State) *Value {
 		if allConst && r.T == nil {
 			return strVal(sb.String())
 		}
-		if r.Opaque {
+		if r.Opaque || allPure {
 			r = r.copy()
 			r.Opaque = false // text built here
+			r.Pure = allPure
 		}
 		return r
 	case "list", "tuple":

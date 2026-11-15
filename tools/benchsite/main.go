@@ -283,7 +283,7 @@ func parseCVE(b []byte) (*CVE, error) {
 	return c, nil
 }
 
-var engineLabel = map[string]string{"pandaward": "PandaWard", "builtin": "Built-in rules", "taint": "Built-in taint engine", "semgrep": "Semgrep", "opengrep": "Opengrep"}
+var engineLabel = map[string]string{"pandaward": "PandaWard", "builtin": "Built-in heuristics", "taint": "Built-in taint engine", "semgrep": "Semgrep", "opengrep": "Opengrep"}
 
 var funcs = template.FuncMap{
 	"engine": func(name string) string {
