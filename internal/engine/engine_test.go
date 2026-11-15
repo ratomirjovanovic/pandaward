@@ -53,7 +53,8 @@ func TestVulnerableFixture(t *testing.T) {
 	// On JavaScript lines with a flow from the request, the taint finding
 	// replaces the heuristic.
 	byTaint := map[string]string{"code.js-eval": "taint.js-code-injection", "code.js-shell": "taint.js-command-injection",
-		"code.sql-concat": "taint.js-sql-injection", "code.html-sink": "taint.js-xss"}
+		"code.sql-concat": "taint.js-sql-injection", "code.html-sink": "taint.js-xss",
+		"code.py-eval": "taint.py-code-injection", "code.py-shell": "taint.py-command-injection"}
 	for _, want := range []string{"secret.stripe-live-key", "secret.github-token", "code.js-eval", "code.py-eval", "code.js-shell", "code.py-shell", "code.sql-concat",
 		"code.py-deserialize", "code.tls-verify-off", "code.jwt-decode-no-verify", "code.html-sink", "code.cors-wildcard-credentials", "code.webhook-no-signature",
 		"code.llm-output-exec", "cicd.unpinned-action", "cicd.script-injection", "cicd.prt-untrusted-checkout", "cicd.no-permissions", "infra.container-root",

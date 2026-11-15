@@ -192,6 +192,8 @@ type Param struct {
 	Pos  Pos
 	// Ann is the dotted name of the annotation, if it is a name.
 	Ann string
+	// Default is the default value when it is a constant.
+	Default *Const
 }
 
 // Decorator is a decorator applied to a function: the dotted name it calls

@@ -22,7 +22,10 @@ const (
 	maxCalls     = 2000
 )
 
-type callResult struct{ ret, self *Value }
+type callResult struct {
+	ret, self *Value
+	validates bool
+}
 
 // Project analyzes the modules of one project together: a call of a
 // function or class another module defines is analyzed with the actual
@@ -250,9 +253,21 @@ func (f *fnRun) project(c *call, st State) (*Value, bool) {
 	} else if decorated(fn, "classmethod") {
 		self = &Value{}
 	}
-	ret, selfOut, ok := f.invoke(fn, self, c)
+	ret, selfOut, validates, ok := f.invoke(fn, self, c)
 	if !ok {
 		return nil, false
+	}
+	if validates {
+		// check(x) raised on what it rejects: x passed it.
+		for _, a := range in.Args {
+			if name := f.root(a); name != "" {
+				if v, ok := st[name]; ok && v.T != nil {
+					n := v.copy()
+					n.Safe = taint.All
+					st[name] = n
+				}
+			}
+		}
 	}
 	if self != nil && selfOut != nil && in.A.Var != "" && c.recv.Inst != "" {
 		// a method that sets attributes of self
@@ -278,7 +293,7 @@ func (f *fnRun) instantiate(class *ir.Function, c *call) *Value {
 	r := f.p.owner[class]
 	inst := &Value{Inst: className(r.mod, class)}
 	if init := f.p.method(class, "__init__", 0); init != nil {
-		if _, selfOut, ok := f.invoke(init, inst, c); ok && selfOut != nil {
+		if _, selfOut, _, ok := f.invoke(init, inst, c); ok && selfOut != nil {
 			inst = selfOut.copy()
 			inst.Inst = className(r.mod, class)
 		}
@@ -294,31 +309,34 @@ func (f *fnRun) instantiate(class *ir.Function, c *call) *Value {
 
 // invoke analyzes fn with the arguments of a call, once per distinct
 // arguments.
-func (f *fnRun) invoke(fn *ir.Function, self *Value, c *call) (ret, selfOut *Value, ok bool) {
+func (f *fnRun) invoke(fn *ir.Function, self *Value, c *call) (ret, selfOut *Value, validates, ok bool) {
 	p := f.p
 	owner := p.owner[fn]
 	if owner == nil || p.active[fn] || p.depth >= maxCallDepth {
-		return nil, nil, false
+		return nil, nil, false, false
 	}
 	entry := bind(fn, self, c)
+	// A nested function also reads its enclosing scope, which the key does
+	// not hold: it is analyzed again at each call.
+	closure := fn.Parent != nil && fn.Parent != owner.mod.Init && !isClass(fn.Parent)
 	key := memoKey(fn, entry)
-	if r, ok := p.memo[key]; ok {
-		return r.ret, r.self, true
+	if r, ok := p.memo[key]; ok && !closure {
+		return r.ret, r.self, r.validates, true
 	}
 	if p.calls >= maxCalls {
-		return nil, nil, false
+		return nil, nil, false, false
 	}
 	p.calls++
 	p.active[fn] = true
 	p.depth++
-	ret, selfOut = owner.function(fn, entry, false)
+	ret, selfOut, validates = owner.analyzeFn(fn, entry, false)
 	p.depth--
 	delete(p.active, fn)
 	if ret == nil {
 		ret = &Value{}
 	}
-	p.memo[key] = callResult{ret, selfOut}
-	return ret, selfOut, true
+	p.memo[key] = callResult{ret, selfOut, validates}
+	return ret, selfOut, validates, true
 }
 
 // bind sets the parameters of fn from the arguments of a call.
@@ -356,6 +374,8 @@ func bind(fn *ir.Function, self *Value, c *call) State {
 				pos = pos[1:]
 			case ok:
 				entry[prm.Name] = v
+			case prm.Default != nil:
+				entry[prm.Name] = constVal(prm.Default)
 			default:
 				entry[prm.Name] = &Value{}
 			}

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path"
 	"strings"
+	"sync"
 
 	"github.com/ratomirjovanovic/pandaward/internal/inventory"
 	"github.com/ratomirjovanovic/pandaward/internal/model"
@@ -232,4 +233,32 @@ func isLibrary(inv *inventory.Inventory) bool {
 	// Without main, npm loads index.js: a named, versioned package with
 	// one publishes it.
 	return pkg.Name != "" && pkg.Version != "" && inv.FileByPath("index.js") != nil
+}
+
+var (
+	taintSupersedeOnce sync.Once
+	taintSupersede     map[string][]string // language -> bundled rule ids
+)
+
+// TaintReplaces returns the taint adapter's name when its engine replaces
+// the bundled Semgrep rule ruleID in a file of that language: it analyzes
+// every such file outside test paths, and its specification lists the
+// rules it decides better (`supersedes`). It returns "" otherwise, also
+// for rules a project adds itself.
+func TaintReplaces(ruleID, lang, path string) string {
+	taintSupersedeOnce.Do(func() {
+		taintSupersede = map[string][]string{}
+		if spec, err := taint.Load("python"); err == nil {
+			taintSupersede["python"] = spec.Supersedes
+		}
+	})
+	if IsTestPath(path) {
+		return ""
+	}
+	for _, id := range taintSupersede[lang] {
+		if ruleID == id || strings.HasSuffix(ruleID, "."+id) {
+			return TaintAdapter
+		}
+	}
+	return ""
 }

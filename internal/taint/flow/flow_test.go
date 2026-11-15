@@ -414,3 +414,58 @@ func TestWords(t *testing.T) {
 		}
 	}
 }
+
+// A nested function reads its enclosing scope at the call; a helper that
+// raises on what it rejects validates its argument; a parameter's
+// constant default chooses the branch; a server-side request and a
+// library URL check.
+func TestCallsAndChecks(t *testing.T) {
+	src := header + `import requests
+from django.utils.http import url_has_allowed_host_and_scheme
+def check(path):
+    if '..' in path:
+        raise PermissionError(path)
+
+def full(name, setup=False):
+    if setup:
+        return name
+    check(name)
+    def short():
+        return name
+    return short()
+
+def leak(name):
+    def short():
+        return name
+    return short()
+
+@app.route('/a')
+def a():
+    x = request.args.get("x")
+    open(full(x))
+    open(leak(x))
+    requests.get(x)
+    if url_has_allowed_host_and_scheme(x, allowed_hosts=None):
+        return redirect(x)
+    return redirect(x)
+`
+	got := strings.Join(sinks(analyze(t, src)), " ")
+	want := "open-redirect:31 path-traversal:27 ssrf:28"
+	if got != want {
+		t.Errorf("got  %s\nwant %s", got, want)
+	}
+}
+
+// A language model's reply is untrusted wherever it is read.
+func TestModelOutput(t *testing.T) {
+	src := `import subprocess
+def run(completion, message):
+    eval(completion.choices[0].message.content)
+    subprocess.run("ls " + message.content[0].text, shell=True)
+    eval(completion.choices[0].message.role + "x")
+`
+	got := strings.Join(sinks(analyze(t, src)), " ")
+	if got != "code-injection:3 command-injection:4" {
+		t.Errorf("got %s", got)
+	}
+}

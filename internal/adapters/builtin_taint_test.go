@@ -30,7 +30,9 @@ func TestTaintAdapterOnFixture(t *testing.T) {
 	var got []string
 	for _, s := range res.Signals {
 		got = append(got, s.RuleID+"@"+s.File+":"+strconv.Itoa(s.StartLine))
-		if !strings.Contains(s.Message, "Flow: req.") {
+		// JavaScript flows start at the request; the Python ones at the
+		// language model's reply.
+		if !strings.Contains(s.Message, "Flow: req.") && !strings.Contains(s.Message, "message.content") {
 			t.Errorf("%s: message lacks the flow: %s", s.RuleID, s.Message)
 		}
 		if s.Severity != model.SevHigh || s.Confidence != model.StronglySupported {
@@ -43,6 +45,8 @@ func TestTaintAdapterOnFixture(t *testing.T) {
 		"taint.js-command-injection@src/server.js:8",
 		"taint.js-sql-injection@src/server.js:6",
 		"taint.js-xss@src/server.js:9",
+		"taint.py-code-injection@app.py:7",
+		"taint.py-command-injection@app.py:6",
 	}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("got %v\nwant %v", got, want)
