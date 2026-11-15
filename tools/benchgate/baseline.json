@@ -113,22 +113,22 @@
       }
     },
     "owasp/python/pandaward": {
-      "average_score_covered": 0.6365694072519454,
+      "average_score_covered": 0.7607021242844533,
       "categories": {
-        "cmdi": 0.7692307692307693,
-        "codeinj": 0.47878787878787876,
+        "cmdi": 0.8461538461538461,
+        "codeinj": 0.6287878787878788,
         "deserialization": 0.6666666666666667,
         "hash": 1,
-        "ldapi": 0.6730769230769231,
-        "pathtraver": 0.5296489917849141,
-        "redirect": 0.6263736263736264,
+        "ldapi": 0.7980769230769231,
+        "pathtraver": 0.7911874533233756,
+        "redirect": 0.8571428571428572,
         "securecookie": 1,
         "sqli": 0.6,
-        "trustbound": 0.2923976608187135,
+        "trustbound": 0.34795321637426907,
         "weakrand": 1,
-        "xpathi": 0.2758169934640523,
-        "xss": 0.474972191323693,
-        "xxe": 0.525
+        "xpathi": 0.6875816993464052,
+        "xss": 0.6512791991101223,
+        "xxe": 0.775
       }
     },
     "owasp/python/semgrep": {
@@ -148,6 +148,25 @@
         "xpathi": 0.21917211328976033,
         "xss": 0.2124582869855395,
         "xxe": 0.525
+      }
+    },
+    "owasp/python/taint": {
+      "average_score_covered": 0.6418709744529283,
+      "categories": {
+        "cmdi": 0.8461538461538461,
+        "codeinj": 0.75,
+        "deserialization": 0.8888888888888888,
+        "hash": 0,
+        "ldapi": 0.875,
+        "pathtraver": 0.9076923076923077,
+        "redirect": 1,
+        "securecookie": 0,
+        "sqli": 0.6,
+        "trustbound": 0.6111111111111112,
+        "weakrand": 0,
+        "xpathi": 0.8431372549019608,
+        "xss": 0.7892102335928809,
+        "xxe": 0.875
       }
     }
   }
