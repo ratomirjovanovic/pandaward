@@ -182,7 +182,11 @@ func (l *lowerer) function(name string, line int, params []Expr, body []Stmt, ex
 		if _, ok := p.(*Spread); ok {
 			kind = "*"
 		}
-		fn.Params = append(fn.Params, ir.Param{Name: pname, Kind: kind, Pos: at(p.Ln())})
+		ann := ""
+		if id, ok := p.(*Ident); ok && (id.Type == "Request" || id.Type == "NextRequest") {
+			ann = id.Type
+		}
+		fn.Params = append(fn.Params, ir.Param{Name: pname, Kind: kind, Ann: ann, Pos: at(p.Ln())})
 	}
 	l.mod.Funcs = append(l.mod.Funcs, fn)
 
@@ -1364,7 +1368,7 @@ func (l *lowerer) jsx(e *JSXElement) ir.Operand {
 	for _, a := range e.Attrs {
 		if a.Spread {
 			vals = append(vals, l.expr(a.Value))
-			keys = append(keys, ir.Operand{})
+			keys = append(keys, ir.C(ir.Str, "..."))
 			continue
 		}
 		vals = append(vals, l.expr(a.Value))

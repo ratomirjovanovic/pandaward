@@ -31,6 +31,9 @@ type (
 	Ident struct {
 		Pos
 		Name string
+		// Type is the TypeScript annotation of a parameter when it is a
+		// plain name (request: Request), else "".
+		Type string
 	}
 	// Lit is a literal. Kind is String, Number, Regex or Ident (true, false,
 	// null, undefined is an Ident); Val is the cooked string value or the

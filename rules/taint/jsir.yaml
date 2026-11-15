@@ -228,10 +228,10 @@ sinks:
     message: Input chooses where the user is redirected, so a link can send users to another site.
     fix: Redirect only to relative paths or to an allowlist of hosts.
     # res.redirect(url), and ctx.redirect or this.redirect in Koa
-    calls: [express.response.redirect, express.request.redirect, this.redirect]
+    calls: [express.response.redirect, express.request.redirect, this.redirect, next/server.NextResponse.redirect, NextResponse.redirect]
     methods: [redirect#0]
     method_receivers:
-      redirect: [res, response, reply]
+      redirect: [res, response, reply, ctx]
     props: [location.href, window.location.href]
     request_only: true
 

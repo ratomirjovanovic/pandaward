@@ -978,7 +978,14 @@ func (p *parser) params() ([]Expr, []string) {
 		if p.ts {
 			p.eat("?")
 			if p.eat(":") {
+				name := ""
+				if p.tok.Kind == TIdent {
+					name = p.tok.Val
+				}
 				p.skipType()
+				if id, ok := param.(*Ident); ok && (p.is(",") || p.is(")") || p.is("=")) {
+					id.Type = name
+				}
 			}
 		}
 		if p.is("=") {

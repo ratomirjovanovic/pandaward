@@ -260,6 +260,10 @@ func scanApps(dirs []string) {
 			fmt.Fprintln(os.Stderr, root, err)
 			continue
 		}
+		if useIR {
+			files, total = scanIR(inv, root, files, total)
+			continue
+		}
 		res, run := adapters.ByName(adapters.TaintAdapter).Run(context.Background(), &adapters.Context{Root: root, Inv: inv, Cfg: cfg})
 		fmt.Fprintln(os.Stderr, root+":", run.Detail)
 		var k int
@@ -272,4 +276,37 @@ func scanApps(dirs []string) {
 		}
 	}
 	fmt.Printf("%d files, %d findings\n", files, total)
+}
+
+// scanIR prints the findings of the IR engine in the JavaScript and
+// TypeScript files of an inventory, one file at a time and without
+// library mode, as the application code of a scan is analyzed.
+func scanIR(inv *inventory.Inventory, root string, files, total int) (int, int) {
+	for _, f := range inv.Files {
+		if f.Lang != "javascript" && f.Lang != "typescript" {
+			continue
+		}
+		path := filepath.Join(root, filepath.FromSlash(f.Path))
+		b, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		files++
+		file := js.Parse(f.Path, string(b), js.OptionsFor(f.Path))
+		spec, err := taint.Load("jsir")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		p := flow.New(spec).NewProject(func(string) (*ir.Module, []string) { return nil, nil })
+		for _, x := range p.AnalyzeOne(js.Lower(file, f.Path, nil), strings.Split(string(b), "\n")) {
+			total++
+			what := ""
+			if len(x.Steps) > 0 {
+				what = x.Steps[0].What
+			}
+			fmt.Printf("%s:%d %s\n    %s\n", path, x.Line, x.Sink.ID, what)
+		}
+	}
+	return files, total
 }

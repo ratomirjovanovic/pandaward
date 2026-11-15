@@ -14,15 +14,21 @@ import (
 // "sink:line" for each flow.
 func jsFlows(t *testing.T, src string) []string {
 	t.Helper()
+	return jsFlowsIn(t, "app.js", src)
+}
+
+// jsFlowsIn is jsFlows for a file of the given name.
+func jsFlowsIn(t *testing.T, name, src string) []string {
+	t.Helper()
 	spec, err := taint.Load("jsir")
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := js.Parse("app.js", src, js.OptionsFor("app.js"))
+	f := js.Parse(name, src, js.OptionsFor(name))
 	p := New(spec).NewProject(func(string) (*ir.Module, []string) { return nil, nil })
 	p.Library = true
 	var out []string
-	for _, x := range p.AnalyzeOne(js.Lower(f, "app.js", nil), strings.Split(src, "\n")) {
+	for _, x := range p.AnalyzeOne(js.Lower(f, name, nil), strings.Split(src, "\n")) {
 		at := fmt.Sprintf("%s:%d", x.Sink.ID, x.Line)
 		if x.EndLine > x.Line {
 			at += fmt.Sprintf("-%d", x.EndLine)
@@ -298,5 +304,35 @@ app.get('/', function (req, res) {
 		if got != c.want {
 			t.Errorf("got %q, want %q\n%s", got, c.want, c.src)
 		}
+	}
+}
+
+// TestJSNextRoutes checks the route handlers of Next.js: a parameter typed
+// Request is the request, a redirect to it is reported, and a page whose
+// markup holds the request elsewhere is not an XSS.
+func TestJSNextRoutes(t *testing.T) {
+	src := `import { NextResponse } from "next/server"
+export async function GET(request: Request) {
+  const { searchParams, origin } = new URL(request.url)
+  const next = searchParams.get("next") ?? "/"
+  return NextResponse.redirect(` + "`${origin}${next}`" + `)
+}
+export function POST(request: Request) {
+  return NextResponse.redirect("/done")
+}`
+	if got := strings.Join(jsFlowsIn(t, "route.ts", src), " "); got != "taint.js-open-redirect:5" {
+		t.Errorf("got %q", got)
+	}
+	page := `export default function Page() {
+  const shop = new URLSearchParams(window.location.search).get('shop') ?? ''
+  return (
+    <div>
+      <p>{shop}</p>
+      <a href={'/x/' + shop}>x</a>
+    </div>
+  )
+}`
+	if got := jsFlowsIn(t, "page.tsx", page); len(got) != 0 {
+		t.Errorf("page: got %v", got)
 	}
 }

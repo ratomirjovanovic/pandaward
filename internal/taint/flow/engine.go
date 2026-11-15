@@ -311,7 +311,7 @@ func (e *Engine) requestParams(fn *ir.Function) (map[string]bool, bool) {
 	}
 	var req map[string]bool
 	for _, p := range fn.Params {
-		if e.reqNames[p.Name] && (!e.reqWeak[p.Name] || res) {
+		if e.reqNames[p.Name] && (!e.reqWeak[p.Name] || res || requestTypes[p.Ann]) {
 			if req == nil {
 				req = map[string]bool{}
 			}
@@ -320,6 +320,10 @@ func (e *Engine) requestParams(fn *ir.Function) (map[string]bool, bool) {
 	}
 	return req, res && req != nil
 }
+
+// requestTypes are annotations that make a weak name a request: the
+// route handlers of Next.js (GET(request: Request)).
+var requestTypes = map[string]bool{"Request": true, "NextRequest": true}
 
 // responseNames are parameter names of a handler's response.
 var responseNames = map[string]bool{"res": true, "response": true, "reply": true, "h": true}

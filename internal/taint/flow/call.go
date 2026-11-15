@@ -728,7 +728,17 @@ func (f *fnRun) jsxSinks(c *call) {
 			for _, part := range strings.Split(path, ".") {
 				next, ok := v.Fields[part]
 				if !ok {
-					v = taintOf(v)
+					// Not written as an attribute: only a spread
+					// ({...props}) can still carry it.
+					if sp, ok := v.Fields["..."]; ok {
+						if n, ok := sp.Fields[part]; ok {
+							v = n
+							continue
+						}
+						v = taintOf(sp)
+					} else {
+						v = empty
+					}
 					break
 				}
 				v = next
