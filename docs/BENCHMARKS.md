@@ -34,7 +34,7 @@ The [OWASP Benchmark](https://github.com/OWASP-Benchmark/BenchmarkJava) is a Jav
 
 ```sh
 sh tools/owaspbench/run.sh                                     # Java, built-in rules, table
-sh tools/owaspbench/run.sh --engine builtin,semgrep,opengrep   # every engine, plus PandaWard as a scan runs them
+sh tools/owaspbench/run.sh --engine builtin,semgrep,opengrep,taint   # every engine, plus PandaWard as a scan runs them
 sh tools/owaspbench/run.sh --suite python --engine semgrep     # Python
 sh tools/owaspbench/run.sh --engine semgrep --json              # JSON
 ```
@@ -52,7 +52,7 @@ A category with no rule for an engine is shown as "not covered" rather than as a
 | | |
 |---|---|
 | Benchmark | OWASP BenchmarkJava, commit `f40c618c5a709afce350ef06ed2899c85cf586e9`, expected results 1.2 |
-| PandaWard | `main` at `6c3989c` (after #401), manual `benchmarks` run [43688116462](https://github.com/ratomirjovanovic/pandaward/actions/runs/43688116462) on GitHub Actions |
+| PandaWard | `main` at `368ef4e` (after #427), `benchmarks` run [43728451715](https://github.com/ratomirjovanovic/pandaward/actions/runs/43728451715) of #427 on GitHub Actions, whose tree is that commit's |
 | Engines | built-in rules; the built-in taint engine; Semgrep 1.182.0 and Opengrep 1.33.1 with the bundled rule set `03b1554f67a40da1...` |
 | Date | 2026-11-15 |
 | Tool | `tools/owaspbench` |
@@ -63,39 +63,42 @@ Average score over covered categories, and over all 11 categories with not cover
 
 | Engine | Covered categories | Average, covered | Average, all 11 |
 |---|---|---|---|
-| PandaWard (built-in rules and Opengrep, as a scan runs them) | 11 | +0.818 | +0.818 |
-| Built-in rules | 6 | -0.000 | -0.000 |
+| PandaWard (built-in heuristics, taint engine and Opengrep, as a scan runs them) | 11 | +1.000 | +1.000 |
+| Taint engine alone (#406) | 11 | +1.000 | +1.000 |
+| Built-in heuristics | 6 | -0.000 | -0.000 |
 | Semgrep 1.182.0, bundled rules | 11 | +0.528 | +0.528 |
 | Opengrep 1.33.1, bundled rules | 11 | +0.818 | +0.818 |
 
 Per category (TPR / FPR / score):
 
-| Category | CWE | Real | Not real | Built-in | Semgrep | Opengrep | Bundled rule |
-|---|---|---|---|---|---|---|---|
-| cmdi | 78 | 126 | 125 | 0.000 / 0.000 / +0.000 | 0.770 / 0.576 / +0.194 | 1.000 / 0.264 / +0.736 | `pandaward-java-command-exec` |
-| crypto | 327 | 130 | 116 | not covered | 1.000 / 0.000 / +1.000 | 1.000 / 0.000 / +1.000 | `pandaward-java-weak-cipher` |
-| hash | 328 | 129 | 107 | 0.000 / 0.000 / +0.000 | 1.000 / 0.000 / +1.000 | 1.000 / 0.000 / +1.000 | `pandaward-java-weak-hash` |
-| ldapi | 90 | 27 | 32 | not covered | 0.963 / 0.688 / +0.275 | 1.000 / 0.250 / +0.750 | `pandaward-java-ldap-injection` |
-| pathtraver | 22 | 133 | 135 | not covered | 0.940 / 0.741 / +0.199 | 1.000 / 0.356 / +0.644 | `pandaward-java-path-traversal` |
-| securecookie | 614 | 36 | 31 | 0.000 / 0.000 / +0.000 | 1.000 / 0.000 / +1.000 | 1.000 / 0.000 / +1.000 | `pandaward-java-insecure-cookie` |
-| sqli | 89 | 272 | 232 | 0.886 / 0.888 / -0.002 | 0.923 / 0.659 / +0.263 | 1.000 / 0.272 / +0.728 | `pandaward-java-sql-injection` |
-| trustbound | 501 | 83 | 43 | not covered | 0.964 / 0.651 / +0.313 | 1.000 / 0.465 / +0.535 | `pandaward-java-trust-boundary` |
-| weakrand | 330 | 218 | 275 | 0.000 / 0.000 / +0.000 | 1.000 / 0.000 / +1.000 | 1.000 / 0.000 / +1.000 | `pandaward-java-weak-random` |
-| xpathi | 643 | 15 | 20 | not covered | 1.000 / 0.800 / +0.200 | 1.000 / 0.250 / +0.750 | `pandaward-java-xpath-injection` |
-| xss | 79 | 246 | 209 | 0.000 / 0.000 / +0.000 | 0.923 / 0.565 / +0.358 | 1.000 / 0.148 / +0.852 | `pandaward-java-xss` |
+| Category | CWE | Real | Not real | Built-in heuristics | Taint engine | Semgrep | Opengrep | PandaWard | Bundled rule |
+|---|---|---|---|---|---|---|---|---|---|
+| cmdi | 78 | 126 | 125 | 0.000 / 0.000 / +0.000 | 1.000 / 0.000 / +1.000 | 0.770 / 0.576 / +0.194 | 1.000 / 0.264 / +0.736 | +1.000 | `pandaward-java-command-exec` |
+| crypto | 327 | 130 | 116 | not covered | 1.000 / 0.000 / +1.000 | 1.000 / 0.000 / +1.000 | 1.000 / 0.000 / +1.000 | +1.000 | `pandaward-java-weak-cipher` |
+| hash | 328 | 129 | 107 | 0.000 / 0.000 / +0.000 | 1.000 / 0.000 / +1.000 | 1.000 / 0.000 / +1.000 | 1.000 / 0.000 / +1.000 | +1.000 | `pandaward-java-weak-hash` |
+| ldapi | 90 | 27 | 32 | not covered | 1.000 / 0.000 / +1.000 | 0.963 / 0.688 / +0.275 | 1.000 / 0.250 / +0.750 | +1.000 | `pandaward-java-ldap-injection` |
+| pathtraver | 22 | 133 | 135 | not covered | 1.000 / 0.000 / +1.000 | 0.940 / 0.741 / +0.199 | 1.000 / 0.356 / +0.644 | +1.000 | `pandaward-java-path-traversal` |
+| securecookie | 614 | 36 | 31 | 0.000 / 0.000 / +0.000 | 1.000 / 0.000 / +1.000 | 1.000 / 0.000 / +1.000 | 1.000 / 0.000 / +1.000 | +1.000 | `pandaward-java-insecure-cookie` |
+| sqli | 89 | 272 | 232 | 0.886 / 0.888 / -0.002 | 1.000 / 0.000 / +1.000 | 0.923 / 0.659 / +0.263 | 1.000 / 0.272 / +0.728 | +1.000 | `pandaward-java-sql-injection` |
+| trustbound | 501 | 83 | 43 | not covered | 1.000 / 0.000 / +1.000 | 0.964 / 0.651 / +0.313 | 1.000 / 0.465 / +0.535 | +1.000 | `pandaward-java-trust-boundary` |
+| weakrand | 330 | 218 | 275 | 0.000 / 0.000 / +0.000 | 1.000 / 0.000 / +1.000 | 1.000 / 0.000 / +1.000 | 1.000 / 0.000 / +1.000 | +1.000 | `pandaward-java-weak-random` |
+| xpathi | 643 | 15 | 20 | not covered | 1.000 / 0.000 / +1.000 | 1.000 / 0.800 / +0.200 | 1.000 / 0.250 / +0.750 | +1.000 | `pandaward-java-xpath-injection` |
+| xss | 79 | 246 | 209 | 0.000 / 0.000 / +0.000 | 1.000 / 0.000 / +1.000 | 0.923 / 0.565 / +0.358 | 1.000 / 0.148 / +0.852 | +1.000 | `pandaward-java-xss` |
 
-The PandaWard row scores a scan with Opengrep installed: the built-in findings, without the heuristics a bundled rule replaces (#328), plus the Opengrep findings (#387). The first measurement (2026-11-09, before #324) was 0.000 on every engine; on 2026-11-14 the Opengrep row was 0.723.
+The PandaWard row scores a scan with Opengrep installed: the built-in heuristics without those a bundled rule replaces (#328), the taint engine, and the Opengrep findings without those of the bundled rules the taint engine replaces in Java files (#427). The first measurement (2026-11-09, before #324) was 0.000 on every engine; on 2026-11-14 the Opengrep row was 0.723, and PandaWard 0.818 on 2026-11-15 before the taint engine covered Java.
 
 ### Interpretation
 
-With the bundled rules on Opengrep, PandaWard scores 0.818 on this suite, above the 0.50 target of the PandaWard 1.0 plan in every category. The first measurement (0.000 on every engine, before #324) failed for two reasons: no rule followed data from the request to the sink, and the patterns used short type names (`new File`, `Cipher.getInstance`) while the Benchmark writes them fully qualified.
+PandaWard scores 1.000 on this suite, as a scan runs it and with its own data flow engine alone, with no other analyzer installed: every vulnerable test case found and no false positive in any of the 11 categories (#427). Before, the score came from the bundled rules on Opengrep (0.818), and PandaWard without Opengrep scored 0. The first measurement (0.000 on every engine, before #324) failed because no rule followed data from the request to the sink and the patterns used short type names while the Benchmark writes them fully qualified.
+
+- **Taint engine** (#427): Java is parsed and lowered to the same IR as Python. Declared types give values their classes, so `request.getParameter` and `response.getWriter().println` are recognized through imports, star imports and fully qualified names. The engine follows the Benchmark's helper methods, inner classes and request wrapper class (`SeparateClassRequest`) with their arguments, folds constants (`(7*42) - num > 200`, a `switch` on `"ABC".charAt(1)`), keeps list positions and map keys apart, and reads weak algorithm names from `benchmark.properties`. The two constructions that left false positives on Opengrep, a list element after a removal and a `switch` on a constant character, are values it computes.
 
 - **Taint rules** (#324) follow request parameters, headers, cookies, the query string and the body to SQL, OS command, file path, LDAP, XPath, HTML response and session sinks, with the usual encoders as sanitizers. The Benchmark's safe variants that pass a constant, overwrite the input or take a branch decided by constant arithmetic are not reported.
 - **Request wrapper classes** (#400): a class of the project that keeps the request in a field and returns its data (`SeparateClassRequest.getTheParameter`) adds those methods to the sources; a method returning a constant (`getTheValue`) does not. With it Opengrep finds every vulnerable case of every injection category.
 - **Algorithms from a properties file** (#398): the weak hash and cipher cases read `hashAlg1` and `cryptoAlg1` from `benchmark.properties`. The adapter follows `getProperty` of keys whose value is weak, so hash and crypto score 1.000 with no false positive.
 - **Opengrep is ahead of Semgrep** (0.818 against 0.528) because it follows taint through methods of the same file (`--taint-intrafile`); many test cases pass the input through a helper method or an inner class. A scan uses Opengrep when it is installed (#387).
 - **Every remaining false positive** on Opengrep comes from two Benchmark constructions: a value taken from a list by index after the tainted element was removed, and a `switch` on a character of a constant string. Telling those apart needs value tracking, not rules. Trust boundary (0.535) and path traversal (0.644) have the most of them.
-- **The built-in rules** still score 0. They are single-line regular expressions, and the built-in taint engine covers JavaScript, TypeScript and Python so far; for Java, install Opengrep (see [Configuration](https://github.com/ratomirjovanovic/pandaward/wiki/Configuration)).
+- **The built-in heuristics** score 0, as expected: they are single-line regular expressions that cannot tell a vulnerable case from its safe twin, which is what this suite measures. They are not PandaWard's detection for Java anymore; the built-in taint engine is, and it needs no other tool. The heuristics still run as a fallback and catch shapes without a known source.
 
 Every rule has `ruleid` and `ok` fixtures in `rules/semgrep/java.java` that run on both engines, and the benchmark gate keeps these scores from dropping. The Benchmark is a synthetic suite; tuning to it alone overstates real-world accuracy, which is why the CVE benchmark below measures real projects.
 
@@ -116,13 +119,13 @@ The [OWASP Benchmark for Python](https://github.com/OWASP-Benchmark/BenchmarkPyt
 |---|---|---|---|
 | PandaWard (built-in rules, taint engine and Opengrep, as a scan runs them) | 14 | +1.000 | +1.000 |
 | Taint engine alone (#406) | 14 | +1.000 | +1.000 |
-| Built-in rules | 8 | +0.026 | +0.015 |
+| Built-in heuristics | 8 | +0.026 | +0.015 |
 | Semgrep 1.182.0, bundled rules | 14 | +0.540 | +0.540 |
 | Opengrep 1.33.1, bundled rules | 14 | +0.637 | +0.637 |
 
 Per category (TPR / FPR / score):
 
-| Category | CWE | Real | Not real | Built-in | Taint engine | Semgrep | Opengrep | PandaWard | Bundled rule |
+| Category | CWE | Real | Not real | Built-in heuristics | Taint engine | Semgrep | Opengrep | PandaWard | Bundled rule |
 |---|---|---|---|---|---|---|---|---|---|
 | cmdi | 78 | 13 | 7 | 0.538 / 1.000 / -0.462 | 1.000 / 0.000 / +1.000 | 0.615 / 0.000 / +0.615 | 0.769 / 0.000 / +0.769 | +1.000 | `pandaward-py-shell` |
 | codeinj | 94 | 20 | 33 | 1.000 / 1.000 / +0.000 | 1.000 / 0.000 / +1.000 | 0.600 / 0.182 / +0.418 | 0.600 / 0.121 / +0.479 | +1.000 | `pandaward-py-eval` |
