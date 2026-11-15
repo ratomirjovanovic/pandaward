@@ -50,6 +50,11 @@ sources:
     names: [req, request, ctx, event]
     weak_names: [request, event]
   helper_params: [path, pathname, file, filename, filePath, filepath, uri, url, relativePath, relPath, p]
+  # Listeners of these events get data another party chose (an archive's
+  # entry), and of any event but connection events on these receivers
+  # (socket.on('chat', msg => ...)).
+  events: [entry]
+  sockets: [socket, io, ws, client, conn, connection, channel]
   route_calls:
     - receivers: [app, router, server, api, routes, route, r, fastify, express, express.Router, express]
       methods: [get, post, put, patch, delete, del, all, use, options, head, route]
@@ -255,6 +260,10 @@ sanitizers:
     calls: [mysql.escape, pg-format, sqlstring.escape]
 
 returns:
+  # A jQuery selection; its methods return the selection for chaining
+  # (see jqueryValues in internal/taint/flow).
+  $: jQuery
+  jQuery: jQuery
   express.response.status: express.response
   express.response.type: express.response
   express.response.set: express.response

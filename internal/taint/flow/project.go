@@ -86,6 +86,21 @@ func (p *Project) handler(fn *ir.Function, rc taint.RouteCall) {
 	p.depth--
 }
 
+// listener analyzes a function an event call registers, with the event's
+// data in its parameters.
+func (p *Project) listener(fn *ir.Function, t *taint.Trace) {
+	owner := p.owner[fn]
+	if owner == nil || p.handlers[fn] {
+		return
+	}
+	p.handlers[fn] = true
+	entry := State{}
+	for _, prm := range fn.Params {
+		entry[prm.Name] = &Value{T: t}
+	}
+	owner.function(fn, entry, false)
+}
+
 // exported analyzes the functions a module exports with their parameters
 // as sources: in a published package the caller decides what they hold.
 func (p *Project) exported(r *run) {

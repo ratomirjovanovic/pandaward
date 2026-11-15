@@ -221,6 +221,19 @@ module.exports = new Tools()`
 	}
 }
 
+// TestJSEvents checks listeners of socket messages and of events whose
+// data another party chooses, and not of connection events.
+func TestJSEvents(t *testing.T) {
+	src := `var fs = require('fs')
+socket.on('topic', function (data) { $('#t').html(data.topic) })
+socket.on('connect', function (s) { $('#t').html(s) })
+zip.on('entry', function (entry) { fs.createWriteStream(entry.path) })
+emitter.on('done', function (x) { $('#t').html(x) })`
+	if got := strings.Join(jsFlows(t, src), " "); got != "taint.js-path-traversal:4 taint.js-xss:2" {
+		t.Errorf("got %q", got)
+	}
+}
+
 // TestJSRouteHandlers checks that the flows in a handler the module body
 // registers are reported: loading the module analyzes its body, and the
 // handler with it.

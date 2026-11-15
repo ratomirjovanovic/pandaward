@@ -70,6 +70,7 @@ func (f *fnRun) call(in *ir.Instr, st State) *Value {
 	if f.report {
 		f.weakSinks(c)
 		f.routeCall(c)
+		f.eventCall(c)
 		f.jsxSinks(c)
 	}
 	r := f.weakSource(c, f.callResolved(c, st))
@@ -99,6 +100,12 @@ func (f *fnRun) call(in *ir.Instr, st State) *Value {
 				break
 			}
 		}
+	}
+	// $(sel).find(x).closest(y): a jQuery method returns the selection,
+	// except the ones that read a value from it.
+	if c.recv.Inst == "jQuery" && in.Name != "" && !jqueryValues[in.Name] && !(in.Name == "html" && len(c.args) == 0) && r.Inst == "" {
+		r = r.copy()
+		r.Inst = "jQuery"
 	}
 	// Properties.getProperty(key, default) reads the project's files.
 	if in.Name == "getProperty" && len(c.args) >= 1 && c.args[0].C != nil && r.T == nil {
@@ -557,7 +564,7 @@ func (f *fnRun) sinks(c *call, st State) {
 	if c.method != "" {
 		recvName := f.receiverName(c.in)
 		for _, t := range f.e.methods[c.method] {
-			if rs := t.sink.MethodReceivers[c.method]; len(rs) > 0 && !contains(rs, recvName) {
+			if rs := t.sink.MethodReceivers[c.method]; len(rs) > 0 && !contains(rs, recvName) && !(c.recv.Inst == "jQuery" && contains(rs, "$")) {
 				continue
 			}
 			if contains(t.sink.ReceiversNot, recvName) {
@@ -803,6 +810,44 @@ func callbackFns(args []*Value) []*Value {
 func stripsDotDot(re, repl *ir.Const) bool {
 	return re != nil && repl != nil && re.Kind == ir.Other && strings.HasPrefix(re.Val, "/") &&
 		strings.Contains(re.Val, `\.\.`) && repl.Kind == ir.Str && repl.Val == ""
+}
+
+// jqueryValues are jQuery methods that return a value read from the
+// selection rather than the selection.
+var jqueryValues = map[string]bool{"text": true, "val": true, "attr": true, "prop": true, "data": true, "css": true, "is": true,
+	"hasClass": true, "index": true, "get": true, "toArray": true, "serialize": true, "serializeArray": true, "width": true,
+	"height": true, "offset": true, "position": true, "scrollTop": true, "scrollLeft": true, "outerWidth": true, "outerHeight": true}
+
+// socketLifecycle events carry no message from a peer.
+var socketLifecycle = map[string]bool{"connect": true, "connection": true, "disconnect": true, "close": true, "open": true,
+	"error": true, "end": true, "reconnect": true, "ready": true, "listening": true}
+
+// eventCall analyzes the listeners of events whose data another party
+// chooses: socket.on('chat', msg => ...) on a socket, and events such as
+// an archive's entry on any emitter.
+func (f *fnRun) eventCall(c *call) {
+	if c.in.Name != "on" && c.in.Name != "once" && c.in.Name != "addListener" || len(c.args) < 2 {
+		return
+	}
+	ev := c.args[0].C
+	if ev == nil || ev.Kind != ir.Str {
+		return
+	}
+	recv := f.receiverName(c.in)
+	if recv == "" {
+		recv = c.recv.Q
+	}
+	if i := strings.LastIndexByte(recv, '.'); i >= 0 {
+		recv = recv[i+1:]
+	}
+	if !contains(f.e.spec.Sources.Events, ev.Val) && !(contains(f.e.spec.Sources.Sockets, recv) && !socketLifecycle[ev.Val]) {
+		return
+	}
+	for _, a := range c.args[1:] {
+		if a.Fn != nil && !isClass(a.Fn) {
+			f.p.listener(a.Fn, f.newSource(c.in.Pos.Line, "'"+ev.Val+"' event data"))
+		}
+	}
 }
 
 // routeCall analyzes the handlers a call registers.
