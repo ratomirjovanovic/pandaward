@@ -103,6 +103,8 @@ func (p *Project) listener(fn *ir.Function, t *taint.Trace) {
 
 // exported analyzes the functions a module exports with their parameters
 // as sources: in a published package the caller decides what they hold.
+// Each exported function gets its own budget of calls, so that a large
+// script of many does not starve the last ones.
 func (p *Project) exported(r *run) {
 	all := State{}
 	for name, v := range r.stored {
@@ -129,6 +131,7 @@ func (p *Project) exported(r *run) {
 			for _, m := range r.mod.Funcs {
 				if m.Parent == class && !strings.HasSuffix(m.Name, ".__init__") && len(m.Params) > 0 {
 					entry := State{m.Params[0].Name: v}
+					p.calls = 0
 					r.function(m, p.exportedParams(r, m, name, entry), false)
 				}
 			}
@@ -139,6 +142,7 @@ func (p *Project) exported(r *run) {
 		}
 		params := func(fn *ir.Function, entry State) State { return p.exportedParams(r, fn, name, entry) }
 		if !isClass(v.Fn) {
+			p.calls = 0
 			r.function(v.Fn, params(v.Fn, State{}), false)
 			continue
 		}
@@ -147,6 +151,7 @@ func (p *Project) exported(r *run) {
 		class := v.Fn
 		inst := &Value{Inst: className(r.mod, class)}
 		if init := p.method(class, "__init__", 0); init != nil {
+			p.calls = 0
 			if _, self, _ := r.analyzeFn(init, params(init, State{init.Params[0].Name: inst}), false); self != nil {
 				inst = self.copy()
 				inst.Inst = className(r.mod, class)
@@ -158,6 +163,7 @@ func (p *Project) exported(r *run) {
 				if !decorated(m, "staticmethod") {
 					entry[m.Params[0].Name] = inst
 				}
+				p.calls = 0
 				r.function(m, params(m, entry), false)
 			}
 		}
@@ -622,6 +628,27 @@ func encode(sb *strings.Builder, v *Value, depth int) {
 // lowering does not see as a module export: exports.f = fn inside a
 // function, such as the (function () { ... })() a module wraps itself in,
 // or f = exports.f = fn.
+// prototypeMethod records a function stored as a method of a prototype,
+// X.prototype.m = function () {...}: a library's callers reach its
+// methods through the instances it hands out, so they count as exported.
+func (f *fnRun) prototypeMethod(in *ir.Instr, v *Value) {
+	d := f.fn.Defs[in.A.Var]
+	if v.Fn == nil || d == nil || d.Op != ir.Load || d.Name != "prototype" {
+		return
+	}
+	owner := f.receiverName(d)
+	if owner == "" {
+		owner = "?"
+	}
+	k := owner + ".prototype." + in.Name
+	if f.stored == nil {
+		f.stored = map[string]*Value{}
+	}
+	if _, ok := f.stored[k]; !ok {
+		f.stored[k] = v
+	}
+}
+
 func (f *fnRun) export(q, name string, v *Value) {
 	var names map[string]*Value
 	switch {

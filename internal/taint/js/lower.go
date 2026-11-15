@@ -66,6 +66,36 @@ func prototypes(list []Stmt) map[string][]*Prop {
 			}
 		}
 	}
+	// Only a constructor of the list makes a class: function X () {},
+	// X = function () {} or var X = function () {}.
+	ctors := map[string]bool{}
+	for _, s := range list {
+		switch s := s.(type) {
+		case *FuncDecl:
+			ctors[s.Func.Name] = true
+		case *ExprStmt:
+			if a, ok := s.X.(*Assign); ok && a.Op == "=" {
+				if id, ok := a.Target.(*Ident); ok {
+					if _, isFn := a.Value.(*Func); isFn {
+						ctors[id.Name] = true
+					}
+				}
+			}
+		case *VarDecl:
+			for _, d := range s.Decls {
+				if id, ok := d.Target.(*Ident); ok {
+					if _, isFn := d.Init.(*Func); isFn {
+						ctors[id.Name] = true
+					}
+				}
+			}
+		}
+	}
+	for name := range out {
+		if !ctors[name] {
+			delete(out, name)
+		}
+	}
 	return out
 }
 
@@ -419,17 +449,34 @@ func (l *lowerer) stmts(list []Stmt) {
 
 func (l *lowerer) funcDecl(f *Func) {
 	if l.module && len(l.protos[f.Name]) > 0 {
-		// a constructor function with prototype methods: a class
-		members := []*ClassMember{{Pos: f.Pos, Key: "constructor", Kind: "constructor", Value: f}}
-		for _, p := range l.protos[f.Name] {
-			members = append(members, &ClassMember{Pos: p.Pos, Key: p.Key, Kind: "method", Value: p.Value})
-		}
-		v := l.class(&Class{Pos: f.Pos, Name: f.Name, Members: members})
+		v := l.protoClass(f.Name, f)
 		l.bind(f.Name, &ir.Instr{Op: ir.Copy, Pos: at(f.Line), A: v})
 		return
 	}
 	fn := l.function(f.Name, f.Line, f.Params, f.Body, f.ExprBody, l.fn, "", false)
 	l.bind(f.Name, &ir.Instr{Op: ir.Func, Pos: at(f.Line), Fn: fn})
+}
+
+// protoClass lowers a constructor function with prototype methods as a
+// class.
+func (l *lowerer) protoClass(name string, f *Func) ir.Operand {
+	members := []*ClassMember{{Pos: f.Pos, Key: "constructor", Kind: "constructor", Value: f}}
+	for _, p := range l.protos[name] {
+		members = append(members, &ClassMember{Pos: p.Pos, Key: p.Key, Kind: "method", Value: p.Value})
+	}
+	return l.class(&Class{Pos: f.Pos, Name: name, Members: members})
+}
+
+// ctorAssign lowers X = function () {} or var X = function () {} whose X
+// has prototype methods as a class, and reports whether it did.
+func (l *lowerer) ctorAssign(target, value Expr, line int) bool {
+	id, ok := target.(*Ident)
+	f, isFn := value.(*Func)
+	if !ok || !isFn || !l.module || len(l.protos[id.Name]) == 0 {
+		return false
+	}
+	l.emit(&ir.Instr{Op: ir.Copy, Pos: at(line), Dst: id.Name, A: l.protoClass(id.Name, f)})
+	return true
 }
 
 func (l *lowerer) stmt(s Stmt) {
@@ -438,6 +485,9 @@ func (l *lowerer) stmt(s Stmt) {
 		l.exprStmt(s.X)
 	case *VarDecl:
 		for _, d := range s.Decls {
+			if l.ctorAssign(d.Target, d.Init, d.Line) {
+				continue
+			}
 			v := ir.C(ir.None, "")
 			if d.Init != nil {
 				v = l.expr(d.Init)
@@ -729,6 +779,9 @@ func (l *lowerer) switchStmt(s *Switch) {
 
 // exprStmt lowers an expression statement, with the module export forms.
 func (l *lowerer) exprStmt(x Expr) {
+	if a, ok := x.(*Assign); ok && a.Op == "=" && l.ctorAssign(a.Target, a.Value, a.Line) {
+		return
+	}
 	if a, ok := x.(*Assign); ok && a.Op == "=" && l.module && exportChain(a) {
 		l.assignChain(a)
 		return

@@ -703,6 +703,7 @@ func (f *fnRun) instr(in *ir.Instr, st State) {
 				f.weakStore(in.Name, v, line)
 				f.propSinks(in, f.val(st, in.A), v)
 				f.export(base.Q, in.Name, v)
+				f.prototypeMethod(in, v)
 			}
 			base.Fields["."+in.Name] = v
 			st[in.A.Var] = mix(base, v)

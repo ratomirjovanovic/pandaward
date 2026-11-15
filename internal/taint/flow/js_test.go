@@ -234,6 +234,28 @@ emitter.on('done', function (x) { $('#t').html(x) })`
 	}
 }
 
+// TestJSPrototypeMethods checks prototype methods of constructors
+// assigned to a name and of classes inside a wrapper function, which a
+// library's callers reach through its instances.
+func TestJSPrototypeMethods(t *testing.T) {
+	script := `Panel = function (ui) { this.ui = ui }
+Panel.prototype.color = function (c) {
+  var apply = function () { this.el.innerHTML = '<b>' + c + '</b>' }
+  apply()
+}`
+	if got := strings.Join(jsFlows(t, script), " "); got != "taint.js-xss:3" {
+		t.Errorf("script: got %q", got)
+	}
+	module := `module.exports = (function () {
+  function Editor () {}
+  Editor.prototype.setValue = function (val) { this.body.innerHTML = val }
+  return Editor
+})()`
+	if got := strings.Join(jsFlows(t, module), " "); got != "taint.js-xss:3" {
+		t.Errorf("module: got %q", got)
+	}
+}
+
 // TestJSRouteHandlers checks that the flows in a handler the module body
 // registers are reported: loading the module analyzes its body, and the
 // handler with it.
