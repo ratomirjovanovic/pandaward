@@ -62,6 +62,32 @@ func TestLoad(t *testing.T) {
 	if snaps[0].CVE.Asset != "https://example.invalid/cve.json" || snaps[0].CVE.Unavailable != 1 || snaps[0].CVE.Scored != 219 {
 		t.Fatalf("cve %+v", snaps[0].CVE)
 	}
+	// Two measurements of main on the same day: the later run is latest,
+	// whatever the directory names.
+	write("z-morning", "meta.json", `{"label":"main aaaaaaa","date":"2026-12-09","time":"2026-12-09T08:00:00Z","url":"https://example.invalid/a"}`)
+	write("z-morning", "cve.json", cve)
+	write("a-evening", "meta.json", `{"label":"main bbbbbbb","date":"2026-12-09","time":"2026-12-09T20:00:00Z","url":"https://example.invalid/b"}`)
+	write("a-evening", "cve.json", cve)
+	snaps, err = Load([]string{root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snaps[0].Label != "main bbbbbbb" || snaps[1].Label != "main aaaaaaa" {
+		t.Fatalf("same-day order: %s, %s", snaps[0].Label, snaps[1].Label)
+	}
+
+	// The same commit from a committed snapshot and from the site build's
+	// run of main shows once.
+	write("run-copy", "meta.json", `{"label":"main bbbbbbb","date":"2026-12-09","time":"2026-12-09T20:00:00Z","url":"https://example.invalid/b"}`)
+	write("run-copy", "cve.json", cve)
+	snaps, err = Load([]string{root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if snaps[0].Label != "main bbbbbbb" || snaps[1].Label != "main aaaaaaa" {
+		t.Fatalf("duplicate source kept: %s, %s", snaps[0].Label, snaps[1].Label)
+	}
+
 	write("bad", "meta.json", `{"label":"x"}`)
 	if _, err := Load([]string{root}); err == nil {
 		t.Fatal("meta.json without date and url was accepted")
