@@ -3,6 +3,7 @@ package flow
 import (
 	"sort"
 	"strconv"
+	"strings"
 
 	"github.com/ratomirjovanovic/pandaward/internal/taint"
 	"github.com/ratomirjovanovic/pandaward/internal/taint/ir"
@@ -37,10 +38,39 @@ type Value struct {
 	// from, and WK which of the two (taint.WeakHash, taint.WeakRandom).
 	W  *taint.Trace
 	WK taint.Kind
+	// Hint is the constant text of a string built from constant and
+	// unknown parts ("rememberMe" of "rememberMe" + n), for naming checks.
+	Hint string
 	// Pure marks a value computed from constants only, through operators,
 	// containers and functions that only transform their input (base64,
 	// encode, format), even when the engine does not compute it.
 	Pure bool
+}
+
+// text returns the constant text of a value: a string constant or the
+// hint of one partly built from constants.
+func text(v *Value) string {
+	if v.C != nil && v.C.Kind == ir.Str {
+		return v.C.Val
+	}
+	return v.Hint
+}
+
+// hinted marks r with the constant text of the parts it was built from.
+func hinted(r *Value, parts ...*Value) *Value {
+	if r.C != nil {
+		return r
+	}
+	var sb strings.Builder
+	for _, p := range parts {
+		sb.WriteString(text(p))
+	}
+	if sb.Len() == 0 || r.Hint == sb.String() {
+		return r
+	}
+	r = r.copy()
+	r.Hint = sb.String()
+	return r
 }
 
 // isPure reports a value known to come from constants only.
@@ -199,6 +229,9 @@ func joinDepth(a, b *Value, widen bool, depth int) *Value {
 	}
 	r.Norm = a.Norm && b.Norm
 	r.Pure = isPure(a) && isPure(b)
+	if a.Hint == b.Hint {
+		r.Hint = a.Hint
+	}
 	if a.From == b.From {
 		r.From = a.From
 	}
@@ -259,7 +292,7 @@ func equal(a, b *Value) bool {
 	if b == nil {
 		b = empty
 	}
-	if (a.T != nil) != (b.T != nil) || a.Safe != b.Safe || a.Q != b.Q || a.Inst != b.Inst || a.Norm != b.Norm || a.Fn != b.Fn || a.Known != b.Known || a.From != b.From || a.Opaque != b.Opaque || a.WK != b.WK || isPure(a) != isPure(b) {
+	if (a.T != nil) != (b.T != nil) || a.Safe != b.Safe || a.Q != b.Q || a.Inst != b.Inst || a.Norm != b.Norm || a.Fn != b.Fn || a.Known != b.Known || a.From != b.From || a.Opaque != b.Opaque || a.WK != b.WK || isPure(a) != isPure(b) || a.Hint != b.Hint {
 		return false
 	}
 	if (a.C == nil) != (b.C == nil) || a.C != nil && *a.C != *b.C {

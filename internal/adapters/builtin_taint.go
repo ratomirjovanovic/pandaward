@@ -14,6 +14,7 @@ import (
 	"github.com/ratomirjovanovic/pandaward/internal/taint"
 	"github.com/ratomirjovanovic/pandaward/internal/taint/flow"
 	"github.com/ratomirjovanovic/pandaward/internal/taint/ir"
+	javaparse "github.com/ratomirjovanovic/pandaward/internal/taint/java"
 	"github.com/ratomirjovanovic/pandaward/internal/taint/jsflow"
 	pyparse "github.com/ratomirjovanovic/pandaward/internal/taint/py"
 	"github.com/ratomirjovanovic/pandaward/internal/version"
@@ -102,6 +103,10 @@ func (a taintAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 	if err != nil {
 		return res, finish(run, model.ExitError, err.Error(), len(res.Signals))
 	}
+	javaFiles, javaErrors, err := a.java(ctx, c, &res)
+	if err != nil {
+		return res, finish(run, model.ExitError, err.Error(), len(res.Signals))
+	}
 	if ctx.Err() != nil {
 		return res, finish(run, model.ExitTimeout, "cancelled", len(res.Signals))
 	}
@@ -115,6 +120,10 @@ func (a taintAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 	detail += fmt.Sprintf("; %d Python files", pyFiles)
 	if pyErrors > 0 {
 		detail += fmt.Sprintf(" (%d with syntax the parser skipped)", pyErrors)
+	}
+	detail += fmt.Sprintf("; %d Java files", javaFiles)
+	if javaErrors > 0 {
+		detail += fmt.Sprintf(" (%d with syntax the parser skipped)", javaErrors)
 	}
 	return res, finish(run, model.ExitOK, detail, len(res.Signals))
 }
@@ -235,6 +244,94 @@ func isLibrary(inv *inventory.Inventory) bool {
 	return pkg.Name != "" && pkg.Version != "" && inv.FileByPath("index.js") != nil
 }
 
+// java runs the IR engine (#406) on the Java files as one project, with
+// the keys of the project's .properties files, which code reads through
+// Properties.getProperty.
+func (a taintAdapter) java(ctx context.Context, c *Context, res *Result) (files, parseErrors int, err error) {
+	var paths []string
+	props := map[string]string{}
+	for _, f := range c.Inv.Files {
+		switch f.Lang {
+		case "java":
+			paths = append(paths, f.Path)
+		case "properties":
+			readProperties(f.Lines, props)
+		}
+	}
+	if len(paths) == 0 {
+		return 0, 0, nil
+	}
+	spec, err := taint.Load("java")
+	if err != nil {
+		return 0, 0, err
+	}
+	index := javaparse.NewFiles(paths)
+	parsed := map[string][]*ir.Module{}
+	load := func(p string) []*ir.Module {
+		if m, ok := parsed[p]; ok {
+			return m
+		}
+		f := c.Inv.FileByPath(p)
+		if f == nil {
+			return nil
+		}
+		jf := javaparse.Parse(f.Path, strings.Join(f.Lines, "\n"))
+		if len(jf.Errors) > 0 {
+			parseErrors++
+		}
+		parsed[p] = javaparse.LowerWith(jf, spec.Classes())
+		return parsed[p]
+	}
+	proj := flow.New(spec).NewProject(func(name string) (*ir.Module, []string) {
+		p := index.Lookup(name)
+		for _, m := range load(p) {
+			if m.Name == name {
+				return m, c.Inv.FileByPath(p).Lines
+			}
+		}
+		return nil, nil
+	})
+	proj.SetProperties(props)
+	for _, p := range paths {
+		if IsTestPath(p) {
+			continue
+		}
+		if ctx.Err() != nil {
+			return files, parseErrors, nil
+		}
+		files++
+		for _, m := range load(p) {
+			for _, fd := range proj.Module(m.Name) {
+				if f := c.Inv.FileByPath(fd.File); f != nil && !IsTestPath(f.Path) {
+					res.Signals = append(res.Signals, taintSignal(fd, f, a.Name()))
+				}
+			}
+		}
+	}
+	return files, parseErrors, nil
+}
+
+// readProperties adds the key=value lines of a .properties file; a key
+// with two different values in the project is unknown ("").
+func readProperties(lines []string, out map[string]string) {
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" || line[0] == '#' || line[0] == '!' {
+			continue
+		}
+		k, v, ok := strings.Cut(line, "=")
+		if !ok {
+			continue
+		}
+		k, v = strings.TrimSpace(k), strings.TrimSpace(v)
+		if old, dup := out[k]; dup && old != v {
+			out[k] = ""
+			continue
+		}
+		out[k] = v
+	}
+}
+
 var (
 	taintSupersedeOnce sync.Once
 	taintSupersede     map[string][]string // language -> bundled rule ids
@@ -248,8 +345,10 @@ var (
 func TaintReplaces(ruleID, lang, path string) string {
 	taintSupersedeOnce.Do(func() {
 		taintSupersede = map[string][]string{}
-		if spec, err := taint.Load("python"); err == nil {
-			taintSupersede["python"] = spec.Supersedes
+		for _, lang := range []string{"python", "java"} {
+			if spec, err := taint.Load(lang); err == nil {
+				taintSupersede[lang] = spec.Supersedes
+			}
 		}
 	})
 	if IsTestPath(path) {

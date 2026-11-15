@@ -71,6 +71,34 @@ func (f *fnRun) call(in *ir.Instr, st State) *Value {
 		f.weakSinks(c)
 	}
 	r := f.weakSource(c, f.callResolved(c, st))
+	for _, n := range c.names {
+		if contains(f.e.spec.Weak.RandomFill, n) && len(in.Args) > 0 {
+			if name := f.root(in.Args[0]); name != "" {
+				v := st[name].copy()
+				v.W = f.newSource(in.Pos.Line, f.text(in.Pos.Line))
+				v.WK |= taint.WeakRandom
+				st[name] = v
+			}
+		}
+	}
+	{
+		for _, n := range c.names {
+			if t, ok := f.e.spec.Returns[n]; ok {
+				r = r.copy()
+				r.Inst = t
+				break
+			}
+		}
+	}
+	// Properties.getProperty(key, default) reads the project's files.
+	if in.Name == "getProperty" && len(c.args) >= 1 && c.args[0].C != nil && r.T == nil {
+		if v, ok := f.e.props[c.args[0].C.Val]; ok {
+			return strVal(v)
+		}
+		if len(c.args) == 2 && c.args[1].C != nil {
+			return c.args[1]
+		}
+	}
 	if f.pureCall(c) {
 		inputs := append([]*Value{}, c.all...)
 		if c.in.Name != "" && c.method != "" {
@@ -437,10 +465,43 @@ func (f *fnRun) fold(c *call) *Value {
 	s := c.recv.C.Val
 	strs := make([]string, 0, len(c.args))
 	for _, a := range c.args {
-		if a.C == nil || a.C.Kind != ir.Str {
+		if a.C == nil {
 			return nil
 		}
 		strs = append(strs, a.C.Val)
+	}
+	ints := make([]int, 0, len(c.args))
+	for _, a := range c.args {
+		if n, ok := intConst(a); ok {
+			ints = append(ints, n)
+		}
+	}
+	r := []rune(s)
+	switch c.in.Name {
+	case "charAt":
+		if len(ints) == 1 && ints[0] >= 0 && ints[0] < len(r) {
+			return strVal(string(r[ints[0]]))
+		}
+	case "substring":
+		if len(ints) == len(c.args) && len(ints) >= 1 {
+			lo, hi := ints[0], len(r)
+			if len(ints) == 2 {
+				hi = ints[1]
+			}
+			if lo >= 0 && lo <= hi && hi <= len(r) {
+				return strVal(string(r[lo:hi]))
+			}
+		}
+	case "length":
+		if len(c.args) == 0 {
+			return intVal(int64(len(r)))
+		}
+	case "toUpperCase":
+		return strVal(strings.ToUpper(s))
+	case "toLowerCase":
+		return strVal(strings.ToLower(s))
+	case "trim":
+		return strVal(strings.TrimSpace(s))
 	}
 	switch c.in.Name {
 	case "upper":

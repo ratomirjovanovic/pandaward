@@ -111,6 +111,36 @@ func (f *fnRun) weakSource(c *call, r *Value) *Value {
 	return r
 }
 
+type weakAlg struct {
+	sink *taint.Sink
+	arg  int
+}
+
+type secretStore struct {
+	callee    string
+	name, val int
+}
+
+// weakAlgorithm reports a call whose argument names a broken algorithm.
+func (f *fnRun) weakAlgorithm(c *call) {
+	for _, n := range c.names {
+		for _, w := range f.e.weakAlgs[n] {
+			if w.arg >= len(c.args) || c.args[w.arg].C == nil {
+				continue
+			}
+			alg := strings.ToLower(c.args[w.arg].C.Val)
+			parts := strings.Split(alg, "/")
+			wa := w.sink.WeakAlgorithms
+			// Bare is about ciphers: KeyGenerator.getInstance("AES") is fine.
+			bare := len(parts) == 1 && contains(wa.Bare, parts[0]) && strings.HasSuffix(n, ".Cipher.getInstance")
+			weak := contains(wa.Names, parts[0]) || len(parts) > 1 && parts[1] == "ecb" || bare
+			if weak {
+				f.foundAt(w.sink, c.in.Pos.Line, nil)
+			}
+		}
+	}
+}
+
 // weakSinks reports, at a call, a cookie set without its flags or with a
 // predictable value, and a weak digest or predictable number written to a
 // file named for a password or secret.
@@ -132,6 +162,23 @@ func (f *fnRun) weakSinks(c *call) {
 		}
 		if value != nil && value.WK&taint.WeakRandom != 0 && w.randSink != nil {
 			f.foundAt(w.randSink, line, value.W)
+		}
+	}
+	f.weakAlgorithm(c)
+	for _, n := range c.names {
+		for _, st := range f.e.secretStores {
+			if st.callee == n && st.name < len(c.in.Args) && st.val < len(c.args) {
+				name := f.constText(c.in.Args[st.name])
+				if name == "" {
+					name = text(c.args[st.name])
+				}
+				f.weakStore(name, c.args[st.val], line)
+			}
+		}
+		if contains(f.e.spec.Weak.CookieFlagSetters, n) && len(c.args) == 1 && c.args[0].C != nil && w.cookieSink != nil {
+			if t, known := c.args[0].C.Truth(); known && !t {
+				f.foundAt(w.cookieSink, line, nil)
+			}
 		}
 	}
 	if c.in.Name == "write" || c.in.Name == "writelines" {
