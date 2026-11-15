@@ -148,7 +148,10 @@ func TestFlows(t *testing.T) {
 	pickle.loads(x)`, []string{"deserialization:8", "deserialization:9"}},
 		{"session store", `	x = request.args.get("x")
 	session["user"] = x
-	session["n"] = len(x)`, []string{"trust-boundary:7"}},
+	session["n"] = len(x)
+	session["ok"] = True
+	if x in ["a", "b"]:
+		session["choice"] = x`, []string{"trust-boundary:7", "trust-boundary:8"}},
 		{"html return", `	x = request.args.get("x")
 	return f"<p>{x}</p>"`, []string{"xss:7"}},
 		{"escaped return", `	import html
@@ -467,5 +470,36 @@ def run(completion, message):
 	got := strings.Join(sinks(analyze(t, src)), " ")
 	if got != "code-injection:3 command-injection:4" {
 		t.Errorf("got %s", got)
+	}
+}
+
+// pickle and yaml.load are reported for input not shown to come from
+// constants, as a hypothesis; checked text decoded from base64 can hold
+// anything again; request.path of a route without parameters is its path.
+func TestDeserialization(t *testing.T) {
+	src := header + `import base64
+def helper(blob):
+    return pickle.loads(blob)
+
+@app.route('/fixed/path')
+def handler():
+    a = "c2FmZQ=="
+    pickle.loads(base64.b64decode(a))
+    pickle.loads(base64.b64decode(request.path.split("/")[1]))
+    x = request.args.get("x")
+    if not x.isalnum():
+        return "no"
+    pickle.loads(base64.b64decode(x))
+    yaml.load(x + "suffix", Loader=yaml.SafeLoader)
+`
+	fs := analyze(t, src)
+	got := strings.Join(sinks(fs), " ")
+	if got != "deserialization:16 deserialization:6" {
+		t.Errorf("got %s", got)
+	}
+	for _, f := range fs {
+		if f.Line == 6 && !f.Library {
+			t.Errorf("unknown input should be a hypothesis")
+		}
 	}
 }

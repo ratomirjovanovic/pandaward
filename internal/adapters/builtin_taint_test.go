@@ -30,6 +30,13 @@ func TestTaintAdapterOnFixture(t *testing.T) {
 	var got []string
 	for _, s := range res.Signals {
 		got = append(got, s.RuleID+"@"+s.File+":"+strconv.Itoa(s.StartLine))
+		if s.Confidence == model.Hypothesis {
+			// input not shown to come from constants, without a source
+			if s.RuleID != "taint.py-deserialization" || s.Severity != model.SevMedium {
+				t.Errorf("%s: unexpected hypothesis", s.RuleID)
+			}
+			continue
+		}
 		// JavaScript flows start at the request; the Python ones at the
 		// language model's reply.
 		if !strings.Contains(s.Message, "Flow: req.") && !strings.Contains(s.Message, "message.content") {
@@ -47,6 +54,7 @@ func TestTaintAdapterOnFixture(t *testing.T) {
 		"taint.js-xss@src/server.js:9",
 		"taint.py-code-injection@app.py:7",
 		"taint.py-command-injection@app.py:6",
+		"taint.py-deserialization@app.py:4",
 	}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Fatalf("got %v\nwant %v", got, want)

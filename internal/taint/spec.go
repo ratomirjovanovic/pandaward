@@ -75,6 +75,11 @@ type Spec struct {
 	// Supersedes lists bundled Semgrep rules the engine replaces in the
 	// files it analyzes (Python).
 	Supersedes []string
+	// Pure are calls and methods that only transform their input.
+	Pure Pure
+	// Decoders turn text into bytes that can hold anything, undoing what
+	// a check of the text allowed (Python).
+	Decoders []string
 	// Lookups are methods that return what their receiver holds, not their
 	// arguments: a row found by a key from the request is the database's
 	// data (Python).
@@ -206,6 +211,10 @@ type Sink struct {
 	// built from it: a redirect to url_for(..., next=x) or a session
 	// entry holding a form object is not the flaw.
 	TextOnly bool `yaml:"text_only"`
+	// UnlessConstant sinks are reported for any input that is not shown
+	// to come from constants, not only for untrusted input (Python
+	// deserialization).
+	UnlessConstant bool `yaml:"unless_constant"`
 	// RequestOnly sinks are reported only for request sources, not for
 	// library parameters: a library that fetches the URL it is given is
 	// doing its job.
@@ -246,6 +255,15 @@ type specFile struct {
 	Lookups     []string    `yaml:"lookups"`
 	Weak        Weak        `yaml:"weak"`
 	Supersedes  []string    `yaml:"supersedes"`
+	Pure        Pure        `yaml:"pure"`
+	Decoders    []string    `yaml:"decoders"`
+}
+
+// Pure lists the calls and methods whose result comes from constants when
+// their input does (Python).
+type Pure struct {
+	Calls   []string `yaml:"calls"`
+	Methods []string `yaml:"methods"`
 }
 
 // Weak lists the calls that make a weak digest or a predictable number,
@@ -302,7 +320,7 @@ func Parse(data []byte) (*Spec, error) {
 	if err := yaml.Unmarshal(data, &f); err != nil {
 		return nil, err
 	}
-	s := &Spec{Sources: f.Sources, Sinks: f.Sinks, Sanitizers: f.Sanitizers, Guards: f.Guards, Normalizers: f.Normalizers, Responses: f.Responses, Escapes: f.Escapes, URLParsers: f.URLParsers, ShellFlags: f.ShellFlags, TextCalls: f.TextCalls, Lookups: f.Lookups, Weak: f.Weak, Supersedes: f.Supersedes, sanitizeCall: map[string]Kind{}, sanitizeMethod: map[string]Kind{}}
+	s := &Spec{Sources: f.Sources, Sinks: f.Sinks, Sanitizers: f.Sanitizers, Guards: f.Guards, Normalizers: f.Normalizers, Responses: f.Responses, Escapes: f.Escapes, URLParsers: f.URLParsers, ShellFlags: f.ShellFlags, TextCalls: f.TextCalls, Lookups: f.Lookups, Weak: f.Weak, Supersedes: f.Supersedes, Pure: f.Pure, Decoders: f.Decoders, sanitizeCall: map[string]Kind{}, sanitizeMethod: map[string]Kind{}}
 	for _, g := range s.Guards {
 		for _, n := range g.KindsRaw {
 			k, ok := kindByName[n]
