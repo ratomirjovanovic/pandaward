@@ -350,6 +350,11 @@ func (l *lowerer) stmt(s Stmt) {
 			l.expr(b.Value)
 		}
 		fn := l.function("<class "+s.Name+">", s.Pos, nil, s.Decorators, s.Body, l.fn, s.Name, false)
+		for _, b := range s.Bases {
+			if d := dotted(b.Value); d != "" && b.Name == "" && b.Star == "" {
+				fn.Bases = append(fn.Bases, d)
+			}
+		}
 		l.bind(s.Name, &ir.Instr{Op: ir.Func, Pos: at(s.Pos), Fn: fn}, s.Pos)
 	case *Return:
 		var v ir.Operand

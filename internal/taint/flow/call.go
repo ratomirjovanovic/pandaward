@@ -97,8 +97,17 @@ func (f *fnRun) call(in *ir.Instr, st State) *Value {
 		}
 		return r
 	}
+	if kinds == 0 {
+		if r, ok := f.project(c, st); ok {
+			return r
+		}
+	}
 	if r := f.container(c, st); r != nil {
 		return r
+	}
+	if in.Name != "" && f.e.lookups[in.Name] && c.recv.T == nil {
+		// A lookup in a store the request does not fill.
+		return &Value{}
 	}
 	r := &Value{}
 	r = mix(r, c.recv)
@@ -536,10 +545,17 @@ func contains(list []string, s string) bool {
 }
 
 func (f *fnRun) found(s *taint.Sink, line int, v *Value) {
-	k := s.ID + ":" + strconv.Itoa(line)
-	if _, ok := f.findings[k]; ok {
+	k := f.mod.Path + "|" + s.ID + ":" + strconv.Itoa(line)
+	if _, ok := f.p.findings[k]; ok {
 		return
 	}
-	tr := v.T.Add(line, f.text(line))
-	f.findings[k] = taint.Finding{Sink: s, File: f.mod.Path, Line: line, EndLine: line, Steps: tr.Steps()}
+	tr := v.T.AddStep(taint.Step{Line: line, What: f.text(line), File: f.mod.Path})
+	steps := tr.Steps()
+	for i := range steps {
+		if steps[i].File == f.mod.Path {
+			steps[i].File = ""
+		}
+	}
+	f.p.findings[k] = taint.Finding{Sink: s, File: f.mod.Path, Line: line, EndLine: line, Steps: steps}
+	f.p.order = append(f.p.order, k)
 }

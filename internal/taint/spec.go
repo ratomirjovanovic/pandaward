@@ -62,6 +62,10 @@ type Spec struct {
 	// b64decode, os.path.join); any other call the engine does not model
 	// returns an opaque object built from them (Python).
 	TextCalls []string
+	// Lookups are methods that return what their receiver holds, not their
+	// arguments: a row found by a key from the request is the database's
+	// data (Python).
+	Lookups []string
 	// sanitizer kinds by callee name and by method name
 	sanitizeCall   map[string]Kind
 	sanitizeMethod map[string]Kind
@@ -114,6 +118,11 @@ type Guard struct {
 	QuotedLiteral bool `yaml:"quoted_literal"`
 	// Netloc: the host of a parsed URL is in a constant allowlist.
 	Netloc bool `yaml:"netloc"`
+	// Methods are checks such as isalnum: true only when the whole value
+	// has no character that could matter.
+	Methods []string `yaml:"methods"`
+	// Allowlist: `x in <constants>` is true, so x is one of them.
+	Allowlist bool `yaml:"allowlist"`
 }
 
 // Escape is x.replace(Old, new) with a new that does not contain Old.
@@ -215,6 +224,7 @@ type specFile struct {
 	URLParsers  []string    `yaml:"url_parsers"`
 	ShellFlags  []string    `yaml:"shell_flags"`
 	TextCalls   []string    `yaml:"text_calls"`
+	Lookups     []string    `yaml:"lookups"`
 }
 
 func parseTarget(s string) (Target, error) {
@@ -257,7 +267,7 @@ func Parse(data []byte) (*Spec, error) {
 	if err := yaml.Unmarshal(data, &f); err != nil {
 		return nil, err
 	}
-	s := &Spec{Sources: f.Sources, Sinks: f.Sinks, Sanitizers: f.Sanitizers, Guards: f.Guards, Normalizers: f.Normalizers, Responses: f.Responses, Escapes: f.Escapes, URLParsers: f.URLParsers, ShellFlags: f.ShellFlags, TextCalls: f.TextCalls, sanitizeCall: map[string]Kind{}, sanitizeMethod: map[string]Kind{}}
+	s := &Spec{Sources: f.Sources, Sinks: f.Sinks, Sanitizers: f.Sanitizers, Guards: f.Guards, Normalizers: f.Normalizers, Responses: f.Responses, Escapes: f.Escapes, URLParsers: f.URLParsers, ShellFlags: f.ShellFlags, TextCalls: f.TextCalls, Lookups: f.Lookups, sanitizeCall: map[string]Kind{}, sanitizeMethod: map[string]Kind{}}
 	for _, g := range s.Guards {
 		for _, n := range g.KindsRaw {
 			k, ok := kindByName[n]

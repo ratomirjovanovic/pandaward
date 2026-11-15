@@ -298,6 +298,12 @@ guards:
   # string literal: evaluating it runs nothing.
   - kinds: [code]
     quoted_literal: true
+  # A value that is only letters and digits, or one of a list of
+  # constants, cannot change a command, query, path or page.
+  - kinds: [all]
+    methods: [isalnum, isalpha, isdigit, isdecimal, isnumeric, isidentifier]
+  - kinds: [all]
+    allowlist: true
   # The host of a parsed URL compared with an allowlist.
   - kinds: [redirect, ssrf]
     netloc: true
@@ -338,6 +344,33 @@ text_calls:
   - textwrap.dedent
   - json.loads
   - json.load
+
+# Methods that return what their receiver holds, whatever key or filter
+# selects it: a row found by an id from the request is the database's
+# data, and a dict's value is not its key. A receiver holding untrusted
+# data still taints the result.
+lookups:
+  - get
+  - get_or_404
+  - first
+  - first_or_404
+  - one
+  - one_or_none
+  - all
+  - scalar
+  - scalars
+  - filter
+  - filter_by
+  - exclude
+  - order_by
+  - fetchone
+  - fetchall
+  - fetchmany
+  - find_one
+  - select_related
+  - prefetch_related
+  - values
+  - values_list
 
 # A list starting with a shell and -c runs its next element as a shell
 # command (subprocess.run(["sh", "-c", cmd])).

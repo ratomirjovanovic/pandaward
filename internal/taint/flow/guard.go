@@ -115,6 +115,10 @@ func (f *fnRun) refine(st State, cond ir.Operand, edge bool) State {
 					}
 				}
 			}
+		case len(g.Methods) > 0 && d.Op == ir.Call && edge && contains(g.Methods, d.Name):
+			mark(f.root(d.A), g.Kinds)
+		case g.Allowlist && isIn && !absent && constant(f.val(st, d.B)) && f.val(st, d.B).C == nil:
+			mark(f.root(d.A), g.Kinds)
 		case g.Netloc:
 			// url.netloc in [...] on this edge, url = urlparse(x)
 			var host ir.Operand

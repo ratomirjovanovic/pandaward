@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/ratomirjovanovic/pandaward/internal/taint"
+	"github.com/ratomirjovanovic/pandaward/internal/taint/ir"
 	"github.com/ratomirjovanovic/pandaward/internal/taint/py"
 )
 
@@ -237,5 +238,138 @@ def handler():
 	}
 	if len(lines) != 3 || lines[0] != 6 || lines[2] != 8 {
 		t.Errorf("steps %v", fs[0].Steps)
+	}
+}
+
+// project analyzes several modules together.
+func project(t *testing.T, files map[string]string) []string {
+	t.Helper()
+	spec, err := taint.Load("python")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var paths []string
+	for p := range files {
+		paths = append(paths, p)
+	}
+	idx := py.NewFiles(paths)
+	mods := map[string]*ir.Module{}
+	load := func(p string) (*ir.Module, []string) {
+		if m, ok := mods[p]; ok {
+			return m, strings.Split(files[p], "\n")
+		}
+		f := py.Parse(p, files[p])
+		if len(f.Errors) > 0 {
+			t.Fatalf("%s: %v", p, f.Errors)
+		}
+		name, pkg := idx.Name(p)
+		mods[p] = py.Lower(f, name, pkg)
+		return mods[p], strings.Split(files[p], "\n")
+	}
+	proj := New(spec).NewProject(func(name string) (*ir.Module, []string) {
+		if p := idx.Lookup(name); p != "" {
+			return load(p)
+		}
+		return nil, nil
+	})
+	var out []string
+	for _, p := range []string{"app.py"} {
+		name, _ := idx.Name(p)
+		for _, fd := range proj.Module(name) {
+			out = append(out, fd.File+":"+strings.TrimPrefix(fd.Sink.ID, "taint.py-")+":"+itoa(fd.Line))
+		}
+	}
+	return out
+}
+
+// A wrapper class in another module reads the request; a helper there
+// escapes by an allowlist of characters; another helper reaches a sink with
+// what the caller passes.
+func TestProjectCalls(t *testing.T) {
+	files := map[string]string{
+		"helpers/__init__.py": "",
+		"helpers/wrap.py": `class Wrapper:
+    def __init__(self, request):
+        self.request = request
+
+    def query(self, name):
+        return self.request.args.get(name)
+
+    def safe(self, name):
+        return "constant"
+`,
+		"helpers/text.py": `def escape(s):
+    out = ''
+    for c in s:
+        if c.isalnum() or c in [' ', '.']:
+            out += c
+        else:
+            out += '&#x' + hex(ord(c))[2:] + ';'
+    return out
+
+def run(cmd):
+    import os
+    os.system(cmd)
+
+def identity(x):
+    return x
+`,
+		"app.py": `from flask import Flask, request
+import helpers.wrap
+from helpers.text import escape, run, identity
+app = Flask(__name__)
+
+@app.route('/a')
+def a():
+    w = helpers.wrap.Wrapper(request)
+    x = w.query("x")
+    y = w.safe("y")
+    run("echo " + y)
+    run("echo " + x)
+    return f"<p>{escape(x)}</p>"
+
+@app.route('/b')
+def b():
+    x = request.args.get("x")
+    return f"<p>{identity(x)}</p>"
+`,
+	}
+	got := strings.Join(project(t, files), " ")
+	want := "app.py:xss:18 helpers/text.py:command-injection:12"
+	if got != want {
+		t.Errorf("got %s\nwant %s", got, want)
+	}
+}
+
+// A row looked up by a key from the request is the database's data.
+func TestLookup(t *testing.T) {
+	src := header + `@app.route('/x/<pid>')
+def handler(pid):
+    p = Process.query.filter_by(pid=pid).first()
+    open(p.logfile)
+    open(pid)
+`
+	got := sinks(analyze(t, src))
+	if strings.Join(got, " ") != "path-traversal:8" {
+		t.Errorf("got %v", got)
+	}
+}
+
+// Recursion and mutual recursion end.
+func TestRecursion(t *testing.T) {
+	src := header + `def f(x, n):
+    if n:
+        return g(x, n - 1)
+    return x
+def g(x, n):
+    return f(x, n)
+
+@app.route('/x')
+def handler():
+    os.system(f(request.args.get("x"), 3))
+`
+	got := sinks(analyze(t, src))
+	if strings.Join(got, " ") != "command-injection:13" {
+		t.Errorf("got %v", got)
 	}
 }
