@@ -419,6 +419,9 @@ func encode(sb *strings.Builder, v *Value, depth int) {
 	if v.Norm {
 		sb.WriteString("n")
 	}
+	if v.Pure {
+		sb.WriteString("p")
+	}
 	if v.From != "" {
 		sb.WriteString("u" + v.From)
 	}
