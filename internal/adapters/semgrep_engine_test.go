@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ratomirjovanovic/pandaward/internal/config"
@@ -96,5 +97,21 @@ func TestSemgrepEngineConfig(t *testing.T) {
 	cfg.Scan.SemgrepEngine = "codeql"
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("an unknown engine must be rejected")
+	}
+}
+
+// doctor recommends Opengrep unless it is installed.
+func TestSemgrepAdvice(t *testing.T) {
+	fakeTools(t, "semgrep", "opengrep")
+	if a := SemgrepAdvice(); a != "" {
+		t.Fatalf("advice with Opengrep installed: %q", a)
+	}
+	fakeTools(t, "semgrep")
+	if a := SemgrepAdvice(); !strings.Contains(a, "Semgrep runs the bundled rules; install Opengrep") {
+		t.Fatalf("advice with Semgrep only: %q", a)
+	}
+	fakeTools(t)
+	if a := SemgrepAdvice(); !strings.HasPrefix(a, "Install Opengrep") {
+		t.Fatalf("advice without either: %q", a)
 	}
 }
