@@ -4,6 +4,7 @@ Thanks for helping make PandaWard better.
 
 ## Before you start
 
+- Not sure yet whether something is a bug or what the change should be? Start a thread in [Discussions](https://github.com/ratomirjovanovic/pandaward/discussions) (Q&A or Ideas).
 - Open or find an issue first and describe the problem, the proposal and how it will be verified.
 - One branch per issue, named `<type>/<issue>-<short-description>` (for example `fix/12-redact-basic-auth`).
 - Security problems in PandaWard itself go through private reporting, see [SECURITY.md](SECURITY.md).
