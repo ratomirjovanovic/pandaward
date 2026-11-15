@@ -213,9 +213,13 @@ var (
 	show  *bool
 )
 
-var irEng *flow.Engine
+var (
+	irEng  *flow.Engine
+	irSpec *taint.Spec
+)
 
-// analyzeIR runs the IR engine on one file in library mode.
+// analyzeIR runs the IR engine on one file in library mode, with the
+// structural findings jsflow finds by shape.
 func analyzeIR(file *js.File, src string) []taint.Finding {
 	if irEng == nil {
 		spec, err := taint.Load("jsir")
@@ -223,12 +227,13 @@ func analyzeIR(file *js.File, src string) []taint.Finding {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-		irEng = flow.New(spec)
+		irEng, irSpec = flow.New(spec), spec
 	}
 	m := js.Lower(file, file.Path, nil)
 	p := irEng.NewProject(func(string) (*ir.Module, []string) { return nil, nil })
 	p.Library = true
-	return p.AnalyzeOne(m, strings.Split(src, "\n"))
+	out := p.AnalyzeOne(m, strings.Split(src, "\n"))
+	return append(out, jsflow.Structural(file, irSpec, jsflow.Options{Library: true})...)
 }
 
 func count(m map[string][]taint.Finding, rule string) int {
