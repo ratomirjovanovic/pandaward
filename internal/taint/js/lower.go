@@ -1,6 +1,7 @@
 package js
 
 import (
+	"sort"
 	"strconv"
 	"strings"
 
@@ -95,10 +96,13 @@ type lowerer struct {
 	// F.prototype.m = function, F.prototype = { m() {} }.
 	protos map[string][]*Prop
 
-	fn       *ir.Function
-	cur      *ir.Block
-	ntemp    int
-	locals   map[string]bool
+	fn     *ir.Function
+	cur    *ir.Block
+	ntemp  int
+	locals map[string]bool
+	// written are names of enclosing scopes this function assigns: it
+	// reads them back from its own copy.
+	written  map[string]bool
 	module   bool
 	loops    []loop
 	handlers [][]*ir.Block
@@ -151,7 +155,7 @@ func (l *lowerer) function(name string, line int, params []Expr, body []Stmt, ex
 
 	saved := *l
 	l.fn, l.ntemp, l.loops, l.handlers, l.module = fn, 0, nil, nil, module
-	l.locals = map[string]bool{}
+	l.locals, l.written = map[string]bool{}, map[string]bool{}
 	for _, p := range fn.Params {
 		l.locals[p.Name] = true
 	}
@@ -160,6 +164,14 @@ func (l *lowerer) function(name string, line int, params []Expr, body []Stmt, ex
 		collectPattern(p, l.locals)
 	}
 	l.cur = fn.NewBlock()
+	// A name of an enclosing scope the function assigns starts as that
+	// scope's value; the function then reads and writes its own copy.
+	if !module {
+		for _, n := range writtenOuter(body, exprBody, l.locals) {
+			l.emit(&ir.Instr{Op: ir.Copy, Pos: at(line), Dst: n, A: ir.V(l.free(line, n))})
+			l.written[n] = true
+		}
+	}
 	// destructuring parameters
 	for i, p := range params {
 		if patternName(p) == "" {
@@ -187,6 +199,39 @@ func (l *lowerer) function(name string, line int, params []Expr, body []Stmt, ex
 	*l = saved
 	l.nfunc = nfunc
 	return fn
+}
+
+// writtenOuter returns the names a function body assigns that it does
+// not declare, outside the functions and classes it holds, sorted.
+func writtenOuter(body []Stmt, exprBody Expr, locals map[string]bool) []string {
+	seen := map[string]bool{}
+	visit := func(n Node) bool {
+		switch n := n.(type) {
+		case *Func, *Class:
+			return false
+		case *Assign:
+			if id, ok := n.Target.(*Ident); ok && !locals[id.Name] {
+				seen[id.Name] = true
+			}
+		case *Unary:
+			if id, ok := n.X.(*Ident); ok && (n.Op == "++" || n.Op == "--") && !locals[id.Name] {
+				seen[id.Name] = true
+			}
+		}
+		return true
+	}
+	for _, s := range body {
+		Inspect(s, visit)
+	}
+	if exprBody != nil {
+		Inspect(exprBody, visit)
+	}
+	out := make([]string, 0, len(seen))
+	for n := range seen {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // patternName returns the name a parameter binds when it is a plain name
@@ -880,7 +925,7 @@ func (l *lowerer) name(n string, line int) ir.Operand {
 	if n == "undefined" {
 		return ir.C(ir.None, "")
 	}
-	if l.module || l.locals[n] {
+	if l.module || l.locals[n] || l.written[n] {
 		return ir.V(n)
 	}
 	return ir.V(l.free(line, n))
@@ -1193,7 +1238,7 @@ func (l *lowerer) class(c *Class) ir.Operand {
 	l.mod.Funcs = append(l.mod.Funcs, body)
 	saved := *l
 	l.fn, l.ntemp, l.loops, l.handlers, l.module = body, 0, nil, nil, false
-	l.locals = map[string]bool{}
+	l.locals, l.written = map[string]bool{}, map[string]bool{}
 	l.cur = body.NewBlock()
 	var fields []*ClassMember
 	for _, m := range c.Members {

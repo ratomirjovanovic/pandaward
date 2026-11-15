@@ -262,6 +262,13 @@ func (r *run) root(fn *ir.Function) {
 	req, handler := r.e.requestParams(fn)
 	for _, p := range fn.Params {
 		v := &Value{Inst: p.Ann}
+		// this of a JavaScript method: the instance of its class, named as
+		// instances are, so scopes recorded in other analyses join.
+		if p.Name == "this" && p.Ann != "" {
+			if cn := className(r.mod, &ir.Function{Class: p.Ann}); r.p.classes[cn] != nil {
+				v.Inst = cn
+			}
+		}
 		if req[p.Name] {
 			entry[p.Name] = &Value{Q: r.e.reqQ}
 			continue
@@ -366,6 +373,7 @@ func (r *run) analyzeFn(fn *ir.Function, entry State, route bool) (ret, self *Va
 			f.block(b, s, func(*ir.Block, State) {})
 		}
 	}
+	f.uncalled()
 	if fn == r.mod.Init {
 		r.exit = State{}
 		for _, b := range fn.Blocks {

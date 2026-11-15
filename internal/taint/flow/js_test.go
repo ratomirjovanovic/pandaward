@@ -191,6 +191,36 @@ func TestJSModuleGlobals(t *testing.T) {
 	}
 }
 
+// TestJSClosures checks closures a library runs later (stored, not
+// called), methods reached through this, and names of an enclosing scope
+// a closure assigns on some paths only.
+func TestJSClosures(t *testing.T) {
+	src := `const proc = require('child_process').exec
+class Tools {
+  funcs (opts) {
+    const scope = this
+    const funcs = {}
+    let cmd = false
+    let list = opts.hosts
+    Object.keys(opts.range).forEach(function blocks (block) {
+      const range = opts.range[block]
+      funcs[range] = function block (callback) {
+        cmd = scope.command(opts, range)
+        proc(cmd, callback)
+      }
+      if (block === '*') { list = [] }
+      proc('ping ' + list.join(' '))
+    })
+    return funcs
+  }
+  command (opts, block) { return opts.nmap + ' ' + block }
+}
+module.exports = new Tools()`
+	if got := strings.Join(jsFlows(t, src), " "); got != "taint.js-command-injection:12 taint.js-command-injection:15" {
+		t.Errorf("got %q", got)
+	}
+}
+
 // TestJSRouteHandlers checks that the flows in a handler the module body
 // registers are reported: loading the module analyzes its body, and the
 // handler with it.

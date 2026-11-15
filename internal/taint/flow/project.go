@@ -49,14 +49,17 @@ type Project struct {
 	handlers map[*ir.Function]bool
 	memo     map[string]callResult
 	active   map[*ir.Function]bool
-	depth    int
-	calls    int
+	// invoked are the functions analyzed for a call (uncalled).
+	invoked map[*ir.Function]bool
+	depth   int
+	calls   int
 }
 
 // NewProject starts the analysis of a project whose modules load returns.
 func (e *Engine) NewProject(load Loader) *Project {
 	return &Project{e: e, load: load, runs: map[string]*run{}, byMod: map[*ir.Module]*run{}, none: map[string]bool{}, owner: map[*ir.Function]*run{},
-		classes: map[string]*ir.Function{}, findings: map[string]taint.Finding{}, memo: map[string]callResult{}, active: map[*ir.Function]bool{}, handlers: map[*ir.Function]bool{}}
+		classes: map[string]*ir.Function{}, findings: map[string]taint.Finding{}, memo: map[string]callResult{}, active: map[*ir.Function]bool{}, handlers: map[*ir.Function]bool{},
+		invoked: map[*ir.Function]bool{}}
 }
 
 // handler analyzes a function a route call registers, with the request
@@ -476,6 +479,7 @@ func (f *fnRun) invoke(fn *ir.Function, self *Value, c *call) (ret, selfOut *Val
 		return nil, nil, false, false
 	}
 	p.calls++
+	p.invoked[fn] = true
 	p.active[fn] = true
 	p.depth++
 	ret, selfOut, validates = owner.analyzeFn(fn, entry, false)

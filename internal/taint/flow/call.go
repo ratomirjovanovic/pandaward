@@ -855,3 +855,34 @@ func (f *fnRun) foundSpan(s *taint.Sink, pos ir.Pos, t *taint.Trace) {
 	f.p.findings[k] = taint.Finding{Sink: s, File: f.mod.Path, Line: line, EndLine: max(line, pos.End), Steps: steps, Library: t != nil && t.Root().Library}
 	f.p.order = append(f.p.order, k)
 }
+
+// uncalled analyzes the functions fn writes in place that nothing called
+// while it was analyzed, such as funcs[k] = function (cb) {...} that a
+// library runs later, with the scope fn gave them, when that scope holds
+// untrusted data. Like callbacks written in place, they do not use up the
+// call depth.
+func (f *fnRun) uncalled() {
+	for _, b := range f.fn.Blocks {
+		for _, in := range b.Instrs {
+			if in.Op != ir.Func || in.Fn.Parent != f.fn || isClass(in.Fn) || f.p.invoked[in.Fn] || f.p.active[in.Fn] || f.p.handlers[in.Fn] {
+				continue
+			}
+			if !taintedScope(f.envs[in.Fn]) {
+				continue
+			}
+			f.p.depth--
+			f.invoke(in.Fn, nil, &call{in: &ir.Instr{}, kw: map[string]*Value{}})
+			f.p.depth++
+		}
+	}
+}
+
+// taintedScope reports a scope that holds untrusted data.
+func taintedScope(env State) bool {
+	for _, v := range env {
+		if v.T != nil || taintOf(v).T != nil {
+			return true
+		}
+	}
+	return false
+}
