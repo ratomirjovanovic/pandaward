@@ -60,6 +60,24 @@ module.exports = function (port) {
 	}
 }
 
+// TestJSExportedObjectAndCallbackLists checks the functions of an object
+// a module exports by name, and functions in a list passed to a call the
+// engine does not see.
+func TestJSExportedObjectAndCallbackLists(t *testing.T) {
+	src := `var exec = require('child_process').exec
+var series = require('contra').series
+var stats = {
+  ps: function (pid) { exec('ps -p ' + pid) },
+  commit: function (msg) {
+    series([function (done) { exec('git commit -m ' + msg, done) }])
+  }
+}
+module.exports = stats`
+	if got := strings.Join(jsFlows(t, src), " "); got != "taint.js-command-injection:4 taint.js-command-injection:6" {
+		t.Errorf("got %q", got)
+	}
+}
+
 // TestJSRouteHandlers checks that the flows in a handler the module body
 // registers are reported: loading the module analyzes its body, and the
 // handler with it.

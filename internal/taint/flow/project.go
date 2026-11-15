@@ -93,6 +93,14 @@ func (p *Project) exported(r *run) {
 	for name, v := range r.exit {
 		all[name] = v
 	}
+	// module.exports = obj exports the functions of the object.
+	if v, ok := all["default"]; ok && v.Inst == "dict" {
+		for k, fv := range v.Fields {
+			if _, ok := all[k]; !ok && fv.Fn != nil && !strings.HasPrefix(k, ".") && !strings.HasPrefix(k, "#") {
+				all[k] = fv
+			}
+		}
+	}
 	for _, name := range sortedKeys(all) {
 		v := all[name]
 		if v.Fn == nil || strings.HasPrefix(name, "$") || p.owner[v.Fn] != r {

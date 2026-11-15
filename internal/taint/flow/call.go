@@ -734,7 +734,7 @@ func (f *fnRun) callbacks(c *call) {
 	if !f.report || f.p.depth >= maxCallDepth {
 		return
 	}
-	for _, a := range c.all {
+	for _, a := range callbackFns(c.all) {
 		if a.Fn == nil || isClass(a.Fn) || f.p.owner[a.Fn] == nil || f.p.active[a.Fn] {
 			continue
 		}
@@ -744,6 +744,32 @@ func (f *fnRun) callbacks(c *call) {
 		}
 		f.invoke(a.Fn, nil, args)
 	}
+}
+
+// callbackFns returns the arguments of a call that are functions, and the
+// functions in arguments that are lists or object literals, as in
+// async.series([fn, fn], done) or run({ task: fn }).
+func callbackFns(args []*Value) []*Value {
+	var out []*Value
+	for _, a := range args {
+		switch {
+		case a.Fn != nil:
+			out = append(out, a)
+		case a.Inst == "dict":
+			for _, k := range sortedKeys(a.Fields) {
+				if a.Fields[k].Fn != nil {
+					out = append(out, a.Fields[k])
+				}
+			}
+		default:
+			for _, e := range a.Elems {
+				if e.Fn != nil {
+					out = append(out, e)
+				}
+			}
+		}
+	}
+	return out
 }
 
 // routeCall analyzes the handlers a call registers.
