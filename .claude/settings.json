@@ -1,0 +1,6 @@
+{
+  "enabledPlugins": {
+    "frontend-design@anthropic-plugin-directory": true,
+    "pandaward-windows@pandaward": true
+  }
+}
