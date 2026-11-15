@@ -25,26 +25,30 @@ type sinkTarget struct {
 
 // Engine analyzes modules against one specification.
 type Engine struct {
-	spec        *taint.Spec
-	calls       map[string][]sinkTarget
-	methods     map[string][]sinkTarget
-	stores      map[string]*taint.Sink
-	handlerSink *taint.Sink
-	srcAttrs    map[string]bool
-	srcCalls    map[string]bool
-	params      map[string]bool
-	routes      map[string]bool
-	normalizers map[string]bool
-	responses   map[string]bool
-	setters     map[string]bool
-	urlParsers  map[string]bool
-	textCalls   map[string]bool
-	lookups     map[string]bool
-	weak        weak
-	chains      [][]string
-	pureCalls   map[string]bool
-	decoders    map[string]bool
-	pureMethods map[string]bool
+	spec         *taint.Spec
+	calls        map[string][]sinkTarget
+	methods      map[string][]sinkTarget
+	stores       map[string]*taint.Sink
+	handlerSink  *taint.Sink
+	srcAttrs     map[string]bool
+	srcCalls     map[string]bool
+	params       map[string]bool
+	routes       map[string]bool
+	normalizers  map[string]bool
+	responses    map[string]bool
+	setters      map[string]bool
+	urlParsers   map[string]bool
+	textCalls    map[string]bool
+	lookups      map[string]bool
+	paramAnns    map[string]bool
+	weakAlgs     map[string][]weakAlg
+	props        map[string]string
+	secretStores []secretStore
+	weak         weak
+	chains       [][]string
+	pureCalls    map[string]bool
+	decoders     map[string]bool
+	pureMethods  map[string]bool
 }
 
 // New prepares an engine for a specification.
@@ -53,6 +57,26 @@ func New(spec *taint.Spec) *Engine {
 		srcAttrs: set(spec.Sources.Attributes), srcCalls: set(spec.Sources.Calls), params: set(spec.Sources.Params),
 		routes: set(spec.Sources.RouteDecorators), normalizers: set(spec.Normalizers), responses: set(spec.Responses.Calls), setters: map[string]bool{}, urlParsers: set(spec.URLParsers), textCalls: set(spec.TextCalls), lookups: set(spec.Lookups)}
 	e.weak = newWeak(spec)
+	e.paramAnns = set(spec.Sources.ParamAnnotations)
+	e.weakAlgs = map[string][]weakAlg{}
+	for _, s := range spec.Sinks {
+		if s.WeakAlgorithms == nil {
+			continue
+		}
+		for _, c := range s.WeakAlgorithms.Calls {
+			name, arg, _ := strings.Cut(c, "#")
+			n, _ := strconv.Atoi(arg)
+			e.weakAlgs[name] = append(e.weakAlgs[name], weakAlg{s, n})
+		}
+	}
+	for _, st := range spec.Weak.SecretStores {
+		parts := strings.Split(st, "#")
+		if len(parts) == 3 {
+			k, _ := strconv.Atoi(parts[1])
+			v, _ := strconv.Atoi(parts[2])
+			e.secretStores = append(e.secretStores, secretStore{parts[0], k, v})
+		}
+	}
 	e.pureCalls, e.pureMethods = set(spec.Pure.Calls), set(spec.Pure.Methods)
 	e.decoders = set(spec.Decoders)
 	for _, c := range spec.Sources.Chains {
@@ -221,12 +245,20 @@ func (r *run) root(fn *ir.Function) {
 	typed := typedParams(fn)
 	entry := State{}
 	for _, p := range fn.Params {
-		v := &Value{}
+		v := &Value{Inst: p.Ann}
+		if numericType[p.Ann] || javaScalar[p.Ann] {
+			v.Inst = ""
+		}
 		if r.e.params[p.Name] {
 			v.Q = p.Name
 		}
-		if route && p.Name != "self" && p.Name != "cls" && !typed[p.Name] && !numericType[p.Ann] {
+		if route && p.Name != "self" && p.Name != "cls" && p.Name != "this" && !typed[p.Name] && !numericType[p.Ann] && !javaScalar[p.Ann] {
 			v.T = r.newSource(p.Pos.Line, "route parameter "+p.Name)
+		}
+		for _, d := range p.Decorators {
+			if r.e.paramAnns[d.Name] && !javaScalar[p.Ann] {
+				v.T = r.newSource(p.Pos.Line, "@"+d.Name+" "+p.Name)
+			}
 		}
 		entry[p.Name] = v
 	}
@@ -310,6 +342,10 @@ func fixedRoute(fn *ir.Function) string {
 	}
 	return ""
 }
+
+// javaScalar are Java types whose values cannot carry text.
+var javaScalar = map[string]bool{"int": true, "long": true, "short": true, "byte": true, "boolean": true, "double": true, "float": true, "char": true,
+	"Integer": true, "Long": true, "Short": true, "Byte": true, "Boolean": true, "Double": true, "Float": true, "java.util.UUID": true}
 
 // routeParam matches a typed path parameter such as <int:id>.
 var routeParam = regexp.MustCompile(`<(\w+):(\w+)>`)
@@ -549,7 +585,11 @@ func (f *fnRun) instr(in *ir.Instr, st State) {
 		}
 	case ir.Bin:
 		a, b := f.val(st, in.A), f.val(st, in.B)
-		f.set(st, in.Dst, purified(binary(in.Name, a, b), a, b), line)
+		r := purified(binary(in.Name, a, b), a, b)
+		if in.Name == "+" {
+			r = hinted(r, a, b)
+		}
+		f.set(st, in.Dst, r, line)
 	case ir.Unary:
 		a := f.val(st, in.A)
 		f.set(st, in.Dst, purified(unary(in.Name, a), a), line)
@@ -586,6 +626,15 @@ func (f *fnRun) instr(in *ir.Instr, st State) {
 		f.set(st, in.Dst, f.build(in, st), line)
 	case ir.Iter:
 		f.set(st, in.Dst, iterate(f.val(st, in.A)), line)
+	case ir.Cast:
+		v := f.val(st, in.A)
+		// The declared type names the class, unless the value is an
+		// instance of a class of the project, whose methods are analyzed.
+		if in.Name != "" && in.Name != "Object" && v.Inst != in.Name && f.p.classes[v.Inst] == nil && !javaScalar[in.Name] {
+			v = v.copy()
+			v.Inst = in.Name
+		}
+		st[in.Dst] = v
 	case ir.Call:
 		f.set(st, in.Dst, f.call(in, st), line)
 	}
@@ -599,6 +648,12 @@ func (f *fnRun) load(base *Value, name string, line int) *Value {
 		return fv
 	}
 	if base.Q != "" {
+		// a static field of a class of the project
+		if r := f.p.module(base.Q); r != nil {
+			if v, ok := r.exit[name]; ok {
+				return v
+			}
+		}
 		q := base.Q + "." + name
 		if f.e.srcAttrs[q] {
 			return f.source(line, q)

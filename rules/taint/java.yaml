@@ -1,0 +1,316 @@
+# Taint specification for Java, read by the built-in taint engine
+# (builtin-taint) over the IR (internal/taint/flow). Names are qualified
+# by the class a value has: its declared type, the class it was created
+# from, or the return type below. A method of a class is Class.method;
+# a constructor is the class name. `name#N` selects argument N (default 0),
+# `name#*` any argument, `name#self` the receiver.
+
+sources:
+  calls:
+    - javax.servlet.http.HttpServletRequest.getParameter
+    - javax.servlet.http.HttpServletRequest.getParameterValues
+    - javax.servlet.http.HttpServletRequest.getParameterMap
+    - javax.servlet.http.HttpServletRequest.getParameterNames
+    - javax.servlet.http.HttpServletRequest.getHeader
+    - javax.servlet.http.HttpServletRequest.getHeaders
+    - javax.servlet.http.HttpServletRequest.getHeaderNames
+    - javax.servlet.http.HttpServletRequest.getQueryString
+    - javax.servlet.http.HttpServletRequest.getCookies
+    - javax.servlet.http.HttpServletRequest.getInputStream
+    - javax.servlet.http.HttpServletRequest.getReader
+    - javax.servlet.http.HttpServletRequest.getPathInfo
+    - javax.servlet.http.HttpServletRequest.getPart
+    - javax.servlet.http.HttpServletRequest.getParts
+    - javax.servlet.ServletRequest.getParameter
+    - javax.servlet.ServletRequest.getParameterValues
+    - javax.servlet.ServletRequest.getParameterMap
+    - jakarta.servlet.http.HttpServletRequest.getParameter
+    - jakarta.servlet.http.HttpServletRequest.getParameterValues
+    - jakarta.servlet.http.HttpServletRequest.getParameterMap
+    - jakarta.servlet.http.HttpServletRequest.getParameterNames
+    - jakarta.servlet.http.HttpServletRequest.getHeader
+    - jakarta.servlet.http.HttpServletRequest.getHeaders
+    - jakarta.servlet.http.HttpServletRequest.getQueryString
+    - jakarta.servlet.http.HttpServletRequest.getCookies
+    - jakarta.servlet.http.HttpServletRequest.getInputStream
+    - jakarta.servlet.http.HttpServletRequest.getReader
+  # Spring MVC and JAX-RS parameters bound from the request.
+  param_annotations: [RequestParam, PathVariable, RequestHeader, CookieValue, RequestBody, ModelAttribute, MatrixVariable, RequestPart,
+    QueryParam, PathParam, HeaderParam, CookieParam, FormParam, MatrixParam, BeanParam]
+
+sinks:
+  - id: taint.java-command-injection
+    kind: cmd
+    control: D-002
+    cwe: "CWE-78"
+    title: OS command built from untrusted input
+    message: Input reaches a command the program runs, so it can add arguments or, through a shell, run extra commands.
+    fix: Run a fixed program with an argument array, never through sh -c or cmd /c, and validate the values against an allowlist.
+    calls:
+      - java.lang.Runtime.exec#*
+      - Runtime.exec#*
+      - ProcessBuilder#*
+      - java.lang.ProcessBuilder#*
+      - ProcessBuilder.command#*
+      - java.lang.ProcessBuilder.command#*
+
+  - id: taint.java-sql-injection
+    kind: sql
+    control: D-001
+    cwe: "CWE-89"
+    title: SQL query built from untrusted input
+    message: Input is built into SQL text that is then executed, so it can change the query.
+    fix: Use a PreparedStatement with ? placeholders, or the named parameters of the query API, instead of building values into the SQL text.
+    calls:
+      - java.sql.Statement.execute
+      - java.sql.Statement.executeQuery
+      - java.sql.Statement.executeUpdate
+      - java.sql.Statement.executeLargeUpdate
+      - java.sql.Statement.addBatch
+      - java.sql.Connection.prepareStatement
+      - java.sql.Connection.prepareCall
+      - java.sql.Connection.nativeSQL
+      - java.sql.PreparedStatement.execute
+      - java.sql.PreparedStatement.executeQuery
+      - java.sql.PreparedStatement.executeUpdate
+      - java.sql.CallableStatement.execute
+      - org.springframework.jdbc.core.JdbcTemplate.execute
+      - org.springframework.jdbc.core.JdbcTemplate.query
+      - org.springframework.jdbc.core.JdbcTemplate.queryForObject
+      - org.springframework.jdbc.core.JdbcTemplate.queryForList
+      - org.springframework.jdbc.core.JdbcTemplate.queryForMap
+      - org.springframework.jdbc.core.JdbcTemplate.queryForRowSet
+      - org.springframework.jdbc.core.JdbcTemplate.queryForLong
+      - org.springframework.jdbc.core.JdbcTemplate.queryForInt
+      - org.springframework.jdbc.core.JdbcTemplate.update
+      - org.springframework.jdbc.core.JdbcTemplate.batchUpdate#*
+      - javax.persistence.EntityManager.createQuery
+      - javax.persistence.EntityManager.createNativeQuery
+      - jakarta.persistence.EntityManager.createQuery
+      - jakarta.persistence.EntityManager.createNativeQuery
+      - org.hibernate.Session.createQuery
+      - org.hibernate.Session.createSQLQuery
+      - org.hibernate.Session.createNativeQuery
+
+  - id: taint.java-path-traversal
+    kind: path
+    control: D-003
+    cwe: "CWE-22"
+    title: File path built from untrusted input
+    message: Input reaches a file system path, so `../` sequences or an absolute path reach files outside the intended directory.
+    fix: Resolve the path (getCanonicalPath, toRealPath) and check that it stays under the base directory, or map names through an allowlist.
+    calls:
+      - java.io.File#*
+      - java.io.FileInputStream#0
+      - java.io.FileOutputStream#0
+      - java.io.FileReader#0
+      - java.io.FileWriter#0
+      - java.io.RandomAccessFile#0
+      - java.io.PrintWriter#0
+      - java.nio.file.Paths.get#*
+      - java.nio.file.Path.of#*
+      - java.nio.file.Path.resolve#0
+      - java.nio.file.Files.newInputStream
+      - java.nio.file.Files.newOutputStream
+      - java.nio.file.Files.newBufferedReader
+      - java.nio.file.Files.newBufferedWriter
+      - java.nio.file.Files.readAllBytes
+      - java.nio.file.Files.readAllLines
+      - java.nio.file.Files.readString
+      - java.nio.file.Files.write
+      - java.nio.file.Files.writeString
+      - java.nio.file.Files.delete
+      - java.nio.file.Files.deleteIfExists
+      - java.nio.file.Files.copy#*
+      - java.nio.file.Files.move#*
+
+  - id: taint.java-ldap-injection
+    kind: ldap
+    control: D-001
+    cwe: "CWE-90"
+    title: LDAP filter built from untrusted input
+    message: Input is built into an LDAP search filter, so it can change which entries the search returns.
+    fix: Escape the value for LDAP filters (ESAPI encodeForLDAP) or use the search method's filter arguments ({0}) instead of building the filter text.
+    calls:
+      - javax.naming.directory.DirContext.search#1
+      - javax.naming.directory.InitialDirContext.search#1
+      - javax.naming.ldap.LdapContext.search#1
+      - javax.naming.ldap.InitialLdapContext.search#1
+      - org.springframework.ldap.core.LdapTemplate.search#1
+
+  - id: taint.java-xpath-injection
+    kind: xpath
+    control: D-001
+    cwe: "CWE-643"
+    title: XPath query built from untrusted input
+    message: Input is built into an XPath expression, so it can change which nodes the query selects.
+    fix: Use an XPathVariableResolver and $variables instead of building the value into the expression.
+    calls:
+      - javax.xml.xpath.XPath.evaluate
+      - javax.xml.xpath.XPath.compile
+      - javax.xml.xpath.XPath.evaluateExpression
+
+  - id: taint.java-xss
+    kind: xss
+    control: D-006
+    cwe: "CWE-79"
+    title: Untrusted input written into an HTML response
+    message: Input is written into the response without HTML encoding, so it can run script in the user's browser.
+    fix: Encode the value for HTML (ESAPI encodeForHTML, Spring HtmlUtils.htmlEscape) or render it through an escaping template.
+    calls:
+      - java.io.PrintWriter.print
+      - java.io.PrintWriter.println
+      - java.io.PrintWriter.write
+      - java.io.PrintWriter.printf#*
+      - java.io.PrintWriter.format#*
+      - java.io.PrintWriter.append
+      - javax.servlet.ServletOutputStream.print
+      - javax.servlet.ServletOutputStream.println
+      - javax.servlet.ServletOutputStream.write
+
+  - id: taint.java-trust-boundary
+    kind: trust
+    control: D-001
+    cwe: "CWE-501"
+    title: Untrusted data stored in the session
+    message: Input is stored in the server-side session, where later code trusts it as the application's own data.
+    fix: Validate the value before storing it in the session, or keep client input apart from trusted session data.
+    text_only: true
+    calls:
+      - javax.servlet.http.HttpSession.setAttribute#*
+      - javax.servlet.http.HttpSession.putValue#*
+      - jakarta.servlet.http.HttpSession.setAttribute#*
+
+  - id: taint.java-weak-random
+    kind: weakrandom
+    control: E-004
+    cwe: "CWE-330"
+    title: Predictable random value used as a secret
+    message: A value from java.util.Random or Math.random, which is predictable, is used as a token, session value or cookie value.
+    fix: Use java.security.SecureRandom for anything an attacker must not guess.
+
+  - id: taint.java-weak-hash
+    kind: weakhash
+    control: E-004
+    cwe: "CWE-328"
+    title: Weak hash algorithm
+    message: MD5, SHA-1 or another broken hash algorithm is used; collisions are practical and brute force is fast.
+    fix: Use SHA-256 or stronger; for passwords, use a slow, salted function (PBKDF2, bcrypt, scrypt, argon2).
+    weak_algorithms:
+      calls: [java.security.MessageDigest.getInstance#0]
+      names: [md5, md4, md2, sha1, sha-1, sha]
+
+  - id: taint.java-weak-crypto
+    kind: weakcrypto
+    control: E-004
+    cwe: "CWE-327"
+    title: Weak encryption algorithm
+    message: A broken or weak cipher or mode is used (DES, 3DES, RC2, RC4, Blowfish or ECB mode).
+    fix: Use AES in GCM mode (AES/GCM/NoPadding) with a random nonce.
+    weak_algorithms:
+      calls: [javax.crypto.Cipher.getInstance#0, javax.crypto.KeyGenerator.getInstance#0, javax.crypto.SecretKeyFactory.getInstance#0]
+      names: [des, desede, tripledes, 3des, rc2, rc4, arcfour, blowfish, ecb]
+      # The first part of the transformation is the algorithm; AES alone
+      # means AES/ECB.
+      bare: [aes]
+
+  - id: taint.java-insecure-cookie
+    kind: cookie
+    control: B-002
+    cwe: "CWE-614"
+    title: Cookie without the Secure flag
+    message: A cookie is set with setSecure(false), so it is also sent over plain HTTP.
+    fix: Call setSecure(true) (and setHttpOnly(true)) on cookies that carry session or user data.
+
+sanitizers:
+  - kinds: [all]
+    calls: [Integer.parseInt, Integer.valueOf, Long.parseLong, Long.valueOf, Double.parseDouble, Float.parseFloat, Boolean.parseBoolean, java.util.UUID.fromString]
+    methods: [equals, equalsIgnoreCase, startsWith, endsWith, contains, matches, isEmpty, length, indexOf, lastIndexOf, hashCode, compareTo, hasMoreElements, hasNext, size]
+  - kinds: [xss]
+    calls:
+      - org.owasp.esapi.Encoder.encodeForHTML
+      - org.owasp.esapi.Encoder.encodeForHTMLAttribute
+      - org.owasp.esapi.Encoder.encodeForJavaScript
+      - org.apache.commons.lang.StringEscapeUtils.escapeHtml
+      - org.apache.commons.lang3.StringEscapeUtils.escapeHtml4
+      - org.apache.commons.text.StringEscapeUtils.escapeHtml4
+      - org.springframework.web.util.HtmlUtils.htmlEscape
+      - org.owasp.encoder.Encode.forHtml
+      - org.owasp.encoder.Encode.forHtmlContent
+      - java.net.URLEncoder.encode
+  - kinds: [sql]
+    calls: [org.owasp.esapi.Encoder.encodeForSQL, org.apache.commons.lang.StringEscapeUtils.escapeSql]
+  - kinds: [ldap]
+    calls: [org.owasp.esapi.Encoder.encodeForLDAP, org.owasp.esapi.Encoder.encodeForDN]
+  - kinds: [xpath]
+    calls: [org.owasp.esapi.Encoder.encodeForXPath]
+  - kinds: [cmd]
+    calls: [org.owasp.esapi.Encoder.encodeForOS]
+  - kinds: [path]
+    calls: [org.apache.commons.io.FilenameUtils.getName]
+
+# What methods of known classes return, so that the methods called on the
+# result are known too.
+returns:
+  javax.servlet.http.HttpServletResponse.getWriter: java.io.PrintWriter
+  javax.servlet.http.HttpServletResponse.getOutputStream: javax.servlet.ServletOutputStream
+  javax.servlet.http.HttpServletRequest.getSession: javax.servlet.http.HttpSession
+  jakarta.servlet.http.HttpServletResponse.getWriter: java.io.PrintWriter
+  jakarta.servlet.http.HttpServletRequest.getSession: jakarta.servlet.http.HttpSession
+  org.owasp.esapi.ESAPI.encoder: org.owasp.esapi.Encoder
+  Runtime.getRuntime: java.lang.Runtime
+  java.lang.Runtime.getRuntime: java.lang.Runtime
+  java.sql.DriverManager.getConnection: java.sql.Connection
+  java.sql.Connection.createStatement: java.sql.Statement
+  java.sql.Connection.prepareStatement: java.sql.PreparedStatement
+  java.sql.Connection.prepareCall: java.sql.CallableStatement
+  javax.xml.xpath.XPathFactory.newInstance: javax.xml.xpath.XPathFactory
+  javax.xml.xpath.XPathFactory.newXPath: javax.xml.xpath.XPath
+  java.util.Base64.getDecoder: java.util.Base64.Decoder
+  java.util.Base64.getEncoder: java.util.Base64.Encoder
+  java.util.Base64.getUrlDecoder: java.util.Base64.Decoder
+
+# Calls that return text derived from their arguments.
+text_calls:
+  - java.net.URLDecoder.decode
+  - String.valueOf
+  - String
+  - java.lang.String
+  - String.format
+  - String.join
+  - java.util.Base64.Decoder.decode
+  - java.util.Base64.Encoder.encodeToString
+  - org.apache.commons.codec.binary.Base64.decodeBase64
+  - org.apache.commons.codec.binary.Base64.encodeBase64
+  - java.util.Arrays.toString
+
+decoders: [java.util.Base64.Decoder.decode, org.apache.commons.codec.binary.Base64.decodeBase64]
+
+pure:
+  calls: [String.valueOf, String, java.lang.String, String.format, String.join, Integer.toString, Long.toString, Float.toString, Double.toString, java.net.URLDecoder.decode, java.net.URLEncoder.encode]
+  methods: [substring, toCharArray, getBytes, split, trim, strip, toLowerCase, toUpperCase, replace, replaceAll, replaceFirst, concat, charAt, toString, intern, format]
+
+guards:
+  - kinds: [path]
+    contains: [".."]
+  - kinds: [sql, xpath]
+    contains: ["'"]
+  - kinds: [path]
+    method: startsWith
+    normalized: true
+
+normalizers:
+  - java.io.File.getCanonicalPath
+  - java.io.File.getCanonicalFile
+  - java.nio.file.Path.normalize
+  - java.nio.file.Path.toRealPath
+  - java.nio.file.Path.toAbsolutePath
+
+weak:
+  random_calls: [java.util.Random.nextInt, java.util.Random.nextLong, java.util.Random.nextFloat, java.util.Random.nextDouble, java.util.Random.nextGaussian, java.util.Random.nextBoolean, Math.random, java.lang.Math.random]
+  secret_names: [token, secret, password, passwd, nonce, salt, otp, session, remember, csrf, reset, apikey]
+  password_names: [password, passwd, pwd, credential, passphrase]
+  # Calls that store a value under a name: callee, the argument with the
+  # name and the argument with the value.
+  secret_stores: ["javax.servlet.http.Cookie#0#1", "javax.servlet.http.HttpSession.setAttribute#0#1", "javax.servlet.http.HttpSession.putValue#0#1"]
+  cookie_flag_setters: [javax.servlet.http.Cookie.setSecure]

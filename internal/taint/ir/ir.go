@@ -131,9 +131,11 @@ const (
 	Iter
 	// Del: delete A.Name (Name set) or A[B].
 	Del
+	// Cast: Dst = A, of the class Name (a declared type or a cast).
+	Cast
 )
 
-var opNames = [...]string{"copy", "bin", "unary", "load", "store", "index", "setindex", "call", "build", "free", "import", "func", "iter", "del"}
+var opNames = [...]string{"copy", "bin", "unary", "load", "store", "index", "setindex", "call", "build", "free", "import", "func", "iter", "del", "cast"}
 
 func (o Op) String() string { return opNames[o] }
 
@@ -194,6 +196,8 @@ type Param struct {
 	Ann string
 	// Default is the default value when it is a constant.
 	Default *Const
+	// Decorators are the parameter's annotations (Java).
+	Decorators []Decorator
 }
 
 // Decorator is a decorator applied to a function: the dotted name it calls
@@ -202,6 +206,8 @@ type Decorator struct {
 	Name string
 	Args []string
 	Call bool
+	// Keys are the argument names of an annotation (value, name, ...).
+	Keys []string
 }
 
 // Function is one function or the body of a module or class.
@@ -339,6 +345,8 @@ func (in *Instr) String() string {
 		return dst + "func " + in.Fn.Name
 	case Iter:
 		return dst + "iter " + in.A.String()
+	case Cast:
+		return dst + "(" + in.Name + ") " + in.A.String()
 	case Del:
 		if in.Name != "" {
 			return "del " + in.A.String() + "." + in.Name

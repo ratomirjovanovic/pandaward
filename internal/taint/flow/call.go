@@ -71,6 +71,24 @@ func (f *fnRun) call(in *ir.Instr, st State) *Value {
 		f.weakSinks(c)
 	}
 	r := f.weakSource(c, f.callResolved(c, st))
+	if r.Inst == "" || r.Inst == r.Q {
+		for _, n := range c.names {
+			if t, ok := f.e.spec.Returns[n]; ok {
+				r = r.copy()
+				r.Inst = t
+				break
+			}
+		}
+	}
+	// Properties.getProperty(key, default) reads the project's files.
+	if in.Name == "getProperty" && len(c.args) >= 1 && c.args[0].C != nil && r.T == nil {
+		if v, ok := f.e.props[c.args[0].C.Val]; ok {
+			return strVal(v)
+		}
+		if len(c.args) == 2 && c.args[1].C != nil {
+			return c.args[1]
+		}
+	}
 	if f.pureCall(c) {
 		inputs := append([]*Value{}, c.all...)
 		if c.in.Name != "" && c.method != "" {

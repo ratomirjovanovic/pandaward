@@ -39,12 +39,14 @@ const (
 	WeakHash
 	WeakRandom
 	Cookie
+	// WeakCrypto is a broken cipher or mode (Java).
+	WeakCrypto
 	// Shape marks checks found by the shape of the code alone.
 	Shape
 	All Kind = 1<<iota - 1
 )
 
-var kindByName = map[string]Kind{"cmd": Cmd, "code": Code, "path": Path, "sql": SQL, "xss": XSS, "ssrf": SSRF, "redirect": Redirect, "proto": Proto, "deser": Deser, "ldap": LDAP, "xpath": XPath, "trust": Trust, "xxe": XXE, "weakhash": WeakHash, "weakrandom": WeakRandom, "cookie": Cookie, "shape": Shape, "all": All}
+var kindByName = map[string]Kind{"cmd": Cmd, "code": Code, "path": Path, "sql": SQL, "xss": XSS, "ssrf": SSRF, "redirect": Redirect, "proto": Proto, "deser": Deser, "ldap": LDAP, "xpath": XPath, "trust": Trust, "xxe": XXE, "weakhash": WeakHash, "weakrandom": WeakRandom, "cookie": Cookie, "weakcrypto": WeakCrypto, "shape": Shape, "all": All}
 
 // Spec is a parsed taint specification.
 type Spec struct {
@@ -77,6 +79,8 @@ type Spec struct {
 	Supersedes []string
 	// Pure are calls and methods that only transform their input.
 	Pure Pure
+	// Returns maps a qualified method to the class it returns (Java).
+	Returns map[string]string
 	// Decoders turn text into bytes that can hold anything, undoing what
 	// a check of the text allowed (Python).
 	Decoders []string
@@ -120,6 +124,9 @@ type Sources struct {
 	Calls           []string `yaml:"calls"`
 	Params          []string `yaml:"params"`
 	RouteDecorators []string `yaml:"route_decorators"`
+	// ParamAnnotations mark a parameter as request data (Java:
+	// RequestParam, PathVariable, QueryParam, ...).
+	ParamAnnotations []string `yaml:"param_annotations"`
 	// HTMLReturnFrameworks are modules whose import makes a route
 	// handler's return value an HTML response.
 	HTMLReturnFrameworks []string `yaml:"html_return_frameworks"`
@@ -211,6 +218,9 @@ type Sink struct {
 	// built from it: a redirect to url_for(..., next=x) or a session
 	// entry holding a form object is not the flaw.
 	TextOnly bool `yaml:"text_only"`
+	// WeakAlgorithms report a call whose argument names a broken
+	// algorithm, constant or read from a properties file (Java).
+	WeakAlgorithms *WeakAlgorithms `yaml:"weak_algorithms"`
 	// UnlessConstant sinks are reported for any input that is not shown
 	// to come from constants, not only for untrusted input (Python
 	// deserialization).
@@ -223,6 +233,15 @@ type Sink struct {
 	Calls          map[string]Target `yaml:"-"`
 	CallsWithShell map[string]Target `yaml:"-"`
 	Methods        map[string]Target `yaml:"-"`
+}
+
+// WeakAlgorithms are calls (name#arg) whose argument names an algorithm:
+// the first part of a transformation such as DES/CBC/PKCS5Padding is in
+// Names, a mode part is ecb, or the algorithm is in Bare with no mode.
+type WeakAlgorithms struct {
+	Calls []string `yaml:"calls"`
+	Names []string `yaml:"names"`
+	Bare  []string `yaml:"bare"`
 }
 
 // Flag is a flag set on argument Arg by a call such as
@@ -242,21 +261,22 @@ type Sanitizer struct {
 }
 
 type specFile struct {
-	Sources     Sources     `yaml:"sources"`
-	Sinks       []*Sink     `yaml:"sinks"`
-	Sanitizers  []Sanitizer `yaml:"sanitizers"`
-	Guards      []*Guard    `yaml:"guards"`
-	Normalizers []string    `yaml:"normalizers"`
-	Responses   Responses   `yaml:"responses"`
-	Escapes     []*Escape   `yaml:"escapes"`
-	URLParsers  []string    `yaml:"url_parsers"`
-	ShellFlags  []string    `yaml:"shell_flags"`
-	TextCalls   []string    `yaml:"text_calls"`
-	Lookups     []string    `yaml:"lookups"`
-	Weak        Weak        `yaml:"weak"`
-	Supersedes  []string    `yaml:"supersedes"`
-	Pure        Pure        `yaml:"pure"`
-	Decoders    []string    `yaml:"decoders"`
+	Sources     Sources           `yaml:"sources"`
+	Sinks       []*Sink           `yaml:"sinks"`
+	Sanitizers  []Sanitizer       `yaml:"sanitizers"`
+	Guards      []*Guard          `yaml:"guards"`
+	Normalizers []string          `yaml:"normalizers"`
+	Responses   Responses         `yaml:"responses"`
+	Escapes     []*Escape         `yaml:"escapes"`
+	URLParsers  []string          `yaml:"url_parsers"`
+	ShellFlags  []string          `yaml:"shell_flags"`
+	TextCalls   []string          `yaml:"text_calls"`
+	Lookups     []string          `yaml:"lookups"`
+	Weak        Weak              `yaml:"weak"`
+	Supersedes  []string          `yaml:"supersedes"`
+	Pure        Pure              `yaml:"pure"`
+	Returns     map[string]string `yaml:"returns"`
+	Decoders    []string          `yaml:"decoders"`
 }
 
 // Pure lists the calls and methods whose result comes from constants when
@@ -278,6 +298,12 @@ type Weak struct {
 	PasswordNames []string `yaml:"password_names"`
 	CookieSetters []string `yaml:"cookie_setters"`
 	CookieFlags   []string `yaml:"cookie_flags"`
+	// SecretStores are callee#nameArg#valueArg: a call that stores a
+	// value under a name (Java: new Cookie(name, value)).
+	SecretStores []string `yaml:"secret_stores"`
+	// CookieFlagSetters are methods that set a cookie's security flag
+	// (Java: Cookie.setSecure); false is the finding.
+	CookieFlagSetters []string `yaml:"cookie_flag_setters"`
 }
 
 func parseTarget(s string) (Target, error) {
@@ -320,7 +346,7 @@ func Parse(data []byte) (*Spec, error) {
 	if err := yaml.Unmarshal(data, &f); err != nil {
 		return nil, err
 	}
-	s := &Spec{Sources: f.Sources, Sinks: f.Sinks, Sanitizers: f.Sanitizers, Guards: f.Guards, Normalizers: f.Normalizers, Responses: f.Responses, Escapes: f.Escapes, URLParsers: f.URLParsers, ShellFlags: f.ShellFlags, TextCalls: f.TextCalls, Lookups: f.Lookups, Weak: f.Weak, Supersedes: f.Supersedes, Pure: f.Pure, Decoders: f.Decoders, sanitizeCall: map[string]Kind{}, sanitizeMethod: map[string]Kind{}}
+	s := &Spec{Sources: f.Sources, Sinks: f.Sinks, Sanitizers: f.Sanitizers, Guards: f.Guards, Normalizers: f.Normalizers, Responses: f.Responses, Escapes: f.Escapes, URLParsers: f.URLParsers, ShellFlags: f.ShellFlags, TextCalls: f.TextCalls, Lookups: f.Lookups, Weak: f.Weak, Supersedes: f.Supersedes, Pure: f.Pure, Returns: f.Returns, Decoders: f.Decoders, sanitizeCall: map[string]Kind{}, sanitizeMethod: map[string]Kind{}}
 	for _, g := range s.Guards {
 		for _, n := range g.KindsRaw {
 			k, ok := kindByName[n]

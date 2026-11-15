@@ -55,6 +55,10 @@ func (e *Engine) NewProject(load Loader) *Project {
 		classes: map[string]*ir.Function{}, findings: map[string]taint.Finding{}, memo: map[string]callResult{}, active: map[*ir.Function]bool{}}
 }
 
+// SetProperties gives the engine the keys and values of the project's
+// .properties files, which Properties.getProperty(key, default) reads.
+func (p *Project) SetProperties(props map[string]string) { p.e.props = props }
+
 // Module analyzes every function of a module and returns the flows found
 // since the previous call, in this module or in the modules it calls.
 func (p *Project) Module(name string) []taint.Finding {
@@ -136,6 +140,9 @@ func className(m *ir.Module, fn *ir.Function) string {
 	if m.Name == "" {
 		return m.Path + ":" + fn.Class
 	}
+	if m.Name == fn.Class || strings.HasSuffix(m.Name, "."+fn.Class) {
+		return m.Name // a module named after its class (Java)
+	}
 	return m.Name + "." + fn.Class
 }
 
@@ -146,6 +153,12 @@ func (p *Project) resolve(q string, hops int) *ir.Function {
 		return nil
 	}
 	parts := strings.Split(q, ".")
+	// A module named after its class (Java): the name is the class.
+	if r := p.module(q); r != nil {
+		if v, ok := r.exit[parts[len(parts)-1]]; ok && v.Fn != nil {
+			return v.Fn
+		}
+	}
 	for i := len(parts) - 1; i >= 1; i-- {
 		r := p.module(strings.Join(parts[:i], "."))
 		if r == nil {
