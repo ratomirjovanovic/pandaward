@@ -5,7 +5,7 @@ Current and past results are on [pandaward.dev/benchmarks](https://pandaward.dev
 PandaWard has two kinds of measurement:
 
 - `pandaward benchmark` runs every built-in rule against PandaWard's own small corpus of vulnerable and safe cases (see the README). It checks that each rule does what it was written to do.
-- The OWASP Benchmark measurements below run PandaWard against public, labelled evaluation projects that PandaWard's authors did not write, for Java and for Python: the built-in rules, and the bundled Semgrep rules on Semgrep and on Opengrep. They show how much of a known test suite each engine finds.
+- The OWASP Benchmark measurements below run PandaWard against public, labelled evaluation projects that PandaWard's authors did not write, for Java and for Python: the built-in rules, the built-in taint engine (Python), and the bundled Semgrep rules on Semgrep and on Opengrep. They show how much of a known test suite each engine finds.
 - The OpenSSF CVE Benchmark measurement runs the same engines on real JavaScript and TypeScript projects at the commit before and after a published CVE was fixed.
 
 ## Quality gates
@@ -52,8 +52,8 @@ A category with no rule for an engine is shown as "not covered" rather than as a
 | | |
 |---|---|
 | Benchmark | OWASP BenchmarkJava, commit `f40c618c5a709afce350ef06ed2899c85cf586e9`, expected results 1.2 |
-| PandaWard | `main` at `6c3989c` (after #401), manual `benchmarks` run [43688116462](https://github.com/ratomirjovanovic/pandaward/actions/runs/43688116462) on GitHub Actions |
-| Engines | built-in rules; Semgrep 1.182.0 and Opengrep 1.33.1 with the bundled rule set `03b1554f67a40da1...` |
+| PandaWard | `main` at `5c7fab3` (after #417), `benchmarks` run [43702942863](https://github.com/ratomirjovanovic/pandaward/actions/runs/43702942863) of #417 on GitHub Actions, whose tree is that commit's |
+| Engines | built-in rules; the built-in taint engine; Semgrep 1.182.0 and Opengrep 1.33.1 with the bundled rule set `03b1554f67a40da1...` |
 | Date | 2026-11-15 |
 | Tool | `tools/owaspbench` |
 
@@ -114,35 +114,38 @@ The [OWASP Benchmark for Python](https://github.com/OWASP-Benchmark/BenchmarkPyt
 
 | Engine | Covered categories | Average, covered | Average, all 14 |
 |---|---|---|---|
-| PandaWard (built-in rules and Opengrep, as a scan runs them) | 14 | +0.637 | +0.637 |
+| PandaWard (built-in rules, taint engine and Opengrep, as a scan runs them) | 14 | +0.761 | +0.761 |
+| Taint engine alone (#406) | 14 | +0.642 | +0.642 |
 | Built-in rules | 8 | +0.026 | +0.015 |
 | Semgrep 1.182.0, bundled rules | 14 | +0.540 | +0.540 |
 | Opengrep 1.33.1, bundled rules | 14 | +0.637 | +0.637 |
 
 Per category (TPR / FPR / score):
 
-| Category | CWE | Real | Not real | Built-in | Semgrep | Opengrep | Bundled rule |
-|---|---|---|---|---|---|---|---|
-| cmdi | 78 | 13 | 7 | 0.538 / 1.000 / -0.462 | 0.615 / 0.000 / +0.615 | 0.769 / 0.000 / +0.769 | `pandaward-py-shell` |
-| codeinj | 94 | 20 | 33 | 1.000 / 1.000 / +0.000 | 0.600 / 0.182 / +0.418 | 0.600 / 0.121 / +0.479 | `pandaward-py-eval` |
-| deserialization | 502 | 18 | 36 | 1.000 / 0.333 / +0.667 | 1.000 / 0.333 / +0.667 | 1.000 / 0.333 / +0.667 | `pandaward-py-unsafe-deserialization` |
-| hash | 328 | 71 | 80 | 0.000 / 0.000 / +0.000 | 1.000 / 0.000 / +1.000 | 1.000 / 0.000 / +1.000 | `pandaward-py-weak-hash` |
-| ldapi | 90 | 16 | 13 | not covered | 0.688 / 0.154 / +0.534 | 0.750 / 0.077 / +0.673 | `pandaward-py-ldap-injection` |
-| pathtraver | 22 | 65 | 103 | not covered | 0.538 / 0.194 / +0.344 | 0.646 / 0.117 / +0.530 | `pandaward-py-path-traversal` |
-| redirect | 601 | 13 | 21 | not covered | 0.692 / 0.190 / +0.502 | 0.769 / 0.143 / +0.626 | `pandaward-py-open-redirect` |
-| securecookie | 614 | 24 | 15 | 0.000 / 0.000 / +0.000 | 1.000 / 0.000 / +1.000 | 1.000 / 0.000 / +1.000 | `pandaward-py-insecure-cookie` |
-| sqli | 89 | 5 | 11 | 0.000 / 0.000 / +0.000 | 0.400 / 0.000 / +0.400 | 0.600 / 0.000 / +0.600 | `pandaward-py-sql-injection` |
-| trustbound | 501 | 18 | 19 | not covered | 0.444 / 0.316 / +0.129 | 0.556 / 0.263 / +0.292 | `pandaward-py-trust-boundary` |
-| weakrand | 330 | 99 | 227 | 0.000 / 0.000 / +0.000 | 1.000 / 0.000 / +1.000 | 1.000 / 0.000 / +1.000 | `pandaward-py-weak-random` |
-| xpathi | 643 | 51 | 135 | not covered | 0.412 / 0.193 / +0.219 | 0.431 / 0.156 / +0.276 | `pandaward-py-xpath-injection` |
-| xss | 79 | 31 | 58 | 0.000 / 0.000 / +0.000 | 0.419 / 0.207 / +0.212 | 0.613 / 0.138 / +0.475 | `pandaward-py-xss` |
-| xxe | 611 | 8 | 20 | not covered | 0.625 / 0.100 / +0.525 | 0.625 / 0.100 / +0.525 | `pandaward-py-xxe` |
+| Category | CWE | Real | Not real | Built-in | Taint engine | Semgrep | Opengrep | PandaWard | Bundled rule |
+|---|---|---|---|---|---|---|---|---|---|
+| cmdi | 78 | 13 | 7 | 0.538 / 1.000 / -0.462 | 0.846 / 0.000 / +0.846 | 0.615 / 0.000 / +0.615 | 0.769 / 0.000 / +0.769 | +0.846 | `pandaward-py-shell` |
+| codeinj | 94 | 20 | 33 | 1.000 / 1.000 / +0.000 | 0.750 / 0.000 / +0.750 | 0.600 / 0.182 / +0.418 | 0.600 / 0.121 / +0.479 | +0.629 | `pandaward-py-eval` |
+| deserialization | 502 | 18 | 36 | 1.000 / 0.333 / +0.667 | 0.889 / 0.000 / +0.889 | 1.000 / 0.333 / +0.667 | 1.000 / 0.333 / +0.667 | +0.667 | `pandaward-py-unsafe-deserialization` |
+| hash | 328 | 71 | 80 | 0.000 / 0.000 / +0.000 | 0.000 / 0.000 / +0.000 | 1.000 / 0.000 / +1.000 | 1.000 / 0.000 / +1.000 | +1.000 | `pandaward-py-weak-hash` |
+| ldapi | 90 | 16 | 13 | not covered | 0.875 / 0.000 / +0.875 | 0.688 / 0.154 / +0.534 | 0.750 / 0.077 / +0.673 | +0.798 | `pandaward-py-ldap-injection` |
+| pathtraver | 22 | 65 | 103 | not covered | 0.908 / 0.000 / +0.908 | 0.538 / 0.194 / +0.344 | 0.646 / 0.117 / +0.530 | +0.791 | `pandaward-py-path-traversal` |
+| redirect | 601 | 13 | 21 | not covered | 1.000 / 0.000 / +1.000 | 0.692 / 0.190 / +0.502 | 0.769 / 0.143 / +0.626 | +0.857 | `pandaward-py-open-redirect` |
+| securecookie | 614 | 24 | 15 | 0.000 / 0.000 / +0.000 | 0.000 / 0.000 / +0.000 | 1.000 / 0.000 / +1.000 | 1.000 / 0.000 / +1.000 | +1.000 | `pandaward-py-insecure-cookie` |
+| sqli | 89 | 5 | 11 | 0.000 / 0.000 / +0.000 | 0.600 / 0.000 / +0.600 | 0.400 / 0.000 / +0.400 | 0.600 / 0.000 / +0.600 | +0.600 | `pandaward-py-sql-injection` |
+| trustbound | 501 | 18 | 19 | not covered | 0.611 / 0.000 / +0.611 | 0.444 / 0.316 / +0.129 | 0.556 / 0.263 / +0.292 | +0.348 | `pandaward-py-trust-boundary` |
+| weakrand | 330 | 99 | 227 | 0.000 / 0.000 / +0.000 | 0.000 / 0.000 / +0.000 | 1.000 / 0.000 / +1.000 | 1.000 / 0.000 / +1.000 | +1.000 | `pandaward-py-weak-random` |
+| xpathi | 643 | 51 | 135 | not covered | 0.843 / 0.000 / +0.843 | 0.412 / 0.193 / +0.219 | 0.431 / 0.156 / +0.276 | +0.688 | `pandaward-py-xpath-injection` |
+| xss | 79 | 31 | 58 | 0.000 / 0.000 / +0.000 | 0.806 / 0.017 / +0.789 | 0.419 / 0.207 / +0.212 | 0.613 / 0.138 / +0.475 | +0.651 | `pandaward-py-xss` |
+| xxe | 611 | 8 | 20 | not covered | 0.875 / 0.000 / +0.875 | 0.625 / 0.100 / +0.525 | 0.625 / 0.100 / +0.525 | +0.775 | `pandaward-py-xxe` |
 
-The first measurement (#315) was +0.059 on Opengrep and +0.039 on Semgrep, with five covered categories; on 2026-11-14 Opengrep scored +0.530.
+The first measurement (#315) was +0.059 on Opengrep and +0.039 on Semgrep, with five covered categories; on 2026-11-14 Opengrep scored +0.530, and PandaWard +0.637 on the morning of 2026-11-15, before the taint engine covered Python.
 
 ### Interpretation
 
-With the bundled rules on Opengrep, PandaWard scores 0.637 on this suite, above the 0.50 target of the PandaWard 1.0 plan on average, from +0.059 before #326. It is still short of it in trust boundary (+0.292), XPath (+0.276), code injection (+0.479) and XSS (+0.475).
+PandaWard scores 0.761 on this suite as a scan runs it, from +0.637 with the bundled rules on Opengrep alone and +0.059 before #326. Its own data flow engine scores 0.642 alone, with no other analyzer installed, and leads Opengrep in every injection category. Trust boundary (+0.348) stays the weakest: the Opengrep rule's false positives remain in the combined result.
+
+- **Taint engine** (#406): Python is lowered to an IR of control flow graphs and analyzed to a fixpoint. It folds constants (the Benchmark hides input behind `7 * 18 + num > 200`, `"ABC"[1]` and `match` on a constant), keeps dict keys, list positions through `append` and `pop` and `ConfigParser` keys apart, and reads guards on branch edges. It has one false positive in the eleven injection categories. 40 of its 41 misses read the input through `helpers.separate_request`, a wrapper class in another module; following functions across modules is the next milestone (P3). Hash, weak random and insecure cookie are not data flow and stay with the pattern rules.
 
 - **Taint rules** (#326) follow Flask and Django request data (arguments, form, cookies, headers, query string, body) to eval and exec, OS commands, SQL, file paths, LDAP, XPath, the HTML a view returns, redirects, the session and XML parsing with external entities enabled. Propagators carry taint through `list.append` and `dict.update`, which the Benchmark uses to hide input.
 - **Guards the rules model** (#392, #394): `eval` after a check that the value is one quoted string literal; a redirect after a check that `urlparse(x).netloc` is in an allowlist; a file path after a check for `../` or that the resolved path stays under its base. Path traversal reports where a `pathlib` path is used, not built, and covers `os.path.exists` and the other `os.path` and `os` file functions. A `ConfigParser` carries a value only to a read of the same key, which removed the constant-key false positives in every category.
