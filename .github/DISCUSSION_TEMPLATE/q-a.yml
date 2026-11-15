@@ -1,0 +1,38 @@
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for asking. A finding you think is wrong, or a problem PandaWard missed, gets fixed fastest as a report: run `pandaward feedback` or `/pandaward:feedback` (see [docs/FEEDBACK.md](https://github.com/ratomirjovanovic/pandaward/blob/main/docs/FEEDBACK.md)). Security problems in PandaWard itself go to a [private advisory](https://github.com/ratomirjovanovic/pandaward/security/advisories/new), never here.
+  - type: textarea
+    id: question
+    attributes:
+      label: Question
+      description: What are you trying to do, and what happened instead?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: PandaWard version
+      description: Output of `pandaward version`.
+      placeholder: "0.2.15"
+  - type: dropdown
+    id: how
+    attributes:
+      label: How do you run it?
+      options:
+        - Claude Code plugin
+        - CLI
+        - GitHub Action or other CI
+        - MCP server in another client
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "Windows 11, macOS 15, Ubuntu 24.04"
+  - type: textarea
+    id: details
+    attributes:
+      label: Output, rule or control
+      description: The command and its output, and the rule or control id (for example `code.sql-concat`, `D-003`) if the question is about a finding. Remove secrets and private paths first.
+      render: text
