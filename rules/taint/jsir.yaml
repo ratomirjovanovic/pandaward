@@ -262,6 +262,14 @@ sinks:
     message: The check rejects javascript URLs but not data or vbscript URLs, which also run script.
     fix: Allow only the schemes you expect (http, https, mailto) instead of rejecting a list.
 
+  - id: taint.js-redos
+    kind: shape
+    control: D-006
+    cwe: "CWE-1333"
+    title: Regular expression with catastrophic backtracking
+    message: Matching this regular expression can take exponential or quadratic time on a crafted input, which blocks the process that runs it (ReDoS).
+    fix: Rewrite the pattern so no two parts can match the same text (no nested quantifiers such as (a+)+, no overlapping alternatives), bound the input length before matching, or use a linear-time engine such as RE2.
+
 sanitizers:
   - kinds: [all]
     calls: [Number, parseInt, parseFloat, Boolean, Math.floor, Math.ceil, Math.round, Math.trunc, Math.abs, Math.min, Math.max, isNaN, Number.isInteger, Number.parseInt, Number.parseFloat, encodeURIComponent, len]

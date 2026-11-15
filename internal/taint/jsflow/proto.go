@@ -753,6 +753,7 @@ func writesInto(body js.Node, descends map[string]int) bool {
 func Structural(f *js.File, spec *taint.Spec, opt Options) []taint.Finding {
 	a := newAnalyzer(f, spec, opt, nil)
 	a.protoPollution(f)
+	a.regexps(f)
 	if opt.Library {
 		a.shapes(f)
 	}

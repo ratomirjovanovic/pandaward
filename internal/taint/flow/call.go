@@ -730,7 +730,7 @@ func (f *fnRun) propSinks(in *ir.Instr, base, v *Value) {
 // jsxSinks reports an attribute path of a JSX element (jsx(tag, attrs))
 // that is a sink, such as dangerouslySetInnerHTML.__html.
 func (f *fnRun) jsxSinks(c *call) {
-	if len(c.names) == 0 || c.names[0] != "jsx" || len(c.args) < 2 {
+	if len(c.names) == 0 || len(c.args) < 2 || c.names[0] != "jsx" && !strings.HasSuffix(c.names[0], "createElement") {
 		return
 	}
 	for _, s := range f.e.spec.Sinks {
