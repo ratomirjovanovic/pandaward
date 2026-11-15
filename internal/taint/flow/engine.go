@@ -441,8 +441,10 @@ func (f *fnRun) block(b *ir.Block, s State, push func(*ir.Block, State)) {
 			if !t.Value.IsZero() && !(v.C != nil && v.C.Kind == ir.None) {
 				f.returns = true
 			}
-			if v, ok := st["self"]; ok {
-				f.self = joinFirst(f.self, v)
+			for _, name := range []string{"self", "this"} {
+				if v, ok := st[name]; ok {
+					f.self = joinFirst(f.self, v)
+				}
 			}
 		}
 		if f.report && f.route && f.html && f.e.handlerSink != nil {

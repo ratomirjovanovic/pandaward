@@ -908,7 +908,11 @@ func (l *lowerer) expr(e Expr) ir.Operand {
 			l.cur = after
 			return ir.V(t)
 		}
-		return l.value(ir.Bin, e.Pos, e.Op, l.expr(e.L), l.expr(e.R))
+		op := e.Op
+		if op == "/" {
+			op = "//" // integer division on integers
+		}
+		return l.value(ir.Bin, e.Pos, op, l.expr(e.L), l.expr(e.R))
 	case *Unary:
 		x := l.expr(e.X)
 		switch e.Op {
