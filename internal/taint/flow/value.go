@@ -37,6 +37,44 @@ type Value struct {
 	// from, and WK which of the two (taint.WeakHash, taint.WeakRandom).
 	W  *taint.Trace
 	WK taint.Kind
+	// Pure marks a value computed from constants only, through operators,
+	// containers and functions that only transform their input (base64,
+	// encode, format), even when the engine does not compute it.
+	Pure bool
+}
+
+// isPure reports a value known to come from constants only.
+func isPure(v *Value) bool {
+	if v == nil {
+		return false
+	}
+	if v.C != nil || v.Pure {
+		return true
+	}
+	if !v.Known || v.T != nil {
+		return false
+	}
+	for _, e := range v.Elems {
+		if !isPure(e) {
+			return false
+		}
+	}
+	return true
+}
+
+// purified marks r pure when every input it was computed from is.
+func purified(r *Value, inputs ...*Value) *Value {
+	if isPure(r) {
+		return r
+	}
+	for _, in := range inputs {
+		if !isPure(in) {
+			return r
+		}
+	}
+	r = r.copy()
+	r.Pure = true
+	return r
 }
 
 var empty = &Value{}
@@ -160,6 +198,7 @@ func joinDepth(a, b *Value, widen bool, depth int) *Value {
 		r.Fn = a.Fn
 	}
 	r.Norm = a.Norm && b.Norm
+	r.Pure = isPure(a) && isPure(b)
 	if a.From == b.From {
 		r.From = a.From
 	}
@@ -202,7 +241,7 @@ func covers(old, v *Value) bool {
 	if old.Q != "" && old.Q != v.Q || old.Inst != "" && old.Inst != v.Inst || old.Fn != nil && old.Fn != v.Fn || old.From != "" && old.From != v.From {
 		return false
 	}
-	if old.Norm && !v.Norm || old.WK&v.WK != v.WK {
+	if old.Norm && !v.Norm || old.WK&v.WK != v.WK || old.Pure && !isPure(v) {
 		return false
 	}
 	return old.Fields == nil && v.Fields == nil && !old.Known
@@ -220,7 +259,7 @@ func equal(a, b *Value) bool {
 	if b == nil {
 		b = empty
 	}
-	if (a.T != nil) != (b.T != nil) || a.Safe != b.Safe || a.Q != b.Q || a.Inst != b.Inst || a.Norm != b.Norm || a.Fn != b.Fn || a.Known != b.Known || a.From != b.From || a.Opaque != b.Opaque || a.WK != b.WK {
+	if (a.T != nil) != (b.T != nil) || a.Safe != b.Safe || a.Q != b.Q || a.Inst != b.Inst || a.Norm != b.Norm || a.Fn != b.Fn || a.Known != b.Known || a.From != b.From || a.Opaque != b.Opaque || a.WK != b.WK || isPure(a) != isPure(b) {
 		return false
 	}
 	if (a.C == nil) != (b.C == nil) || a.C != nil && *a.C != *b.C {

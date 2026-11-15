@@ -100,6 +100,10 @@ sinks:
     title: Untrusted data is deserialized into objects
     message: Input reaches a deserializer that can build arbitrary objects, so a crafted payload runs code.
     fix: Use a data-only format (json, yaml.safe_load) for untrusted input, or sign the data and verify it first.
+    # pickle and yaml.load run code from whatever they are given: input
+    # that is not shown to come from constants is reported too, as a
+    # hypothesis.
+    unless_constant: true
     calls:
       - pickle.loads
       - pickle.load
@@ -447,16 +451,16 @@ lookups:
 # Bundled Semgrep rules the taint engine replaces in the Python files it
 # analyzes: it decides the same weaknesses from the data flow, with fewer
 # false positives (see docs/BENCHMARKS.md). Rules for what it does not
-# cover (TLS verification, template injection) stay, and so does the
-# deserialization rule: pickle and yaml.load run code from whatever they
-# are given, so every call whose input is not a constant is worth a look.
-# The built-in heuristics are not listed: they run when Semgrep and
+# cover (TLS verification, template injection) stay. Deserialization is
+# reported for any input not shown to come from constants, so its pattern
+# rule adds nothing. The built-in heuristics are not listed: they run when Semgrep and
 # Opengrep are not installed, and the bundled rules replace them when they
 # are.
 supersedes:
   - pandaward-py-eval
   - pandaward-py-shell
   - pandaward-py-sql-injection
+  - pandaward-py-unsafe-deserialization
   - pandaward-py-path-traversal
   - pandaward-py-ldap-injection
   - pandaward-py-xpath-injection
@@ -468,6 +472,16 @@ supersedes:
   - pandaward-py-weak-hash
   - pandaward-py-weak-random
   - pandaward-py-insecure-cookie
+
+# Calls and methods that only transform their input: what they return
+# comes from constants when their input does.
+pure:
+  calls: [str, bytes, int, float, bool, len, repr, format, hex, ord, chr, base64.b64decode, base64.b64encode, base64.urlsafe_b64decode, base64.urlsafe_b64encode, base64.b32decode, base64.b16decode, binascii.unhexlify, binascii.hexlify, codecs.decode, codecs.encode, urllib.parse.unquote, urllib.parse.unquote_plus, urllib.parse.quote, urllib.parse.quote_plus, json.dumps, html.escape, pickle.dumps, yaml.dump]
+  methods: [encode, decode, strip, lstrip, rstrip, lower, upper, title, replace, format, join, split, rsplit, splitlines, zfill, ljust, rjust, center, removeprefix, removesuffix, hex, fromhex]
+
+# Decoders turn checked text into bytes that can hold anything: a value
+# of letters and digits decodes to any payload.
+decoders: [base64.b64decode, base64.urlsafe_b64decode, base64.b32decode, base64.b16decode, base64.a85decode, base64.b85decode, binascii.unhexlify, binascii.a2b_base64, codecs.decode, bytes.fromhex, zlib.decompress, gzip.decompress]
 
 # Weak digests and predictable numbers, and where they must not end up.
 weak:

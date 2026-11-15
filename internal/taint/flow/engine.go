@@ -42,6 +42,9 @@ type Engine struct {
 	lookups     map[string]bool
 	weak        weak
 	chains      [][]string
+	pureCalls   map[string]bool
+	decoders    map[string]bool
+	pureMethods map[string]bool
 }
 
 // New prepares an engine for a specification.
@@ -50,6 +53,8 @@ func New(spec *taint.Spec) *Engine {
 		srcAttrs: set(spec.Sources.Attributes), srcCalls: set(spec.Sources.Calls), params: set(spec.Sources.Params),
 		routes: set(spec.Sources.RouteDecorators), normalizers: set(spec.Normalizers), responses: set(spec.Responses.Calls), setters: map[string]bool{}, urlParsers: set(spec.URLParsers), textCalls: set(spec.TextCalls), lookups: set(spec.Lookups)}
 	e.weak = newWeak(spec)
+	e.pureCalls, e.pureMethods = set(spec.Pure.Calls), set(spec.Pure.Methods)
+	e.decoders = set(spec.Decoders)
 	for _, c := range spec.Sources.Chains {
 		e.chains = append(e.chains, strings.Split(c, "."))
 	}
@@ -136,6 +141,9 @@ type fnRun struct {
 	fn     *ir.Function
 	route  bool
 	report bool
+	// path is the route of a handler without path parameters: what
+	// request.path holds while it runs.
+	path string
 	// ret and self are the returned value and self at the returns, joined
 	// in the report pass.
 	ret, self *Value
@@ -243,6 +251,9 @@ func (r *run) function(fn *ir.Function, entry State, route bool) (ret, self *Val
 // only with arguments it accepted.
 func (r *run) analyzeFn(fn *ir.Function, entry State, route bool) (ret, self *Value, validates bool) {
 	f := &fnRun{run: r, fn: fn, route: route, shared: sharedTemps(fn)}
+	if route {
+		f.path = fixedRoute(fn)
+	}
 	in := map[*ir.Block]State{fn.Entry(): entry}
 	visits := map[*ir.Block]int{}
 	work := []*ir.Block{fn.Entry()}
@@ -284,6 +295,20 @@ func (r *run) analyzeFn(fn *ir.Function, entry State, route bool) (ret, self *Va
 		}
 	}
 	return f.ret, f.self, f.raises && !f.returns
+}
+
+// fixedRoute returns the path of a route decorator without parameters
+// (@app.route('/about')), or "".
+func fixedRoute(fn *ir.Function) string {
+	for _, d := range fn.Decorators {
+		if d.Call && len(d.Args) > 0 && strings.HasPrefix(d.Args[0], "/") {
+			if strings.ContainsAny(d.Args[0], "<{") {
+				return ""
+			}
+			return d.Args[0]
+		}
+	}
+	return ""
 }
 
 // routeParam matches a typed path parameter such as <int:id>.
@@ -523,9 +548,11 @@ func (f *fnRun) instr(in *ir.Instr, st State) {
 			f.envs[in.Fn] = st.copy()
 		}
 	case ir.Bin:
-		f.set(st, in.Dst, binary(in.Name, f.val(st, in.A), f.val(st, in.B)), line)
+		a, b := f.val(st, in.A), f.val(st, in.B)
+		f.set(st, in.Dst, purified(binary(in.Name, a, b), a, b), line)
 	case ir.Unary:
-		f.set(st, in.Dst, unary(in.Name, f.val(st, in.A)), line)
+		a := f.val(st, in.A)
+		f.set(st, in.Dst, purified(unary(in.Name, a), a), line)
 	case ir.Load:
 		v := f.load(f.val(st, in.A), in.Name, line)
 		if v.T == nil && f.chained(in) {
@@ -546,7 +573,13 @@ func (f *fnRun) instr(in *ir.Instr, st State) {
 			st[in.A.Var] = mix(base, v)
 		}
 	case ir.Index:
-		f.set(st, in.Dst, f.index(in, st), line)
+		r := f.index(in, st)
+		if in.Name == "slice" {
+			r = purified(r, f.val(st, in.A), f.val(st, in.B), f.val(st, in.C))
+		} else {
+			r = purified(r, f.val(st, in.A), f.val(st, in.B))
+		}
+		f.set(st, in.Dst, r, line)
 	case ir.SetIndex:
 		f.setIndex(in, st)
 	case ir.Build:
@@ -559,6 +592,9 @@ func (f *fnRun) instr(in *ir.Instr, st State) {
 }
 
 func (f *fnRun) load(base *Value, name string, line int) *Value {
+	if name == "path" && f.path != "" && strings.HasSuffix(base.Q, "request") {
+		return strVal(f.path)
+	}
 	if fv, ok := base.Fields["."+name]; ok {
 		return fv
 	}
@@ -738,9 +774,10 @@ func (f *fnRun) build(in *ir.Instr, st State) *Value {
 	case "str":
 		r := &Value{}
 		var sb strings.Builder
-		allConst := true
+		allConst, allPure := true, true
 		for _, a := range in.Args {
 			v := f.val(st, a)
+			allPure = allPure && isPure(v)
 			r = mix(r, v)
 			if v.C != nil && v.C.Kind == ir.Str {
 				sb.WriteString(v.C.Val)
@@ -753,9 +790,10 @@ func (f *fnRun) build(in *ir.Instr, st State) *Value {
 		if allConst && r.T == nil {
 			return strVal(sb.String())
 		}
-		if r.Opaque {
+		if r.Opaque || allPure {
 			r = r.copy()
 			r.Opaque = false // text built here
+			r.Pure = allPure
 		}
 		return r
 	case "list", "tuple":

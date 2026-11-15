@@ -116,7 +116,8 @@ func (f *fnRun) refine(st State, cond ir.Operand, edge bool) State {
 				}
 			}
 		case len(g.Methods) > 0 && d.Op == ir.Call && edge && contains(g.Methods, d.Name):
-			mark(f.root(d.A), g.Kinds)
+			// letters and digits are harmless, but still the client's data
+			mark(f.root(d.A), g.Kinds&^taint.Trust)
 		case len(g.Calls) > 0 && d.Op == ir.Call && edge && len(d.Args) > 0 && f.calls(d, st, g.Calls):
 			mark(f.root(d.Args[0]), g.Kinds)
 		case g.Allowlist && isIn && !absent && constant(f.val(st, d.B)) && f.val(st, d.B).C == nil:
