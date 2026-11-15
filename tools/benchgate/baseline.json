@@ -113,18 +113,18 @@
       }
     },
     "owasp/python/pandaward": {
-      "average_score_covered": 0.9722222222222223,
+      "average_score_covered": 1,
       "categories": {
         "cmdi": 1,
         "codeinj": 1,
-        "deserialization": 0.6666666666666667,
+        "deserialization": 1,
         "hash": 1,
         "ldapi": 1,
         "pathtraver": 1,
         "redirect": 1,
         "securecookie": 1,
         "sqli": 1,
-        "trustbound": 0.9444444444444444,
+        "trustbound": 1,
         "weakrand": 1,
         "xpathi": 1,
         "xss": 1,
@@ -151,18 +151,18 @@
       }
     },
     "owasp/python/taint": {
-      "average_score_covered": 0.9920634920634921,
+      "average_score_covered": 1,
       "categories": {
         "cmdi": 1,
         "codeinj": 1,
-        "deserialization": 0.9444444444444444,
+        "deserialization": 1,
         "hash": 1,
         "ldapi": 1,
         "pathtraver": 1,
         "redirect": 1,
         "securecookie": 1,
         "sqli": 1,
-        "trustbound": 0.9444444444444444,
+        "trustbound": 1,
         "weakrand": 1,
         "xpathi": 1,
         "xss": 1,
