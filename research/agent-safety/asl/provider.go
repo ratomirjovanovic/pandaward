@@ -108,8 +108,8 @@ type apiRequest struct {
 	MaxTokens  int               `json:"max_tokens"`
 	System     string            `json:"system"`
 	Messages   []json.RawMessage `json:"messages"`
-	Tools      []apiTool         `json:"tools"`
-	ToolChoice map[string]string `json:"tool_choice"`
+	Tools      []apiTool         `json:"tools,omitempty"`
+	ToolChoice map[string]string `json:"tool_choice,omitempty"`
 }
 
 type apiTool struct {
