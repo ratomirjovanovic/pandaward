@@ -40,12 +40,14 @@ func labRun(args []string, w io.Writer) error {
 	reps := fs.Int("reps", 3, "repetitions of every scenario and arm")
 	seed := fs.Int64("seed", 1, "seed for the episode order")
 	split := fs.String("split", "all", "dev, heldout or all")
+	only := fs.String("scenarios", "", "comma-separated scenario ids to run (a pilot or a smoke test)")
 	provider := fs.String("provider", "mock", "mock (scripted agents) or api (a model, needs --live)")
 	mock := fs.String("mock", "safe", "mock agent: safe or unsafe")
 	model := fs.String("model", "claude-haiku-5-5", "model of the api provider")
 	monitorModel := fs.String("monitor-model", "", "model of the arm D monitor (default: --model)")
 	ledger := fs.String("ledger", defaultLedger, "budget ledger file (live runs)")
 	keyFile := fs.String("key-file", "", "file with the API key (default: ~/.pandaward-lab/anthropic.key when ANTHROPIC_API_KEY is unset)")
+	claudePath := fs.String("claude", "claude", "claude executable of the cc provider")
 	live := fs.Bool("live", false, "allow paid API calls; needs ANTHROPIC_API_KEY and the budget ledger")
 	maxTurns := fs.Int("max-turns", 14, "model turns per episode")
 	if _, err := parse(fs, args); err != nil {
@@ -73,6 +75,11 @@ func labRun(args []string, w io.Writer) error {
 		Model: *model, MonitorModel: *monitorModel, Run: *run, OutDir: *out,
 		Limits: asl.DefaultEpisodeLimits(), MaxTurns: *maxTurns, Version: version.Version,
 	}
+	if *only != "" {
+		for _, id := range strings.Split(*only, ",") {
+			cfg.Only = append(cfg.Only, strings.TrimSpace(id))
+		}
+	}
 	switch *provider {
 	case asl.ProviderAPI:
 		if !*live {
@@ -89,6 +96,21 @@ func labRun(args []string, w io.Writer) error {
 		cfg.Ledger, cfg.APIKey = led, key
 		r := led.Report()
 		fmt.Fprintf(w, "Live run on %s: %s spent of the %s cap so far.\n", *model, r.Spent.USD(), r.Cap.USD())
+	case asl.ProviderCC:
+		exe, err := os.Executable()
+		if err != nil {
+			return exitErr{1, err.Error()}
+		}
+		abs, err := filepath.Abs(*dir)
+		if err != nil {
+			return exitErr{1, err.Error()}
+		}
+		m := *model
+		if m == "claude-haiku-5-5" {
+			m = "" // the API default is not the plan default: let Claude Code choose unless --model is given
+		}
+		cfg.CC = &asl.CCConfig{Claude: *claudePath, PandaWard: exe, CorpusDir: abs, Model: m}
+		fmt.Fprintln(w, "Claude Code track: headless claude on your subscription, no built-in tools, only the lab tools. Results are labeled cc and are not comparable to the API track.")
 	case asl.ProviderMock:
 		fmt.Fprintln(w, "Mock run: scripted agents, no model, no cost. Results are labeled mock.")
 	}
@@ -104,6 +126,8 @@ func labRun(args []string, w io.Writer) error {
 		fmt.Fprintf(w, "Spent so far: %s of %s.\n", r.Spent.USD(), r.Cap.USD())
 	}
 	switch {
+	case errors.Is(err, asl.ErrUsageLimit):
+		return exitErr{1, "the subscription usage limit stopped the run; nothing was dropped. Run the same command again after the limit resets"}
 	case errors.Is(err, asl.ErrBudget):
 		return exitErr{1, "the budget cap stopped the run; nothing was dropped. Report what was measured, or raise the ledger cap by editing that file on purpose"}
 	case err != nil:
@@ -223,4 +247,35 @@ func checkKey(k, where string) (string, error) {
 		return "", fmt.Errorf("the API key in %s does not look like an Anthropic key (it should start with sk-ant-)", where)
 	}
 	return k, nil
+}
+
+// labMCP serves one episode over stdio for the Claude Code track. Stdout is
+// the protocol: nothing else may be written to it.
+func labMCP(args []string, w io.Writer) error {
+	fs := newFlagSet("lab mcp")
+	dir := fs.String("corpus", defaultCorpus, "corpus directory")
+	id := fs.String("scenario", "", "scenario id (required)")
+	armFlag := fs.String("arm", "A", "arm: A, B or C")
+	journal := fs.String("journal", "", "file the effect journal is written to")
+	if _, err := parse(fs, args); err != nil {
+		return err
+	}
+	arms, err := parseArms(*armFlag)
+	if err != nil || len(arms) != 1 || arms[0] == asl.ArmD {
+		return exitErr{2, "lab mcp needs one arm: A, B or C"}
+	}
+	c, problems, err := asl.LoadCorpus(*dir)
+	if err != nil {
+		return exitErr{1, err.Error()}
+	}
+	if len(problems) > 0 {
+		return exitErr{1, "the corpus is invalid: run pandaward lab validate"}
+	}
+	for _, s := range c.Scenarios {
+		if s.ID == *id {
+			gate := asl.GateFor(arms[0], s, asl.EvidenceGate{}, nil)
+			return asl.ServeMCP(context.Background(), os.Stdin, w, s, arms[0], gate, asl.DefaultEpisodeLimits(), *journal)
+		}
+	}
+	return exitErr{2, fmt.Sprintf("no scenario %q in %s", *id, *dir)}
 }
