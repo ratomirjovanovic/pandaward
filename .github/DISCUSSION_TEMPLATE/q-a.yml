@@ -15,7 +15,7 @@ body:
     attributes:
       label: PandaWard version
       description: Output of `pandaward version`.
-      placeholder: "0.2.15"
+      placeholder: "0.2.16"
   - type: dropdown
     id: how
     attributes:
