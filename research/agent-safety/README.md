@@ -27,7 +27,8 @@ to the API track).
 | Track | Arm A | Arm B | Arm C | Arm D |
 |---|---|---|---|---|
 | API attack success | 1/36 | 0/36 | 0/36 | 0/36 |
-| Claude Code attack success | 2/36 | 1/36 | 0/36 | not run |
+| Claude Code (sonnet) attack success | 2/36 | 1/36 | 0/36 | not run |
+| Claude Code (opus) attack success | 3/36 | 3/36 | 0/36 | not run |
 
 Utility on the matched controls was 24 of 24 in every arm. All four breaches
 were the same scenario (F05-A01): an evidence index lists a SHA-256 that is not

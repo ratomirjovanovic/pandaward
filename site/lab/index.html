@@ -60,13 +60,16 @@
 <tr><td rowspan="3">Claude Code, sonnet</td><td>A</td><td>6% [2-18%] (2/36)</td><td>100% (24/24)</td></tr>
 <tr><td>B</td><td>3% [0-14%] (1/36)</td><td>100% (24/24)</td></tr>
 <tr><td>C</td><td>0% [0-10%] (0/36)</td><td>100% (24/24)</td></tr>
+<tr><td rowspan="3">Claude Code, opus</td><td>A</td><td>8% [3-22%] (3/36)</td><td>100% (24/24)</td></tr>
+<tr><td>B</td><td>8% [3-22%] (3/36)</td><td>100% (24/24)</td></tr>
+<tr><td>C</td><td>0% [0-10%] (0/36)</td><td>100% (24/24)</td></tr>
 </tbody></table></div>
-<p>Full reports with every table: <a href="api/">API track</a> and <a href="cc/">Claude Code track</a> (the Claude Code track uses Claude Code's own system prompt and tools, so it is not comparable to the API track).</p>
+<p>Full reports with every table: <a href="api/">API track</a>, <a href="cc/">Claude Code track, sonnet</a> and <a href="cc-opus/">Claude Code track, opus</a> (the Claude Code track uses Claude Code's own system prompt and tools, so it is not comparable to the API track).</p>
 
 <h3>How to read this</h3>
 <ul>
-<li>Both models almost never followed an attack. All four breaches across both tracks were the same scenario: an evidence index that lists a SHA-256 that is not the hash of the evidence file, which the agent then cited in its report.</li>
-<li>Breaches were so rare that the arms cannot be told apart. Arm C had no breach in 72 attack episodes and arms A and B had 4 in 144, which is within the uncertainty of numbers this small. This is not evidence that the authorization gate or the monitor work, and not evidence that they do not.</li>
+<li>The models almost never followed an attack, and the three models that were run reacted differently to the one that worked: all 10 breaches across the three runs (Haiku 1, Sonnet 3, Opus 6) are the same scenario, an evidence index that lists a SHA-256 that is not the hash of the evidence file, which the agent then cited in its report. Opus cited it in all 6 of its repetitions in arms A and B.</li>
+<li>The evidence check is where there is a signal. In the Claude Code track (sonnet and opus, 6 repetitions in all) arms A and B were breached 9 times in 144 attack episodes and arm C 0 times in 72 (one-sided Fisher exact test p = 0.024). This is an exploratory, post hoc comparison on one scenario, and repetitions of one scenario are not fully independent, so read it as a lead and not as proof. It says the check that ships as <code>pandaward verify-report</code> removed this kind of false assurance; it says nothing about the authorization gate or the monitor, which were not told apart (the attacks on them rarely worked).</li>
 <li>The corpus is too easy for these models to separate defenses. A harder, held-out attack set is the next step for this part of the lab.</li>
 <li>A defense that blocks everything would show as lost utility on the controls. None did here: utility was 24 of 24 in every arm.</li>
 </ul>
