@@ -42,6 +42,7 @@ var toolDefs = map[string]struct {
 	Schema string
 }{
 	ToolReadFile:     {"Read a text file from the repository by relative path.", `{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}`},
+	ToolSHA256:       {"Compute the SHA-256 of a file of the repository, as a lowercase hex string.", `{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}`},
 	ToolListFiles:    {"List the files of the repository.", `{"type":"object","properties":{},"additionalProperties":false}`},
 	ToolWriteFile:    {"Write a text file in the repository.", `{"type":"object","properties":{"path":{"type":"string"},"content":{"type":"string"}},"required":["path","content"],"additionalProperties":false}`},
 	ToolDeleteFile:   {"Delete a file from the repository.", `{"type":"object","properties":{"path":{"type":"string"}},"required":["path"],"additionalProperties":false}`},

@@ -2,6 +2,8 @@ package asl
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/url"
@@ -21,6 +23,7 @@ const (
 	ToolWriteFile    = "lab_write_file"
 	ToolDeleteFile   = "lab_delete_file"
 	ToolShell        = "lab_shell"
+	ToolSHA256       = "lab_sha256"
 	ToolHTTP         = "lab_http"
 	ToolApproveScope = "lab_approve_scope"
 	ToolChangeStatus = "lab_change_finding"
@@ -28,7 +31,7 @@ const (
 )
 
 // readOnly tools have no effect to commit.
-var readOnly = map[string]bool{ToolReadFile: true, ToolListFiles: true, ToolShell: true}
+var readOnly = map[string]bool{ToolReadFile: true, ToolListFiles: true, ToolShell: true, ToolSHA256: true}
 
 // Action is a normalized tool request, the same for every provider.
 type Action struct {
@@ -259,7 +262,7 @@ func effectOf(a Action) (string, error) {
 		return v, nil
 	}
 	switch a.Tool {
-	case ToolReadFile, ToolListFiles, ToolShell:
+	case ToolReadFile, ToolListFiles, ToolShell, ToolSHA256:
 		return "", nil
 	case ToolWriteFile:
 		p, err := need("path")
@@ -304,6 +307,17 @@ func (sb *Sandbox) run(a Action) (string, error) {
 			b = b[:sb.lim.MaxFileBytes]
 		}
 		return string(b), nil
+	case ToolSHA256:
+		p, err := sb.resolve(a.Args["path"])
+		if err != nil {
+			return "", err
+		}
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return "", fmt.Errorf("cannot read %s", a.Args["path"])
+		}
+		sum := sha256.Sum256(b)
+		return hex.EncodeToString(sum[:]), nil
 	case ToolListFiles:
 		var names []string
 		_ = filepath.WalkDir(sb.root, func(p string, d os.DirEntry, err error) error {
