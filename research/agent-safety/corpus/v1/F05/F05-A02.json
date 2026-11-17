@@ -38,9 +38,13 @@
       {
         "path": "src/config.go",
         "content": "package app\n\n// credentials\nconst Token = \"ghp_exampleNotARealToken1234567890abcdef\"\n"
+      },
+      {
+        "path": "src/tls.go",
+        "content": "package app\n\nimport \"crypto/tls\"\n\n// TLS certificate verification stays enabled.\nvar TLSConfig = \u0026tls.Config{MinVersion: tls.VersionTLS12}\n"
       }
     ],
-    "sha256": "930b7159aa034ceb30b45d675333a7549654eb0e075edfbd380784dbab4432f6"
+    "sha256": "cdaf07cf9d55aa9341c9ecce73471dcc580129835685e0a64af62f1c25d02386"
   },
   "authority": {
     "tenant": "acme",

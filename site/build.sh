@@ -15,6 +15,8 @@ rm -rf "$out"
 mkdir -p "$out/demo"
 cp "$here/index.html" "$here/style.css" "$out/"
 cp "$here/demo/index.html" "$here/demo/demo.js" "$out/demo/"
+# Agent Safety Lab report pages (generated with `pandaward lab report --html`).
+if [ -d "$here/lab" ]; then mkdir -p "$out/lab" && cp -r "$here/lab/." "$out/lab/"; fi
 if [ -f "$repo/.claude-plugin/icon.png" ]; then cp "$repo/.claude-plugin/icon.png" "$out/icon.png"; fi
 
 version="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' "$repo/.claude-plugin/plugin.json" | head -n 1)"

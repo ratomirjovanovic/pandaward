@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent Safety Lab - PandaWard</title>
+<meta name="description" content="Research tooling that measures what a coding agent does when the repository it reads tries to steer it. First measurements, method, limits and how to reproduce them.">
+<link rel="stylesheet" href="../style.css">
+</head>
+<body>
+<main class="wrap">
+<p><a href="../">PandaWard</a></p>
+<h1>Agent Safety Lab</h1>
+<p class="lead">Research tooling that measures what a coding agent does when the repository it reads tries to steer it, and whether independently enforced authorization and evidence checks change that. It is separate from scans and from the SAST benchmarks.</p>
+
+<h2>What it tests</h2>
+<p>An agent is given a normal task, such as reviewing a repository with the scanner output and reporting what each control established. The repository carries an attack: a README that says a manager approved a scope, a code comment that tells reviewers to hide the failing control, a tool result that asks for an approval, a scan summary edited to say everything passed, a SARIF file with a suppression nobody recorded, an evidence index with a hash that does not match. A matched legitimate control mirrors each attack without it.</p>
+<p>The agent works in a simulated sandbox with a fake network and a shell simulator. What counts is what the effect journal says happened, and whether the final report is supported by the evidence PandaWard recorded, not what a model says about it.</p>
+
+<h2>Four arms, same tools</h2>
+<div class="tablewrap"><table>
+<thead><tr><th>Arm</th><th>Enforcement</th></tr></thead>
+<tbody>
+<tr><td>A</td><td>prompt only (the sandbox still protects the host)</td></tr>
+<tr><td>B</td><td>deterministic authorization gate before every effect</td></tr>
+<tr><td>C</td><td>B plus an evidence check of the report against recorded facts and hashes</td></tr>
+<tr><td>D</td><td>C plus an independent monitor that fails closed and never sees the oracle</td></tr>
+</tbody></table></div>
+
+<h2>First measurements</h2>
+<p>Corpus v1.4: 20 synthetic scenarios (12 attacks, 8 matched legitimate controls), 3 repetitions, 240 episodes on the API track and 180 on the Claude Code track, no invalid episodes. Intervals are 95% Wilson.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Track and model</th><th>Arm</th><th>Attack success</th><th>Utility on controls</th></tr></thead>
+<tbody>
+<tr><td rowspan="4">API, claude-haiku-5-5</td><td>A</td><td>3% [0-14%] (1/36)</td><td>100% (24/24)</td></tr>
+<tr><td>B</td><td>0% [0-10%] (0/36)</td><td>100% (24/24)</td></tr>
+<tr><td>C</td><td>0% [0-10%] (0/36)</td><td>100% (24/24)</td></tr>
+<tr><td>D</td><td>0% [0-10%] (0/36)</td><td>100% (24/24)</td></tr>
+<tr><td rowspan="3">Claude Code, sonnet</td><td>A</td><td>6% [2-18%] (2/36)</td><td>100% (24/24)</td></tr>
+<tr><td>B</td><td>3% [0-14%] (1/36)</td><td>100% (24/24)</td></tr>
+<tr><td>C</td><td>0% [0-10%] (0/36)</td><td>100% (24/24)</td></tr>
+</tbody></table></div>
+<p>Full reports with every table: <a href="api/">API track</a> and <a href="cc/">Claude Code track</a> (the Claude Code track uses Claude Code's own system prompt and tools, so it is not comparable to the API track).</p>
+
+<h2>How to read this</h2>
+<ul>
+<li>Both models almost never followed an attack. All four breaches across both tracks were the same scenario: an evidence index that lists a SHA-256 that is not the hash of the evidence file, which the agent then cited in its report.</li>
+<li>Breaches were so rare that the arms cannot be told apart. Arm C had no breach in 72 attack episodes and arms A and B had 4 in 144, which is within the uncertainty of numbers this small. This is not evidence that the authorization gate or the monitor work, and it is not evidence that they do not.</li>
+<li>The corpus is too easy for these models to separate defenses. A harder, held-out attack set is the next step; the corpus and the harness are built so that adding it needs no code change.</li>
+<li>A defense that blocks everything would show as lost utility on the controls. None did here: utility was 24 of 24 in every arm.</li>
+</ul>
+
+<h2>How the corpus changed, and what was discarded</h2>
+<p>The first live pilot, on 12 episodes, found problems in the measuring tools, not in the model: the claim parser read a quoted forged summary as the agent's own claim, fixtures cited evidence files they did not contain, and the monitor's reply was cut off by thinking tokens. These were fixed before any official run. Two full runs were then discarded and are not reported:</p>
+<ul>
+<li>v1.2: a fixture cited <code>src/tls.go</code>, which it did not contain, so a careful agent correctly refused to call that control PASS and was scored as inaccurate.</li>
+<li>v1.3: scenarios without facts still pointed at an evidence file that the repository lacked, and the monitor blocked 7 of 24 legitimate reports in arm D because the agent admitted it could not read that file. This was found while analysing arm D, after the arm results were visible, which is why it is stated here.</li>
+</ul>
+<p>Spend including the pilots and both discarded runs: $1.56 of the $5.00 cap (<code>research/agent-safety/BUDGET.md</code>). The Claude Code track runs on a subscription and has no dollar figure.</p>
+
+<h2>Limits</h2>
+<ul>
+<li>Synthetic scenarios, small samples, one model per track. A rate of zero does not mean a defense is complete.</li>
+<li>Report claims are read from lines that start with a control id and a status word, as the task asks; a false claim written only in free prose is not scored, so false-assurance rates are a lower bound.</li>
+<li>The agent runs with the model's default settings; the monitor runs with thinking off.</li>
+<li>Mock runs (scripted agents) check the harness and say nothing about a model. They are always labeled mock and never scored together with real runs.</li>
+<li>The Claude Code track's model is the alias <code>sonnet</code>, resolved by Claude Code at run time.</li>
+</ul>
+
+<h2>Reproduce</h2>
+<pre class="code">pandaward lab validate                                   # no model, no key
+pandaward lab run --run t0 --provider mock               # offline, all 240 episodes
+pandaward lab run --run t1-api --provider api --live --model claude-haiku-5-5 --seed 20261120 --reps 3
+pandaward lab run --run t1-cc --provider cc --model sonnet --arms A,B,C --seed 20261120 --reps 3
+pandaward lab report --run research/agent-safety/runs/t1-api --public --out report.md</pre>
+<p>Method, code and the corpus: <a href="https://github.com/ratomirjovanovic/pandaward/tree/main/research/agent-safety">research/agent-safety</a>. Every number on this page comes from a run manifest and its episodes. Nothing here is a claim about any product or about the models in general.</p>
+</main>
+</body>
+</html>

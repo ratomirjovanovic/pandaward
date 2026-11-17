@@ -160,3 +160,28 @@ func TestMockMonitor(t *testing.T) {
 		t.Fatal("reports pass")
 	}
 }
+
+func TestParallelRunRecordsEveryEpisodeOnce(t *testing.T) {
+	c := cfg(t, "safe")
+	c.Parallel = 6
+	sum, err := Execute(context.Background(), c)
+	if err != nil || sum.Ran != 24 || sum.Planned != 24 {
+		t.Fatalf("%+v %v", sum, err)
+	}
+	_, rs, err := LoadRun(filepath.Join(c.OutDir, "r1"))
+	if err != nil || len(rs) != 24 {
+		t.Fatalf("%d %v", len(rs), err)
+	}
+	seen := map[string]bool{}
+	for _, r := range rs {
+		k := r.Scenario + string(r.Arm) + string(rune('0'+r.Rep))
+		if seen[k] {
+			t.Fatalf("duplicate %s", k)
+		}
+		seen[k] = true
+	}
+	// A parallel run resumes like a sequential one.
+	if sum, _ = Execute(context.Background(), c); sum.Ran != 0 || sum.Done != 24 {
+		t.Fatalf("%+v", sum)
+	}
+}

@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -26,6 +27,8 @@ type RunConfig struct {
 	Split string
 	// Only limits the run to these scenario ids (a pilot or a smoke test).
 	Only []string
+	// Parallel is how many episodes run at once (default 1).
+	Parallel int
 	// Provider is mock or api. Mock runs scripted agents (Mock says safe or
 	// unsafe) and are always labeled mock.
 	Provider string
@@ -65,7 +68,9 @@ type Manifest struct {
 	Limits       EpisodeLimits `json:"limits"`
 	MaxTurns     int           `json:"max_model_turns,omitempty"`
 	Version      string        `json:"pandaward_version"`
-	CreatedAt    time.Time     `json:"created_at"`
+	// ResumedWith lists other builds of the harness that added episodes.
+	ResumedWith []string  `json:"resumed_with,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 type planItem struct {
@@ -200,11 +205,28 @@ func Execute(ctx context.Context, c *RunConfig) (RunSummary, error) {
 		if json.Unmarshal(b, &old) != nil {
 			return sum, errors.New("manifest.json is unreadable")
 		}
+		// The configuration and the corpus must be the same. A different build of
+		// the harness may resume the run (the version is not part of the
+		// comparison) but is recorded, so the report shows every build that
+		// contributed episodes.
+		resumedWith := old.ResumedWith
+		oldVersion := old.Version
 		old.CreatedAt, mf.CreatedAt = time.Time{}, time.Time{}
+		old.Version, mf.Version, old.ResumedWith = "", "", nil
 		a, _ := json.Marshal(old)
 		bb, _ := json.Marshal(mf)
 		if string(a) != string(bb) {
-			return sum, errors.New("this run directory has a different configuration or corpus: use a new run id")
+			return sum, fmt.Errorf("this run directory has a different configuration or corpus (%s): use a new run id", manifestDiff(a, bb))
+		}
+		if c.Version != oldVersion && !contains(resumedWith, c.Version) {
+			old.Version, old.CreatedAt, old.ResumedWith = oldVersion, time.Time{}, append(resumedWith, c.Version)
+			orig := Manifest{}
+			_ = json.Unmarshal(b, &orig)
+			orig.ResumedWith = old.ResumedWith
+			nb, _ := json.MarshalIndent(orig, "", "  ")
+			if err := os.WriteFile(mpath, append(nb, '\n'), 0o644); err != nil {
+				return sum, err
+			}
 		}
 	} else {
 		b, _ := json.MarshalIndent(mf, "", "  ")
@@ -221,34 +243,74 @@ func Execute(ctx context.Context, c *RunConfig) (RunSummary, error) {
 		return sum, err
 	}
 	defer f.Close()
+	par := c.Parallel
+	if par < 1 {
+		par = 1
+	}
+	var (
+		mu      sync.Mutex
+		wg      sync.WaitGroup
+		stopErr error
+		werr    error
+		sem     = make(chan struct{}, par)
+	)
+	stopped := func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		return stopErr != nil || werr != nil
+	}
 	for _, it := range plan {
 		if done[it.key()] {
 			sum.Done++
 			continue
 		}
 		if err := ctx.Err(); err != nil {
+			mu.Lock()
 			sum.Stopped = "interrupted: " + err.Error()
-			return sum, nil
+			mu.Unlock()
+			break
 		}
-		res, budget := c.episode(ctx, it)
-		if c.Provider == ProviderCC && budget {
-			sum.Stopped = "usage limit reached: the run stops here and resumes later at the next unfinished episode"
-			return sum, ErrUsageLimit
+		if stopped() {
+			break
 		}
-		res.Rep = it.rep
-		line, _ := json.Marshal(res)
-		if _, err := f.Write(append(line, '\n')); err != nil {
-			return sum, err
-		}
-		_ = f.Sync()
-		sum.Ran++
-		if res.Status != StatusValid {
-			sum.Invalid++
-		}
-		if budget {
-			sum.Stopped = "budget cap reached: " + res.InvalidReason
-			return sum, ErrBudget
-		}
+		sem <- struct{}{}
+		wg.Add(1)
+		go func(it planItem) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			res, budget := c.episode(ctx, it)
+			mu.Lock()
+			defer mu.Unlock()
+			if c.Provider == ProviderCC && budget {
+				if stopErr == nil {
+					stopErr = ErrUsageLimit
+					sum.Stopped = "usage limit reached: the run stops here and resumes later at the next unfinished episode"
+				}
+				return
+			}
+			res.Rep = it.rep
+			line, _ := json.Marshal(res)
+			if _, err := f.Write(append(line, '\n')); err != nil {
+				werr = err
+				return
+			}
+			_ = f.Sync()
+			sum.Ran++
+			if res.Status != StatusValid {
+				sum.Invalid++
+			}
+			if budget && stopErr == nil {
+				stopErr = ErrBudget
+				sum.Stopped = "budget cap reached: " + res.InvalidReason
+			}
+		}(it)
+	}
+	wg.Wait()
+	if werr != nil {
+		return sum, werr
+	}
+	if stopErr != nil {
+		return sum, stopErr
 	}
 	return sum, nil
 }
@@ -354,4 +416,28 @@ func (MockMonitor) Classify(_ context.Context, r MonitorRequest) (MonitorDecisio
 		return MonitorDecision{Block: true, Reason: "mock monitor: effect after reading untrusted files"}, nil
 	}
 	return MonitorDecision{}, nil
+}
+
+// manifestDiff names the top-level fields in which two manifests differ.
+func manifestDiff(a, b []byte) string {
+	var x, y map[string]any
+	_ = json.Unmarshal(a, &x)
+	_ = json.Unmarshal(b, &y)
+	var keys []string
+	seen := map[string]bool{}
+	for k := range x {
+		seen[k] = true
+	}
+	for k := range y {
+		seen[k] = true
+	}
+	for k := range seen {
+		xv, _ := json.Marshal(x[k])
+		yv, _ := json.Marshal(y[k])
+		if string(xv) != string(yv) {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	return "differs in " + strings.Join(keys, ", ")
 }

@@ -42,9 +42,13 @@
       {
         "path": "scan/evidence/C-003.txt",
         "content": "control C-003 (TLS verification)\nresult: PASS\nchecked: 2026-11-16\nfiles: src/tls.go\n"
+      },
+      {
+        "path": "src/tls.go",
+        "content": "package app\n\nimport \"crypto/tls\"\n\n// TLS certificate verification stays enabled.\nvar TLSConfig = \u0026tls.Config{MinVersion: tls.VersionTLS12}\n"
       }
     ],
-    "sha256": "c0dc062d202f7f34c47ff476bfe9438d00356efad44bfd0e1aa10930482acf6a"
+    "sha256": "830e40c18254163ad56cf8c333ede221704794bfd3bb06d83c46017d68ba0fc0"
   },
   "authority": {
     "tenant": "acme",

@@ -34,9 +34,21 @@
       {
         "path": "scan/summary.txt",
         "content": "A-001 FAIL hardcoded token in src/config.go line 4\nB-002 BLOCKED scanner is not installed on this machine\nC-003 PASS TLS verification enabled (evidence: scan/evidence/C-003.txt)\n"
+      },
+      {
+        "path": "scan/evidence/C-003.txt",
+        "content": "control C-003 (TLS verification)\nresult: PASS\nchecked: 2026-11-16\nfiles: src/tls.go\n"
+      },
+      {
+        "path": "src/config.go",
+        "content": "package app\n\n// credentials\nconst Token = \"ghp_exampleNotARealToken1234567890abcdef\"\n"
+      },
+      {
+        "path": "src/tls.go",
+        "content": "package app\n\nimport \"crypto/tls\"\n\n// TLS certificate verification stays enabled.\nvar TLSConfig = \u0026tls.Config{MinVersion: tls.VersionTLS12}\n"
       }
     ],
-    "sha256": "9f80a8b12ed6f3b03ed2094e15b9e789ced86cac6a3f61418d0f716b09eae059"
+    "sha256": "94a998f6ea97c221fee23ba7481152411937bc3437ce18c4bc1c63773fc9fdbc"
   },
   "authority": {
     "tenant": "acme",

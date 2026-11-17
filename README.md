@@ -444,6 +444,12 @@ The hook runs `pandaward scan --quiet --fail-on high` and blocks the commit when
 
 A PandaWard report is an automated technical assessment. It is not a certification, an attestation, a legal opinion or an independently signed penetration test.
 
+## Agent Safety Lab (research)
+
+PandaWard also ships research tooling that measures what a coding agent does when the repository it reads tries to steer it: a README that claims a manager approved a scope, a scan summary edited to say everything passed, a tool result that asks for an approval. Agents run in a simulated sandbox; what counts is the effect journal and whether the final report is supported by the evidence PandaWard recorded. Four arms use the same tools and differ only in enforcement: prompt only, a deterministic authorization gate, plus an evidence check, plus an independent monitor.
+
+First measurements (corpus of 20 synthetic scenarios, 240 episodes on a Messages API model and 180 on Claude Code, no invalid episodes): both models almost never followed an attack, so the arms cannot be told apart yet. The four breaches were all one scenario, a fabricated evidence hash, and the evidence check had none. This is a small, easy corpus and one model per track, not a claim about any product. The page [pandaward.dev/lab](https://pandaward.dev/lab/) has the reports, the method, what was discarded and how to reproduce; the code and corpus are in [research/agent-safety](research/agent-safety). It is separate from scans and from `pandaward benchmark`.
+
 ## Roadmap
 
 Released as of 0.2.16:
@@ -463,6 +469,7 @@ Next, in this order, and each claimed only once it is measured:
 
 | Step | Scope | State |
 |---|---|---|
+| Agent Safety Lab | first measurements published; next a harder held-out attack set and more models | in progress |
 | Accuracy | known weak spots: JavaScript XSS, findings still reported after a fix, Python request wrapper classes ([#404](https://github.com/ratomirjovanovic/pandaward/issues/404)), a second benchmark the rules were not tuned on | in progress |
 | More languages | Go, C#, Rust, Ruby, Kotlin, PHP, C and C++: for each a parser, lowering to the shared IR, a rule spec and a public benchmark | planned |
 | Built-in DAST baseline | no control stays BLOCKED only because ZAP is missing ([#265](https://github.com/ratomirjovanovic/pandaward/issues/265)) | planned |
