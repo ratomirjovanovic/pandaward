@@ -49,6 +49,7 @@ func labRun(args []string, w io.Writer) error {
 	keyFile := fs.String("key-file", "", "file with the API key (default: ~/.pandaward-lab/anthropic.key when ANTHROPIC_API_KEY is unset)")
 	claudePath := fs.String("claude", "claude", "claude executable of the cc provider")
 	live := fs.Bool("live", false, "allow paid API calls; needs ANTHROPIC_API_KEY and the budget ledger")
+	parallel := fs.Int("parallel", 1, "episodes to run at the same time")
 	maxTurns := fs.Int("max-turns", 14, "model turns per episode")
 	if _, err := parse(fs, args); err != nil {
 		return err
@@ -73,7 +74,7 @@ func labRun(args []string, w io.Writer) error {
 	cfg := &asl.RunConfig{
 		Corpus: c, Arms: arms, Reps: *reps, Seed: *seed, Split: *split, Provider: *provider, Mock: *mock,
 		Model: *model, MonitorModel: *monitorModel, Run: *run, OutDir: *out,
-		Limits: asl.DefaultEpisodeLimits(), MaxTurns: *maxTurns, Version: version.Version,
+		Limits: asl.DefaultEpisodeLimits(), MaxTurns: *maxTurns, Version: version.Version, Parallel: *parallel,
 	}
 	if *only != "" {
 		for _, id := range strings.Split(*only, ",") {
@@ -185,6 +186,7 @@ func labReport(args []string, w io.Writer) error {
 	out := fs.String("out", "", "write the report to this file (default: stdout)")
 	public := fs.Bool("public", false, "fail if the report contains anything that must not be published")
 	ledger := fs.String("ledger", "", "budget ledger to report the spend from")
+	htmlOut := fs.String("html", "", "also write the report as a standalone HTML page for the site")
 	if _, err := parse(fs, args); err != nil {
 		return err
 	}
@@ -207,6 +209,24 @@ func labReport(args []string, w io.Writer) error {
 	text, err := asl.Markdown(m, rs, opt)
 	if err != nil {
 		return exitErr{1, err.Error()}
+	}
+	if *htmlOut != "" {
+		page := asl.HTMLPage("Agent Safety Lab report: run "+m.Run, text, "../style.css", "../")
+		if *public {
+			if err := asl.CheckPublic(page); err != nil {
+				return exitErr{1, err.Error()}
+			}
+		}
+		if err := os.MkdirAll(filepath.Dir(*htmlOut), 0o755); err != nil {
+			return exitErr{1, err.Error()}
+		}
+		if err := os.WriteFile(*htmlOut, []byte(page), 0o644); err != nil {
+			return exitErr{1, err.Error()}
+		}
+		fmt.Fprintf(w, "HTML report written to %s\n", *htmlOut)
+	}
+	if *out == "" && *htmlOut != "" {
+		return nil
 	}
 	if *out == "" {
 		_, err = io.WriteString(w, text)
