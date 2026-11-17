@@ -6,20 +6,20 @@
       "fix_recognized": 28
     },
     "cve/opengrep": {
-      "detected": 87,
-      "fix_recognized": 53
+      "detected": 88,
+      "fix_recognized": 54
     },
     "cve/pandaward": {
-      "detected": 124,
-      "fix_recognized": 86
+      "detected": 125,
+      "fix_recognized": 85
     },
     "cve/semgrep": {
       "detected": 88,
       "fix_recognized": 54
     },
     "cve/taint": {
-      "detected": 73,
-      "fix_recognized": 49
+      "detected": 96,
+      "fix_recognized": 64
     },
     "owasp/java/builtin": {
       "average_score_covered": -0.00031693711967547183,
@@ -110,22 +110,22 @@
       }
     },
     "owasp/python/opengrep": {
-      "average_score_covered": 0.6365694072519454,
+      "average_score_covered": 0.7345370805097675,
       "categories": {
-        "cmdi": 0.7692307692307693,
-        "codeinj": 0.47878787878787876,
+        "cmdi": 0.9230769230769231,
+        "codeinj": 0.7287878787878788,
         "deserialization": 0.6666666666666667,
         "hash": 1,
         "ldapi": 0.6730769230769231,
-        "pathtraver": 0.5296489917849141,
+        "pathtraver": 0.577445855115758,
         "redirect": 0.6263736263736264,
         "securecookie": 1,
-        "sqli": 0.6,
-        "trustbound": 0.2923976608187135,
+        "sqli": 1,
+        "trustbound": 0.5146198830409356,
         "weakrand": 1,
-        "xpathi": 0.2758169934640523,
-        "xss": 0.474972191323693,
-        "xxe": 0.525
+        "xpathi": 0.339433551198257,
+        "xss": 0.6340378197997775,
+        "xxe": 0.6
       }
     },
     "owasp/python/pandaward": {
@@ -148,22 +148,22 @@
       }
     },
     "owasp/python/semgrep": {
-      "average_score_covered": 0.5403779000309977,
+      "average_score_covered": 0.6078950312274294,
       "categories": {
-        "cmdi": 0.6153846153846154,
-        "codeinj": 0.41818181818181815,
+        "cmdi": 0.7692307692307693,
+        "codeinj": 0.6378787878787878,
         "deserialization": 0.6666666666666667,
         "hash": 1,
         "ldapi": 0.5336538461538461,
-        "pathtraver": 0.344286781179985,
+        "pathtraver": 0.3572815533980582,
         "redirect": 0.5018315018315018,
         "securecookie": 1,
-        "sqli": 0.4,
-        "trustbound": 0.1286549707602339,
+        "sqli": 0.6,
+        "trustbound": 0.2982456140350877,
         "weakrand": 1,
-        "xpathi": 0.21917211328976033,
-        "xss": 0.2124582869855395,
-        "xxe": 0.525
+        "xpathi": 0.240958605664488,
+        "xss": 0.3047830923248054,
+        "xxe": 0.6
       }
     },
     "owasp/python/taint": {
