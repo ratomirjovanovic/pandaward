@@ -456,7 +456,7 @@ func semgrep() Adapter {
 			if err := addRequestSources(bundled, requestWrapperSources(c.Inv)); err != nil {
 				return nil, err
 			}
-			if err := insertSources(bundled, "python.yaml", pythonRequestSources(c.Inv)); err != nil {
+			if err := insertSources(bundled, "python.yaml", pythonRequestSources(c.Inv), "pandaward-py-ldap-injection"); err != nil {
 				return nil, err
 			}
 			if extra := configAlgorithmRules(c.Inv); extra != nil {

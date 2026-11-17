@@ -160,3 +160,40 @@ def helper():
 		t.Fatal("no sources without an inventory")
 	}
 }
+
+func TestInsertSourcesWithout(t *testing.T) {
+	dir, err := rules.WriteSemgrep(filepath.Join(t.TempDir(), "rules"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	block := "      - pattern: $W.get_form_parameter(...)\n"
+	if err := insertSources(dir, "python.yaml", block, "pandaward-py-ldap-injection"); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "python.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(b)
+	rule := func(id string) string {
+		i := strings.Index(s, "  - id: "+id+"\n")
+		if i < 0 {
+			t.Fatalf("no rule %s", id)
+		}
+		rest := s[i+1:]
+		if j := strings.Index(rest, "\n  - id: "); j >= 0 {
+			rest = rest[:j]
+		}
+		return rest
+	}
+	if !strings.Contains(rule("pandaward-py-shell"), "pattern-sources: *request") {
+		t.Fatal("other rules keep the shared sources")
+	}
+	if strings.Contains(s[:strings.Index(s, "  - id: pandaward-py-shell")], "$W.get_form_parameter") == false {
+		t.Fatal("the shared sources have the wrapper methods")
+	}
+	ldap := rule("pandaward-py-ldap-injection")
+	if strings.Contains(ldap, "*request") || strings.Contains(ldap, "get_form_parameter") || !strings.Contains(ldap, "flask.request.$A") {
+		t.Fatalf("ldap rule must have its own sources without the wrapper methods:\n%s", ldap[:min(len(ldap), 600)])
+	}
+}
