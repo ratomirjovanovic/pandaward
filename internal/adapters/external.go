@@ -762,6 +762,20 @@ type ToolInfo struct {
 }
 
 // Tools reports installed optional tools.
+// SemgrepAdvice recommends Opengrep when it is not on PATH: the bundled
+// rules follow taint through the functions of a file only on Opengrep. It
+// returns "" when Opengrep is installed.
+func SemgrepAdvice() string {
+	if _, err := exec.LookPath("opengrep"); err == nil {
+		return ""
+	}
+	why := "the bundled Java, Python and JavaScript rules follow data through the functions of a file only on Opengrep, which finds clearly more on the public benchmarks (https://pandaward.dev/benchmarks/)"
+	if _, err := exec.LookPath("semgrep"); err == nil {
+		return "Semgrep runs the bundled rules; install Opengrep (https://github.com/opengrep/opengrep/releases, opengrep.exe on Windows) and it is used instead: " + why + "."
+	}
+	return "Install Opengrep (https://github.com/opengrep/opengrep/releases, opengrep.exe on Windows) to run the bundled rules: " + why + ". Semgrep works too, with fewer findings."
+}
+
 func Tools(ctx context.Context) []ToolInfo {
 	var out []ToolInfo
 	for _, t := range ExternalTools() {

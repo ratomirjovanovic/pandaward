@@ -31,6 +31,7 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 - Node.js scripts without an extension in a `bin` directory (`#!/usr/bin/env node`) are inventoried as JavaScript, so the code rules and the taint engine read package commands such as `bin/serve`. A package with a name and version but no `main` counts as a library when it has a root `index.js`, which npm then loads.
 
 ### Changed
+- `pandaward doctor` lists the built-in taint engine and recommends Opengrep when it is not installed, and the `start` and `init` skills install or mention Opengrep rather than Semgrep for the bundled rules, matching the engine a scan prefers since #387 (#407).
 - With both installed, Opengrep now runs the bundled Semgrep rules instead of Semgrep, because it follows taint through functions in the same file: on the OWASP Benchmark the bundled rules score 0.723 with Opengrep and 0.467 with Semgrep in Java, 0.530 and 0.433 in Python. `scan.semgrep_engine: semgrep` keeps Semgrep. Findings keep their identity, as the adapter is still `semgrep`. The OWASP benchmark tool reports the engine `pandaward` (built-in rules and the engine a scan picks) instead of `all`, which merged both Semgrep engines as no scan does (#387).
 
 ### Fixed
