@@ -256,3 +256,81 @@ func (s *Summary) Finish() {
 		return s.ByCWE[i].CWE < s.ByCWE[j].CWE
 	})
 }
+
+// Labels of a finding judged against a CVE's ground truth.
+const (
+	// LabelTrue: a pre-patch finding that covers a labelled vulnerable line.
+	LabelTrue = "true"
+	// LabelFixed: a post-patch finding of a rule that detected the CVE, in a
+	// file that held a labelled weakness. The weakness is patched, so this is
+	// a candidate false positive (the fixed-commit false positive of the
+	// benchmark); it is labelled likely false, not proven false.
+	LabelFixed = "fixed"
+	// LabelUnlabelled: a pre-patch finding in a vulnerable file that covers no
+	// labelled line. The benchmark does not say whether it is real, so
+	// triage measurements leave it out.
+	LabelUnlabelled = "unlabelled"
+)
+
+// LabeledFinding is one finding with its ground-truth label, the input of the
+// triage measurements of the Agent Safety Lab.
+type LabeledFinding struct {
+	CVE        string `json:"cve"`
+	Engine     string `json:"engine"`
+	Repository string `json:"repository"`
+	// Side is "pre" (the vulnerable commit) or "post" (the fixed commit).
+	Side    string `json:"side"`
+	Commit  string `json:"commit"`
+	File    string `json:"file"`
+	Line    int    `json:"line"`
+	EndLine int    `json:"end_line"`
+	Rule    string `json:"rule"`
+	CWE     string `json:"cwe,omitempty"`
+	Label   string `json:"label"`
+}
+
+// LabelFindings labels the findings of one engine on one CVE: pre-patch
+// findings in the vulnerable files are true when they cover a labelled line
+// and unlabelled otherwise; post-patch findings by a rule that detected the
+// CVE, in those files, are the candidate false positives. Findings elsewhere
+// are not part of the ground truth and are left out.
+func LabelFindings(c CVE, engine string, pre, post []engines.Finding) []LabeledFinding {
+	vulnFiles := map[string]bool{}
+	for _, w := range c.PrePatch.Weaknesses {
+		vulnFiles[cleanPath(w.Location.File)] = true
+	}
+	var out []LabeledFinding
+	detecting := map[string]bool{}
+	for _, f := range pre {
+		file := cleanPath(f.File)
+		if !vulnFiles[file] {
+			continue
+		}
+		end := f.EndLine
+		if end < f.Line {
+			end = f.Line
+		}
+		label := LabelUnlabelled
+		for _, w := range c.PrePatch.Weaknesses {
+			if cleanPath(w.Location.File) == file && f.Line <= w.Location.Line && w.Location.Line <= end {
+				label = LabelTrue
+				detecting[f.Rule] = true
+			}
+		}
+		out = append(out, LabeledFinding{CVE: c.ID, Engine: engine, Repository: c.Repository, Side: "pre", Commit: c.PrePatch.Commit,
+			File: file, Line: f.Line, EndLine: end, Rule: f.Rule, CWE: f.CWE, Label: label})
+	}
+	for _, f := range post {
+		file := cleanPath(f.File)
+		if !vulnFiles[file] || !detecting[f.Rule] {
+			continue
+		}
+		end := f.EndLine
+		if end < f.Line {
+			end = f.Line
+		}
+		out = append(out, LabeledFinding{CVE: c.ID, Engine: engine, Repository: c.Repository, Side: "post", Commit: c.PostPatch.Commit,
+			File: file, Line: f.Line, EndLine: end, Rule: f.Rule, CWE: f.CWE, Label: LabelFixed})
+	}
+	return out
+}

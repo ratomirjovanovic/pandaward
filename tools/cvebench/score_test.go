@@ -170,3 +170,33 @@ func TestCombined(t *testing.T) {
 		t.Fatalf("combined %+v", o)
 	}
 }
+
+func TestLabelFindings(t *testing.T) {
+	c := cve(t)
+	hit := engines.Finding{Rule: "code.html-sink", CWE: "CWE-79", File: "lib/render.js", Line: 42, EndLine: 42}
+	span := engines.Finding{Rule: "code.html-sink", File: "./lib/render.js", Line: 40, EndLine: 44}
+	otherLine := engines.Finding{Rule: "code.html-sink", File: "lib/render.js", Line: 10, EndLine: 10}
+	otherRule := engines.Finding{Rule: "code.shell", File: "lib/render.js", Line: 50, EndLine: 50}
+	elsewhere := engines.Finding{Rule: "code.html-sink", File: "lib/other.js", Line: 42, EndLine: 42}
+
+	lf := LabelFindings(c, "builtin", []engines.Finding{hit, span, otherLine, elsewhere}, []engines.Finding{hit, otherRule, elsewhere})
+	var labels []string
+	for _, f := range lf {
+		labels = append(labels, f.Side+":"+f.Label+":"+f.File)
+	}
+	got := strings.Join(labels, ",")
+	// Two true pre-patch findings, one unlabelled, one candidate false positive after the fix;
+	// a finding outside the vulnerable files and a post-patch finding of a rule that never
+	// detected the CVE are not part of the ground truth.
+	want := "pre:true:lib/render.js,pre:true:lib/render.js,pre:unlabelled:lib/render.js,post:fixed:lib/render.js"
+	if got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+	if lf[0].Commit != c.PrePatch.Commit || lf[3].Commit != c.PostPatch.Commit || lf[0].Repository != c.Repository || lf[0].CVE != c.ID || lf[0].Engine != "builtin" {
+		t.Fatalf("%+v", lf)
+	}
+	// A CVE the engine did not detect has no candidate false positives.
+	if lf := LabelFindings(c, "builtin", []engines.Finding{otherLine}, []engines.Finding{hit}); len(lf) != 1 || lf[0].Label != LabelUnlabelled {
+		t.Fatalf("%+v", lf)
+	}
+}

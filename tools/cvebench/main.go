@@ -67,6 +67,7 @@ func main() {
 	limit := flag.Int("limit", 0, "measure only the first N CVEs (0: all)")
 	jobs := flag.Int("jobs", 2, "CVEs measured in parallel")
 	asJSON := flag.Bool("json", false, "print JSON instead of a table")
+	emitPath := flag.String("emit-findings", "", "also write every labelled finding (true, candidate false positive after the fix, unlabelled) as JSON lines to this file, the input of the Agent Safety Lab triage measurements")
 	shardFlag := flag.String("shard", "", "measure one shard i/n of the CVEs, such as 0/8, for parallel jobs; combine with `cvebench merge`")
 	flag.Parse()
 	shard, shards, err := parseShard(*shardFlag)
@@ -77,6 +78,23 @@ func main() {
 	if *bench == "" || *work == "" {
 		fmt.Fprintln(os.Stderr, "usage: cvebench --bench <ossf-cve-benchmark checkout> --work <dir> [--engine builtin,semgrep,opengrep] [--cve ids] [--limit n] [--json]")
 		os.Exit(2)
+	}
+	if *emitPath != "" {
+		f, err := os.Create(*emitPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "cvebench:", err)
+			os.Exit(1)
+		}
+		defer f.Close()
+		var mu sync.Mutex
+		enc := json.NewEncoder(f)
+		emit = func(fs []LabeledFinding) {
+			mu.Lock()
+			defer mu.Unlock()
+			for _, lf := range fs {
+				_ = enc.Encode(lf)
+			}
+		}
 	}
 	sel, err := engines.Parse(*engineList)
 	if err != nil {
@@ -292,6 +310,10 @@ func safeName(s string) string {
 
 // measureCVE checks out both commits of one CVE and runs every engine on
 // each. An engine that is not installed is reported in notRun.
+// emit receives the labelled findings of every engine on every CVE when
+// --emit-findings is set.
+var emit func([]LabeledFinding)
+
 func measureCVE(ctx context.Context, c CVE, work string, selected []string) ([]Outcome, map[string]string, map[string]string, error) {
 	pre, err := checkout(ctx, c.Repository, c.PrePatch.Commit, filepath.Join(work, c.ID, "pre"))
 	if err != nil {
@@ -328,6 +350,9 @@ func measureCVE(ctx context.Context, c CVE, work string, selected []string) ([]O
 		}
 		pre1[e], post1[e] = rp.Findings, ra.Findings
 		outcomes = append(outcomes, Score(c, e, rp.Findings, ra.Findings))
+		if emit != nil {
+			emit(LabelFindings(c, e, rp.Findings, ra.Findings))
+		}
 	}
 	if sg := combinedSemgrep(selected); sg != "" {
 		_, okB := pre1["builtin"]
@@ -335,7 +360,11 @@ func measureCVE(ctx context.Context, c CVE, work string, selected []string) ([]O
 		if okB && okS {
 			// The taint engine runs in every scan since #381; with it
 			// selected, it counts too.
-			outcomes = append(outcomes, Score(c, Combined, merge(pre1["builtin"], pre1[sg], pre1["taint"]), merge(post1["builtin"], post1[sg], post1["taint"])))
+			mp, mq := merge(pre1["builtin"], pre1[sg], pre1["taint"]), merge(post1["builtin"], post1[sg], post1["taint"])
+			outcomes = append(outcomes, Score(c, Combined, mp, mq))
+			if emit != nil {
+				emit(LabelFindings(c, Combined, mp, mq))
+			}
 		} else {
 			notRun[Combined] = "needs the built-in engine and " + sg
 		}
