@@ -173,12 +173,38 @@ func measure(ctx context.Context, suite *Suite, repo, expectedPath string, selec
 	if eng := scanSemgrep(semgrepFindings); builtinRan && eng != "" {
 		// As in a scan: the built-in rules and one Semgrep engine, Opengrep
 		// when it is installed; built-in heuristics a bundled rule replaces
-		// do not count once it has run.
+		// do not count once it has run. The taint engine runs in every scan
+		// (#381), so it counts when it was measured.
 		builtinFindings, err = withoutSuperseded(builtinFindings, inv)
 		if err != nil {
 			return nil, err
 		}
-		combined := append(append([]Finding{}, semgrepFindings[eng]...), builtinFindings...)
+		sg := semgrepFindings[eng]
+		label := "built-in + " + eng
+		tf, taintRan := semgrepFindings["taint"]
+		if taintRan {
+			// As in a scan: bundled rules the taint engine replaces in the
+			// files it analyzed do not count (#406).
+			var kept []Finding
+			for _, f := range sg {
+				if file := inv.FileByPath(f.File); file != nil && adapters.TaintReplaces(f.Rule, file.Lang, file.Path) != "" {
+					continue
+				}
+				kept = append(kept, f)
+			}
+			sg = kept
+			kept = nil
+			for _, f := range builtinFindings {
+				if file := inv.FileByPath(f.File); file != nil && adapters.TaintReplaces(f.Rule, file.Lang, file.Path) != "" {
+					continue
+				}
+				kept = append(kept, f)
+			}
+			builtinFindings = kept
+			label = "built-in + taint + " + eng
+		}
+		combined := append(append([]Finding{}, sg...), builtinFindings...)
+		combined = append(combined, tf...)
 		covered := map[string][]string{}
 		for _, m := range []map[string][]string{builtinCovered, semgrepCovered} {
 			for c, rs := range m {
@@ -189,7 +215,7 @@ func measure(ctx context.Context, suite *Suite, repo, expectedPath string, selec
 				}
 			}
 		}
-		out.Engines = append(out.Engines, EngineResult{Engine: Combined, Version: "built-in + " + eng, Score: suite.Compute(expected, combined, covered)})
+		out.Engines = append(out.Engines, EngineResult{Engine: Combined, Version: label, Score: suite.Compute(expected, combined, covered)})
 	}
 	return out, nil
 }

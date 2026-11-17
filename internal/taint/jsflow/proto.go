@@ -745,3 +745,17 @@ func writesInto(body js.Node, descends map[string]int) bool {
 	})
 	return found
 }
+
+// Structural returns the findings of a file found by shape rather than by
+// a flow: prototype pollution and, in library mode, incomplete escaping
+// and URL scheme checks. The IR engine, which finds the flows, runs these
+// for its sinks of kind proto and shape.
+func Structural(f *js.File, spec *taint.Spec, opt Options) []taint.Finding {
+	a := newAnalyzer(f, spec, opt, nil)
+	a.protoPollution(f)
+	a.regexps(f)
+	if opt.Library {
+		a.shapes(f)
+	}
+	return a.out
+}

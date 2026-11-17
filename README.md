@@ -118,7 +118,7 @@ scoop bucket add pandaward https://github.com/ratomirjovanovic/pandaward; scoop 
 Or download a binary from the [releases page](https://github.com/ratomirjovanovic/pandaward/releases) (Linux and macOS on amd64 and arm64, Windows on amd64). For example on Linux:
 
 ```sh
-v=v0.2.15
+v=v0.2.16
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/pandaward-linux-amd64
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/SHA256SUMS
 sha256sum --ignore-missing -c SHA256SUMS
@@ -128,7 +128,7 @@ chmod +x pandaward-linux-amd64 && sudo mv pandaward-linux-amd64 /usr/local/bin/p
 On Windows (PowerShell), save `pandaward-windows-amd64.exe` as `pandaward.exe` in a folder on your `PATH`:
 
 ```powershell
-Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.15/pandaward-windows-amd64.exe -OutFile pandaward.exe
+Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.16/pandaward-windows-amd64.exe -OutFile pandaward.exe
 (Get-FileHash pandaward.exe).Hash   # compare with the line in SHA256SUMS
 ```
 
@@ -193,7 +193,7 @@ Five controls cannot be decided by automation: A-004 (threat model), C-003 (auth
 | A Inventory and architecture | entrypoints with file and line (`pandaward routes`): HTTP routes for Express, NestJS, Next.js, Flask, FastAPI, Django, Go, Spring, Laravel, Rails, ASP.NET with router prefixes and mounts resolved; GraphQL schema operations; gRPC services; queue consumers and cron jobs; services in monorepos; OpenAPI drift. For Next.js apps the file-system route table (pages, layouts, route handlers, metadata routes, server actions and middleware of every app, with route groups, dynamic and catch-all segments, parallel slots and intercepting folders resolved) decides A-002: PASS only when nothing found can add routes outside it, otherwise INCONCLUSIVE with each blocker named (a custom server, next.config or vercel.json rewrites and redirects to other origins or not resolvable statically, middleware that proxies or answers requests itself, another web framework or server, serverless function directories, PHP, an OpenAPI mismatch, skipped code files) | threat model |
 | B Authentication | JWT `none` or unverified decode, cookie flags | revoked credentials refused (`staging-active`); login, reset and MFA flows |
 | C Authorization | Supabase/Postgres RLS update policies that let users change privileged columns of their own row (from SQL migrations) | object and function level authorization with test identities (`staging-active`), route review (manual-assisted) |
-| D Injection | built in: a taint engine for JavaScript and TypeScript that follows request data through variables, functions and imports across files to code, OS command, SQL, file path, request URL (SSRF), HTML (XSS) and redirect sinks, plus prototype pollution shapes; eval, shell, SQL concatenation, unsafe deserialization, regular expressions with catastrophic backtracking (ReDoS, D-007); with Semgrep or Opengrep: taint rules that follow request data (and, in Python, model output) to SQL, OS command, file path, LDAP, XPath, code and XXE sinks in Java, Python and JavaScript, plus prototype pollution through recursive merges and path setters in JavaScript | ZAP active scan (`staging-active`, opt-in) |
+| D Injection | built in: a taint engine for JavaScript, TypeScript, Python and Java that follows request data through variables, functions, classes and imports across files to code, OS command, SQL, file path, request URL (SSRF), HTML (XSS) and redirect sinks, plus prototype pollution shapes in JavaScript and deserialization, LDAP, XPath, XXE and session sinks in Python; eval, shell, SQL concatenation, unsafe deserialization, regular expressions with catastrophic backtracking (ReDoS, D-007); with Semgrep or Opengrep: taint rules that follow request data (and, in Python, model output) to SQL, OS command, file path, LDAP, XPath, code and XXE sinks in Java, Python and JavaScript, plus prototype pollution through recursive merges and path setters in JavaScript | ZAP active scan (`staging-active`, opt-in) |
 | E Secrets and crypto | 16 high-specificity secret formats, tracked `.env` and key files, tracked tool-local settings such as `.claude/settings.local.json`, disabled TLS verification, weak hash or random | |
 | F Business logic | | invariants, idempotency, races (manual-assisted) |
 | G APIs and webhooks | webhook signature verification presence | contract vs runtime |
@@ -208,7 +208,7 @@ Five controls cannot be decided by automation: A-004 (threat model), C-003 (auth
 
 `pandaward capabilities` prints the full catalog with each adapter's maturity. All adapters are currently `implemented_unvalidated`. The optional tool adapters are exercised in CI on every pull request against gitleaks 8.30.1, semgrep 1.182.0, osv-scanner 2.7.0 and trivy 0.76.1: the job scans the bundled vulnerable fixture and fails when an adapter does not complete or its parser misses the expected findings. Other versions may work but are not checked.
 
-`pandaward benchmark` runs every built-in rule against a versioned corpus of vulnerable and safe cases and prints TP, FP, FN, TN, precision and recall per rule. CI fails when a rule misses a vulnerable case or fires on a safe one, and each release attaches `benchmark.json`. A rule counts as `implemented_and_benchmarked` only with precision and recall of at least 0.95 on at least 3 vulnerable and 3 safe cases. Today every rule has one of each, so none qualifies yet. The corpus is PandaWard's own, so the numbers describe these cases, not real-world accuracy. On public suites it did not write, measured on every change at [pandaward.dev/benchmarks](https://pandaward.dev/benchmarks/): on the OpenSSF CVE Benchmark PandaWard (built-in rules, the built-in taint engine and the bundled Semgrep rules) finds 124 of 219 real JavaScript and TypeScript CVEs and recognizes 86 of their fixes. On the OWASP Benchmark PandaWard with Opengrep scores 0.818 for Java and 0.637 for Python (with Semgrep CE 0.528 and 0.540, since it does not follow taint through functions of a file), so install Opengrep for Java and Python findings; the built-in rules alone score 0.00 and 0.03 there, as the taint engine covers only JavaScript and TypeScript so far. [docs/BENCHMARKS.md](docs/BENCHMARKS.md) has the method, the numbers per category and how to reproduce them.
+`pandaward benchmark` runs every built-in rule against a versioned corpus of vulnerable and safe cases and prints TP, FP, FN, TN, precision and recall per rule. CI fails when a rule misses a vulnerable case or fires on a safe one, and each release attaches `benchmark.json`. A rule counts as `implemented_and_benchmarked` only with precision and recall of at least 0.95 on at least 3 vulnerable and 3 safe cases. Today every rule has one of each, so none qualifies yet. The corpus is PandaWard's own, so the numbers describe these cases, not real-world accuracy. On public suites it did not write, measured on every change at [pandaward.dev/benchmarks](https://pandaward.dev/benchmarks/): on the OpenSSF CVE Benchmark PandaWard (built-in rules, the built-in taint engine and the bundled Semgrep rules) finds 124 of 219 real JavaScript and TypeScript CVEs and recognizes 86 of their fixes. On the OWASP Benchmark PandaWard scores 1.000 for Java and 1.000 for Python, which its own data flow engine reaches alone, without Opengrep or Semgrep installed (with only the bundled rules, Opengrep scores 0.818 and 0.637). The single-line built-in heuristics score near 0 there, as they cannot tell a vulnerable case from its safe twin; they remain a fallback. [docs/BENCHMARKS.md](docs/BENCHMARKS.md) has the method, the numbers per category and how to reproduce them.
 
 ## Commands
 
@@ -429,7 +429,7 @@ With [pre-commit](https://pre-commit.com), add this to `.pre-commit-config.yaml`
 ```yaml
 repos:
   - repo: https://github.com/ratomirjovanovic/pandaward
-    rev: v0.2.15
+    rev: v0.2.16
     hooks:
       - id: pandaward-system   # uses the pandaward on your PATH; use id: pandaward to build it with Go 1.27+
 ```
@@ -480,6 +480,14 @@ CLI: `brew uninstall pensec && brew untap ratomirjovanovic/pensec`, then install
 ## Wrong or missed findings
 
 Tell us, and the rule gets fixed. PandaWard is open source and its rules improve from these reports. The first `/pandaward:start` in a project asks once whether you want to send them; with `batch`, PandaWard collects them after triage and sends them in one step after you confirm. It groups the false positives you closed by rule and finds missed issues itself: problems a reviewer found and you confirmed that no rule caught. A report holds rule metadata, counts and file types only. With the GitHub CLI signed in, `pandaward feedback submit` files the reports (or adds to an open report about the same rule); without it, you get prefilled issue links. By hand: `pandaward feedback false-positive <PW-ID>`, `pandaward feedback false-negative --rule <id>` or `/pandaward:feedback`. Reports are prioritized automatically and every fix adds a benchmark case. See [docs/FEEDBACK.md](docs/FEEDBACK.md).
+
+## Community
+
+Ask questions, propose ideas and show what you built in [Discussions](https://github.com/ratomirjovanovic/pandaward/discussions); releases and changes in detection are announced there too. [SUPPORT.md](SUPPORT.md) says where each kind of question or report goes.
+
+## Sponsoring
+
+PandaWard is free, open source and runs only on your machine, and it will stay that way: there is no paid tier, no hosted service and no feature held back. If it saves you or your team time, you can [sponsor its development on GitHub](https://github.com/sponsors/ratomirjovanovic). Sponsorship pays for the detection engines, the public benchmarks and keeping releases, packages and documentation current. It changes nothing in what the tool does or where your code goes.
 
 ## Contributing and security
 

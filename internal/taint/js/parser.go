@@ -978,7 +978,14 @@ func (p *parser) params() ([]Expr, []string) {
 		if p.ts {
 			p.eat("?")
 			if p.eat(":") {
+				name := ""
+				if p.tok.Kind == TIdent {
+					name = p.tok.Val
+				}
 				p.skipType()
+				if id, ok := param.(*Ident); ok && (p.is(",") || p.is(")") || p.is("=")) {
+					id.Type = name
+				}
 			}
 		}
 		if p.is("=") {
@@ -1314,6 +1321,11 @@ func (p *parser) unary() Expr {
 		case "!", "~", "+", "-", "++", "--":
 			p.next()
 			return &Unary{Pos: ln, Op: t.Val, X: p.unary()}
+		case "::":
+			// The bind operator ::this.method, as babel's function-bind
+			// proposal writes it: the method itself.
+			p.next()
+			return p.unary()
 		case "<":
 			if p.ts && !p.jsx {
 				// A type assertion <T>x.

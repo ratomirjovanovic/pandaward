@@ -1,0 +1,321 @@
+# Taint specification for JavaScript and TypeScript on the IR engine
+# (internal/taint/flow), measured next to the jsflow engine
+# (javascript.yaml) until it is at least as good on the CVE benchmark
+# (#406). Names are qualified after module resolution: child_process.exec
+# matches require('child_process').exec, an imported exec and cp.exec. A
+# handler a route call registers gets the request (express.request) as its
+# first parameter and the response (express.response) as its second.
+
+sources:
+  attributes:
+    - express.request.query
+    - express.request.body
+    - express.request.params
+    - express.request.headers
+    - express.request.cookies
+    - express.request.signedCookies
+    - express.request.url
+    - express.request.originalUrl
+    - express.request.path
+    - express.request.hostname
+    - express.request.files
+    - express.request.file
+    - express.request.payload
+    - express.request.rawBody
+    - express.request.querystring
+    - express.request.request.body
+    - express.request.request.query
+    - express.request.request.url
+    - location.hash
+    - location.search
+    - location.href
+    - location.pathname
+    - document.URL
+    - document.documentURI
+    - document.referrer
+    - document.baseURI
+    - window.name
+    - window.location.hash
+    - window.location.search
+    - window.location.href
+    # Koa 1 middleware reads the request through this.
+    - this.request.query
+    - this.request.body
+    - this.request.url
+    - this.request.originalUrl
+    - this.request.path
+    - this.request.querystring
+    - this.request.header
+    - this.request.headers
+  # Command line arguments: the person running a program usually chooses
+  # them, so their findings are hypotheses (a command line that runs
+  # another command with them), which request-only sinks ignore.
+  hypothetical: [process.argv]
+  calls:
+    - express.request.get
+    - express.request.header
+    - express.request.param
+  # Parameters with these names hold the request (weak names only in a
+  # function that also takes the response); in such a function the helper
+  # parameters carry a path from the request (serveStatic(req, res, path)).
+  request:
+    names: [req, request, ctx, event]
+    weak_names: [request, event]
+  helper_params: [path, pathname, file, filename, filePath, filepath, uri, url, relativePath, relPath, p]
+  # Listeners of these events get data another party chose (an archive's
+  # entry), and of any event but connection events on these receivers
+  # (socket.on('chat', msg => ...)).
+  events: [entry]
+  sockets: [socket, io, ws, client, conn, connection, channel]
+  route_calls:
+    - receivers: [app, router, server, api, routes, route, r, fastify, express, express.Router, express]
+      methods: [get, post, put, patch, delete, del, all, use, options, head, route]
+      request: express.request
+      response: express.response
+    - calls: [http.createServer, https.createServer, http2.createServer, http2.createSecureServer, connect, express]
+      request: express.request
+      response: express.response
+
+sinks:
+  - id: taint.js-command-injection
+    kind: cmd
+    control: D-002
+    cwe: "CWE-78"
+    title: Shell command built from untrusted input
+    message: Input reaches a command run through a shell, so shell metacharacters in it run extra commands.
+    fix: Use execFile or spawn with an argument array and no shell, or validate the value against a strict allowlist first.
+    calls:
+      - child_process.exec
+      - child_process.execSync
+      - shelljs.exec
+      - execa.command
+      - execa.commandSync
+      - execa.shell
+      - execa.shellSync
+      - exec-sh
+    calls_with_shell_option:
+      - child_process.spawn#0
+      - child_process.spawnSync#0
+      - child_process.execFile#0
+      - child_process.execFileSync#0
+
+  - id: taint.js-code-injection
+    kind: code
+    control: D-001
+    cwe: "CWE-94"
+    title: Code built from untrusted input is evaluated
+    message: Input reaches eval, the Function constructor or a similar evaluator, so it runs as code.
+    fix: Never evaluate input. Parse it as data (JSON.parse) or map it through a lookup table.
+    calls: [eval, Function#*, setTimeout, setInterval, vm.runInNewContext, vm.runInThisContext, vm.runInContext, vm.compileFunction, vm.Script]
+
+  - id: taint.js-path-traversal
+    kind: path
+    control: D-006
+    cwe: "CWE-22"
+    title: File path built from untrusted input
+    message: Input reaches a file system path, so ../ sequences or absolute paths read or write files outside the intended directory.
+    fix: Resolve the path and check that it stays inside the base directory (path.resolve(base, p).startsWith(base + path.sep)), or take only path.basename of it.
+    request_only: true
+    calls:
+      - fs.readFile
+      - fs.readFileSync
+      - fs.writeFile
+      - fs.writeFileSync
+      - fs.appendFile
+      - fs.appendFileSync
+      - fs.createReadStream
+      - fs.createWriteStream
+      - fs.unlink
+      - fs.unlinkSync
+      - fs.rm
+      - fs.rmSync
+      - fs.rmdir
+      - fs.rmdirSync
+      - fs.mkdir
+      - fs.mkdirSync
+      - fs.readdir
+      - fs.readdirSync
+      - fs.stat
+      - fs.statSync
+      - fs.open
+      - fs.openSync
+      - fs.rename
+      - fs.renameSync
+      - fs.copyFile
+      - fs.copyFileSync
+      - fs.exists
+      - fs.existsSync
+      - fs.lstat
+      - fs.lstatSync
+      - fs.access
+      - fs.accessSync
+      - fs.link
+      - fs.linkSync
+      - fs.symlink
+      - fs.symlinkSync
+      - fs.realpath
+      - fs.realpathSync
+      - fs.promises.readFile
+      - fs.promises.writeFile
+      - fs.promises.unlink
+      - fs/promises.readFile
+      - fs/promises.writeFile
+      - fs/promises.unlink
+      - fs/promises.rm
+      - fs-extra.readFile
+      - fs-extra.readFileSync
+      - fs-extra.writeFile
+      - fs-extra.outputFile
+      - fs-extra.remove
+      - fs-extra.copy
+      - graceful-fs.readFile
+      - graceful-fs.createReadStream
+      - graceful-fs.writeFile
+      - send#1
+      - mkdirp
+      - mkdirp.sync
+      - rimraf
+      - rimraf.sync
+      - express.response.sendFile
+      - express.response.download
+      - express.response.sendfile
+
+  - id: taint.js-sql-injection
+    kind: sql
+    control: D-003
+    cwe: "CWE-89"
+    title: SQL query text built from untrusted input
+    message: Input reaches the text of an SQL query, so it can change the query.
+    fix: Pass the value as a bound parameter ($1, ?) or through a tagged sql template.
+    methods: [query#0, execute#0, raw#0, $queryRawUnsafe#0, $executeRawUnsafe#0, unsafe#0]
+    receivers_not: [Promise, res, response, router, app, $]
+
+  - id: taint.js-xss
+    kind: xss
+    control: H-001
+    cwe: "CWE-79"
+    title: Untrusted input written as HTML
+    message: Input is written into the page as HTML, so a script in it runs in the user's browser.
+    fix: Write it as text (textContent, a template that escapes) or sanitize it with DOMPurify first.
+    calls: [document.write, document.writeln, $, jQuery, express.response.send, express.response.write, express.response.end]
+    methods: [insertAdjacentHTML#1, html#0, append#0, prepend#0, after#0, before#0, replaceWith#0]
+    method_receivers:
+      html: [$]
+      append: [$]
+      prepend: [$]
+      after: [$]
+      before: [$]
+      replaceWith: [$]
+    props: [innerHTML, outerHTML, ctx.body]
+    jsx: [dangerouslySetInnerHTML.__html]
+
+  - id: taint.js-ssrf
+    kind: ssrf
+    control: D-006
+    cwe: "CWE-918"
+    title: Request URL built from untrusted input
+    message: Input chooses the URL of a server-side request, so it can reach internal services.
+    fix: Allow only known hosts; parse the URL and compare its host with an allowlist.
+    calls: [fetch, axios, axios.get, axios.post, axios.request, got, got.get, request, request.get, needle.get, http.get, http.request, https.get, https.request, node-fetch, undici.request, undici.fetch]
+    request_only: true
+    text_only: true
+
+  - id: taint.js-open-redirect
+    kind: redirect
+    control: D-006
+    cwe: "CWE-601"
+    title: Redirect target built from untrusted input
+    message: Input chooses where the user is redirected, so a link can send users to another site.
+    fix: Redirect only to relative paths or to an allowlist of hosts.
+    # res.redirect(url), and ctx.redirect or this.redirect in Koa
+    calls: [express.response.redirect, express.request.redirect, this.redirect, next/server.NextResponse.redirect, NextResponse.redirect]
+    methods: [redirect#0]
+    method_receivers:
+      redirect: [res, response, reply, ctx]
+    props: [location.href, window.location.href]
+    request_only: true
+
+  # Structural: found by shape, not by a flow from a source (see
+  # internal/taint/jsflow/proto.go; the IR engine runs them through
+  # jsflow.Structural).
+  - id: taint.js-prototype-pollution
+    kind: proto
+    control: D-006
+    cwe: "CWE-1321"
+    title: Object keys from input written without skipping __proto__
+    message: A recursive merge or a walk along a path of keys writes a key taken from its input without skipping __proto__, constructor and prototype, so a key named __proto__ changes Object.prototype for the whole process.
+    fix: Skip the keys __proto__, constructor and prototype (or write only the target's own properties), or build the result with Object.create(null) or a Map.
+
+  - id: taint.js-incomplete-sanitization
+    kind: shape
+    control: D-006
+    cwe: "CWE-116"
+    title: Escaping or removal that misses repeated or rebuilt input
+    message: This replace() escapes or removes only the first match, or removes a sequence that a single pass can rebuild (....// becomes ../).
+    fix: Use a regular expression with the g flag and a proper encoder, or reject input that contains the sequence instead of removing it.
+
+  - id: taint.js-incomplete-url-scheme-check
+    kind: shape
+    control: H-001
+    cwe: "CWE-184"
+    title: URL check that rejects javascript but not data or vbscript
+    message: The check rejects javascript URLs but not data or vbscript URLs, which also run script.
+    fix: Allow only the schemes you expect (http, https, mailto) instead of rejecting a list.
+
+  - id: taint.js-redos
+    kind: shape
+    control: D-006
+    cwe: "CWE-1333"
+    title: Regular expression with catastrophic backtracking
+    message: Matching this regular expression can take exponential or quadratic time on a crafted input, which blocks the process that runs it (ReDoS).
+    fix: Rewrite the pattern so no two parts can match the same text (no nested quantifiers such as (a+)+, no overlapping alternatives), bound the input length before matching, or use a linear-time engine such as RE2.
+
+sanitizers:
+  - kinds: [all]
+    calls: [Number, parseInt, parseFloat, Boolean, Math.floor, Math.ceil, Math.round, Math.trunc, Math.abs, Math.min, Math.max, isNaN, Number.isInteger, Number.parseInt, Number.parseFloat, encodeURIComponent, len]
+    methods: [startsWith, endsWith, includes, indexOf, lastIndexOf, test, match, localeCompare, hasOwnProperty, length]
+  - kinds: [cmd]
+    calls: [shell-quote.quote, shell-escape, shellescape, any-shell-escape]
+  - kinds: [path]
+    calls: [path.basename, sanitize-filename]
+  # JSON.stringify of a value is a quoted, escaped string literal.
+  - kinds: [code]
+    calls: [JSON.stringify]
+  - kinds: [xss]
+    calls: [escape-html, he.encode, he.escape, lodash.escape, validator.escape, DOMPurify.sanitize, dompurify.sanitize, xss, sanitize-html, encodeURI, JSON.stringify]
+  - kinds: [sql]
+    calls: [mysql.escape, pg-format, sqlstring.escape]
+
+returns:
+  # A jQuery selection; its methods return the selection for chaining
+  # (see jqueryValues in internal/taint/flow).
+  $: jQuery
+  jQuery: jQuery
+  express.response.status: express.response
+  express.response.type: express.response
+  express.response.set: express.response
+  express.response.header: express.response
+  express.response.cookie: express.response
+
+text_calls: [decodeURIComponent, decodeURI, unescape, String, querystring.parse, qs.parse, url.parse, JSON.parse, Buffer.from, path.join, path.resolve, path.normalize]
+
+decoders: [decodeURIComponent, decodeURI, unescape, Buffer.from, atob]
+
+guards:
+  # Library checks that a path stays inside a directory.
+  - kinds: [path]
+    calls: [path-is-inside, is-path-inside, is-path-inside.default]
+  # A value that matches an anchored pattern of listed characters, or is
+  # one of a list of constants, cannot change a command, query, path or
+  # page (also through a function that returns such a check).
+  - kinds: [all]
+    anchored_regex: true
+  - kinds: [all]
+    allowlist: true
+  - kinds: [path]
+    contains: [".."]
+  - kinds: [path]
+    method: startsWith
+    normalized: true
+
+normalizers: [path.resolve, path.normalize, fs.realpathSync]

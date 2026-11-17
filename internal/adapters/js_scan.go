@@ -350,8 +350,11 @@ func isLtEscapedJSON(expr string) bool {
 type jsBinding struct{ module, imported string }
 
 var (
-	importRe  = regexp.MustCompile(`(?m)^\s*import\s+(type\s+)?([^'";]*?)\s+from\s+['"]([^'"]+)['"]`)
-	requireRe = regexp.MustCompile(`(?:const|let|var)\s+(\{[^}]*\}|[A-Za-z_$][\w$]*)\s*=\s*require\(\s*['"]([^'"]+)['"]\s*\)`)
+	importRe = regexp.MustCompile(`(?m)^\s*import\s+(type\s+)?([^'";]*?)\s+from\s+['"]([^'"]+)['"]`)
+	// dynImportRe matches a destructured dynamic import, which binds names
+	// as a named import does: const { f } = await import('./m') (#361).
+	dynImportRe = regexp.MustCompile(`(?:const|let|var)\s+(\{[^}]*\})\s*=\s*await\s+import\(\s*['"]([^'"]+)['"]\s*\)`)
+	requireRe   = regexp.MustCompile(`(?:const|let|var)\s+(\{[^}]*\}|[A-Za-z_$][\w$]*)\s*=\s*require\(\s*['"]([^'"]+)['"]\s*\)`)
 )
 
 // jsImports maps each local name a file imports to its module and the
@@ -390,7 +393,9 @@ func jsImports(text string) map[string]jsBinding {
 			}
 		}
 	}
-	for _, m := range requireRe.FindAllStringSubmatch(text, -1) {
+	matches := requireRe.FindAllStringSubmatch(text, -1)
+	matches = append(matches, dynImportRe.FindAllStringSubmatch(text, -1)...)
+	for _, m := range matches {
 		if !strings.HasPrefix(m[1], "{") {
 			out[m[1]] = jsBinding{m[2], "default"}
 			continue
@@ -469,14 +474,25 @@ var retTypeRe = regexp.MustCompile(`^\s*(?::\s*[\w$.<>\[\]| ]+?)?\s*\{`)
 // blockReturn reads an optional return type and a block body starting at
 // from and returns the expression of its only top-level return statement.
 func blockReturn(text string, from int) (string, bool) {
+	rets := blockReturns(text, from)
+	if len(rets) != 1 {
+		return "", false
+	}
+	return rets[0], true
+}
+
+// blockReturns reads an optional return type and a block body starting at
+// from and returns the expressions of its top-level return statements, not
+// those of functions nested in it; nil when the block does not parse.
+func blockReturns(text string, from int) []string {
 	m := retTypeRe.FindStringIndex(text[from:])
 	if m == nil {
-		return "", false
+		return nil
 	}
 	open := from + m[1] - 1
 	close := matchClose(text, open)
 	if close < 0 {
-		return "", false
+		return nil
 	}
 	body := text[open+1 : close]
 	var stack []bool // true for a function body
@@ -520,10 +536,11 @@ func blockReturn(text string, from int) (string, bool) {
 		}
 		return false
 	})
-	if len(rets) != 1 {
-		return "", false
+	out := make([]string, 0, len(rets))
+	for _, r := range rets {
+		out = append(out, strings.TrimSpace(body[r:exprEnd(body, r, ";", true)]))
 	}
-	return strings.TrimSpace(body[rets[0]:exprEnd(body, rets[0], ";", true)]), true
+	return out
 }
 
 // ---- module resolution ----
