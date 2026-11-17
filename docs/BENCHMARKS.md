@@ -68,6 +68,10 @@ Average score over covered categories, and over all 11 categories with not cover
 | Built-in heuristics | 6 | -0.000 | -0.000 |
 | Semgrep 1.182.0, bundled rules | 11 | +0.528 | +0.528 |
 | Opengrep 1.33.1, bundled rules | 11 | +0.818 | +0.818 |
+| Semgrep 1.182.0, default ruleset (`p/default`) | 11 | +0.349 | +0.349 |
+| Opengrep 1.33.1, default rules (`opengrep-rules`) | 11 | +0.407 | +0.407 |
+
+**Two kinds of Semgrep and Opengrep rows.** "Bundled rules" runs PandaWard's own rule files on that engine: it compares the execution engines. "Default ruleset" and "default rules" run the tool as a user who installs it would, with no PandaWard rule: Semgrep with the registry's `p/default` ruleset, Opengrep with the `java`, `python`, `javascript`, `typescript` and `generic` rule directories of the `opengrep-rules` repository at a pinned commit (`f1d2b56`), with no other flag; these rows compare the products. A finding is mapped to a category by the CWE in the rule's metadata. The two kinds are never merged and are named differently on every page. Neither is a claim about the tools' best configuration: other rulesets (`p/security-audit`, paid rules and cross-file analysis in Semgrep's commercial product) are not measured, and the registry ruleset changes over time, so the Semgrep default row is dated by its run. The OWASP suites were used while PandaWard's engines were built, so the 1.000 rows say how the rules behave on known tests, not on unseen code; the default rows were never tuned to them.
 
 Per category (TPR / FPR / score):
 
@@ -122,6 +126,8 @@ The [OWASP Benchmark for Python](https://github.com/OWASP-Benchmark/BenchmarkPyt
 | Built-in heuristics | 8 | +0.026 | +0.015 |
 | Semgrep 1.182.0, bundled rules | 14 | +0.608 | +0.608 |
 | Opengrep 1.33.1, bundled rules | 14 | +0.735 | +0.735 |
+| Semgrep 1.182.0, default ruleset (`p/default`) | 14 | +0.069 | +0.069 |
+| Opengrep 1.33.1, default rules (`opengrep-rules`) | 14 | +0.102 | +0.102 |
 
 Per category (TPR / FPR / score):
 

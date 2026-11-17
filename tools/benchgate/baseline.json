@@ -48,6 +48,22 @@
         "xss": 0.8516746411483254
       }
     },
+    "owasp/java/opengrep-default": {
+      "average_score_covered": 0.40711552111510374,
+      "categories": {
+        "cmdi": 0.20031746031746034,
+        "crypto": 0,
+        "hash": 0.689922480620155,
+        "ldapi": 0.15625,
+        "pathtraver": 0.19910888331940968,
+        "securecookie": 1,
+        "sqli": 0.24594320486815413,
+        "trustbound": 0.1700756514429812,
+        "weakrand": 1,
+        "xpathi": 0.43333333333333335,
+        "xss": 0.3833197183646478
+      }
+    },
     "owasp/java/pandaward": {
       "average_score_covered": 1,
       "categories": {
@@ -78,6 +94,22 @@
         "weakrand": 1,
         "xpathi": 0.19999999999999996,
         "xss": 0.35817092620686974
+      }
+    },
+    "owasp/java/semgrep-default": {
+      "average_score_covered": 0.34873713958427355,
+      "categories": {
+        "cmdi": 0.056571428571428606,
+        "crypto": 0,
+        "hash": 0.689922480620155,
+        "ldapi": 0.08796296296296291,
+        "pathtraver": 0.1170704539125591,
+        "securecookie": 1,
+        "sqli": 0.1973884381338743,
+        "trustbound": 0.09946763799383579,
+        "weakrand": 1,
+        "xpathi": 0.2833333333333333,
+        "xss": 0.3043917998988602
       }
     },
     "owasp/java/taint": {
@@ -128,6 +160,25 @@
         "xxe": 0.6
       }
     },
+    "owasp/python/opengrep-default": {
+      "average_score_covered": 0.10224717014616101,
+      "categories": {
+        "cmdi": 0,
+        "codeinj": 0,
+        "deserialization": 0.6666666666666667,
+        "hash": 0,
+        "ldapi": 0,
+        "pathtraver": 0.011351755041075433,
+        "redirect": 0.02930402930402931,
+        "securecookie": 0,
+        "sqli": 1,
+        "trustbound": 0,
+        "weakrand": 0,
+        "xpathi": 0,
+        "xss": -0.27586206896551724,
+        "xxe": 0
+      }
+    },
     "owasp/python/pandaward": {
       "average_score_covered": 1,
       "categories": {
@@ -164,6 +215,25 @@
         "xpathi": 0.240958605664488,
         "xss": 0.3047830923248054,
         "xxe": 0.6
+      }
+    },
+    "owasp/python/semgrep-default": {
+      "average_score_covered": 0.06928013717912804,
+      "categories": {
+        "cmdi": -0.46153846153846156,
+        "codeinj": 0,
+        "deserialization": 0.6666666666666667,
+        "hash": 0,
+        "ldapi": 0,
+        "pathtraver": 0.011351755041075433,
+        "redirect": 0.02930402930402931,
+        "securecookie": 0,
+        "sqli": 1,
+        "trustbound": 0,
+        "weakrand": 0,
+        "xpathi": 0,
+        "xss": -0.27586206896551724,
+        "xxe": 0
       }
     },
     "owasp/python/taint": {
