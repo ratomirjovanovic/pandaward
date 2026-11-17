@@ -2,9 +2,14 @@
 
 Research tooling that measures whether a coding or security agent can be
 steered by untrusted repository or tool content into (a) unauthorized side
-effects or (b) security conclusions its evidence does not support. It is not
-part of a scan, and it changes nothing in PandaWard's ledger, scopes or
-findings.
+effects or (b) security conclusions its evidence does not support, and the
+harness that makes PandaWard itself better: the claim checker ships as
+`pandaward verify-report` and the Stop hook check, and the labelled findings of
+the CVE benchmark (`cvebench --emit-findings`) found a ReDoS false positive that
+is fixed. Next, planned and without results: agent-assisted triage (#480), rule
+candidates gated by a held-out benchmark (#481) and finding misses with proof
+(#482). It is not part of a scan, and it changes nothing in PandaWard's ledger,
+scopes or findings.
 
 Status: the harness, the corpus and both live tracks work, and the first
 measurements are published (see below and [pandaward.dev/lab](https://pandaward.dev/lab/)).
