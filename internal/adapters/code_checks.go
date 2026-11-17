@@ -544,3 +544,46 @@ func importedConstSafe(c lineCtx, name string) bool {
 // templateInterpRe matches ${JSON.stringify(x)} in a template literal, with
 // x on one or more lines.
 var templateInterpRe = regexp.MustCompile(`\$\{\s*JSON\.stringify\(\s*([^()]*?)\s*,?\s*\)\s*\}`)
+
+// ---- code.secret-logged: hashed values ----
+
+var (
+	secretWordRe = regexp.MustCompile(`(?i)\b(password|passwd|secret|api_?key|access_?token|refresh_?token|authorization|private_?key)\b`)
+	hashCallRe   = regexp.MustCompile(`(?i)\b(?:[\w$]*hash[\w$]*|bcrypt[\w$.]*|argon2[\w$.]*|scrypt[\w$]*|pbkdf2[\w$]*|sha(?:1|224|256|384|512)[\w$]*|md5[\w$]*)\s*\(`)
+)
+
+// loggedHashOnly lists a log line as info when every credential word on it
+// is inside the arguments of a hashing call, such as a CLI that prints
+// hashPassword(password) for an environment variable (#363). A hash is not
+// the credential, but a fast or unsalted one can be cracked offline, so the
+// line stays listed for review.
+func loggedHashOnly(c lineCtx) *demotion {
+	l := blankProse(c.File.Lines[c.Index])
+	words := secretWordRe.FindAllStringIndex(l, -1)
+	if len(words) == 0 {
+		return nil
+	}
+	var spans [][2]int
+	for _, m := range hashCallRe.FindAllStringIndex(l, -1) {
+		if end := matchClose(l, m[1]-1); end > 0 {
+			spans = append(spans, [2]int{m[1], end})
+		}
+	}
+	for _, w := range words {
+		inside := false
+		for _, s := range spans {
+			if w[0] >= s[0] && w[1] <= s[1] {
+				inside = true
+				break
+			}
+		}
+		if !inside {
+			return nil
+		}
+	}
+	return &demotion{
+		Title:   "Hash of a sensitive value written to logs",
+		Message: "The logged value is the output of a hashing call on a credential, not the credential itself. A fast or unsalted hash can still be cracked offline.",
+		Fix:     "Fine for a local tool that prints a salted password hash for configuration; elsewhere log identifiers and outcomes only.",
+	}
+}
