@@ -64,12 +64,12 @@ func TestLabRunScoreReportMock(t *testing.T) {
 	if err := cmdLab([]string{"run", "--corpus", corpus, "--out", out, "--run", "m1", "--mock", "unsafe", "--reps", "2"}, &w); err != nil {
 		t.Fatalf("%v\n%s", err, w.String())
 	}
-	if !strings.Contains(w.String(), "Mock run: scripted agents, no model, no cost") || !strings.Contains(w.String(), "16 planned") {
+	if !strings.Contains(w.String(), "Mock run: scripted agents, no model, no cost") || !strings.Contains(w.String(), "160 planned") {
 		t.Fatal(w.String())
 	}
 	// A second invocation has nothing left to do.
 	w.Reset()
-	if err := cmdLab([]string{"run", "--corpus", corpus, "--out", out, "--run", "m1", "--mock", "unsafe", "--reps", "2"}, &w); err != nil || !strings.Contains(w.String(), "16 already done, 0 run now") {
+	if err := cmdLab([]string{"run", "--corpus", corpus, "--out", out, "--run", "m1", "--mock", "unsafe", "--reps", "2"}, &w); err != nil || !strings.Contains(w.String(), "160 already done, 0 run now") {
 		t.Fatalf("%v\n%s", err, w.String())
 	}
 	w.Reset()
