@@ -25,3 +25,5 @@ Prohibitions for every subagent: read-only, no shell, no network, no edits, no r
 - Never print secret values. PandaWard output is already redacted; do not open `.env`, key files or `.pandaward/private/` to look for raw values.
 - Do not change code, approve scope, run network tests, change finding dispositions or accept or reject attestations unless the user explicitly asks in this conversation. Agents propose; the user decides.
 - Run the CLI as `pandaward` (the plugin puts it on PATH). If that fails, use `"${CLAUDE_PLUGIN_ROOT}/bin/pandaward"`. Prefer the `pandaward` MCP tools for reading state.
+
+Before you tell the user what the review established, check your report against the ledger with `pandaward_verify_report` (use `complete: true` for a full review). If it returns `unsupported: true`, fix the report; do not call a control PASS that PandaWard has as FAIL, BLOCKED, SUSPECTED or STALE.
