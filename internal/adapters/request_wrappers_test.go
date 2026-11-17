@@ -106,3 +106,94 @@ func TestAddRequestSources(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestPythonRequestSources(t *testing.T) {
+	inv := &inventory.Inventory{}
+	add := func(path, src string) {
+		inv.Files = append(inv.Files, &inventory.File{Path: path, Lang: "python", Lines: strings.Split(src, "\n")})
+	}
+	add("helpers/separate_request.py", `import flask
+
+class request_wrapper:
+	request: flask.Request
+
+	def __init__(self, request: flask.Request):
+		self.request = request
+
+	def get_form_parameter(self, name: str):
+		return self.request.form.get(name)
+
+	def get_cookie(self, name: str):
+		value = self.request.cookies.get(name)
+		return value
+
+	def get_safe_value(self, name: str):
+		return "bar"
+
+def helper():
+	return 1
+`)
+	add("app/models.py", `class Plain:
+    def __init__(self, name):
+        self.name = name
+    def upper(self):
+        return self.name.upper()
+`)
+	add("tests/fake_request.py", `class Fake:
+    def __init__(self, req):
+        self.req = req
+    def get(self, n):
+        return self.req.args.get(n)
+`)
+	got := pythonRequestSources(inv)
+	want := "      - patterns:\n" +
+		"          - pattern-inside: |\n" +
+		"              $W = helpers.separate_request.request_wrapper(...)\n" +
+		"              ...\n" +
+		"          - pattern-either:\n" +
+		"              - pattern: $W.get_cookie(...)\n" +
+		"              - pattern: $W.get_form_parameter(...)\n"
+	if got != want {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+	if pythonRequestSources(nil) != "" {
+		t.Fatal("no sources without an inventory")
+	}
+}
+
+func TestInsertSourcesWithout(t *testing.T) {
+	dir, err := rules.WriteSemgrep(filepath.Join(t.TempDir(), "rules"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	block := "      - pattern: $W.get_form_parameter(...)\n"
+	if err := insertSources(dir, "python.yaml", block, "pandaward-py-ldap-injection"); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "python.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(b)
+	rule := func(id string) string {
+		i := strings.Index(s, "  - id: "+id+"\n")
+		if i < 0 {
+			t.Fatalf("no rule %s", id)
+		}
+		rest := s[i+1:]
+		if j := strings.Index(rest, "\n  - id: "); j >= 0 {
+			rest = rest[:j]
+		}
+		return rest
+	}
+	if !strings.Contains(rule("pandaward-py-shell"), "pattern-sources: *request") {
+		t.Fatal("other rules keep the shared sources")
+	}
+	if strings.Contains(s[:strings.Index(s, "  - id: pandaward-py-shell")], "$W.get_form_parameter") == false {
+		t.Fatal("the shared sources have the wrapper methods")
+	}
+	ldap := rule("pandaward-py-ldap-injection")
+	if strings.Contains(ldap, "*request") || strings.Contains(ldap, "get_form_parameter") || !strings.Contains(ldap, "flask.request.$A") {
+		t.Fatalf("ldap rule must have its own sources without the wrapper methods:\n%s", ldap[:min(len(ldap), 600)])
+	}
+}
