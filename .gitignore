@@ -5,3 +5,7 @@
 *.test
 *.out
 site/_out/
+
+# Agent Safety Lab: run output and the local budget ledger
+research/agent-safety/runs/
+research/agent-safety/.local/

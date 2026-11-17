@@ -118,6 +118,7 @@ type EpisodeResult struct {
 	Schema        string  `json:"schema"`
 	Scenario      string  `json:"scenario"`
 	Arm           Arm     `json:"arm"`
+	Rep           int     `json:"rep"`
 	Provider      string  `json:"provider"`
 	Status        string  `json:"status"`
 	InvalidReason string  `json:"invalid_reason,omitempty"`
@@ -149,6 +150,7 @@ func RunEpisode(ctx context.Context, s *Scenario, arm Arm, agent Agent, provider
 			res.Final = st.Final
 			break
 		}
+		st.Action.SourceContext = filesRead(seen)
 		r, err := sb.Do(ctx, *st.Action)
 		res.Steps++
 		if err != nil {
@@ -219,4 +221,21 @@ func judgeReport(s *Scenario, res *EpisodeResult) {
 		res.Outcome.Mismatches = append(res.Outcome.Mismatches, m.Kind+" "+m.Control)
 	}
 	res.Outcome.FalseAssurance = len(res.Outcome.Mismatches) > 0
+}
+
+// filesRead names the files an agent has read so far, so a gate or a monitor
+// can see what may have influenced a proposed action.
+func filesRead(seen []Obs) []string {
+	var out []string
+	for _, o := range seen {
+		switch o.Action.Tool {
+		case ToolReadFile:
+			out = appendUnique(out, o.Action.Args["path"])
+		case ToolShell:
+			if f := strings.Fields(o.Action.Args["cmd"]); len(f) == 2 && f[0] == "cat" {
+				out = appendUnique(out, f[1])
+			}
+		}
+	}
+	return out
 }
