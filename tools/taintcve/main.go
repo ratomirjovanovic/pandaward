@@ -26,6 +26,8 @@ import (
 	"github.com/ratomirjovanovic/pandaward/internal/config"
 	"github.com/ratomirjovanovic/pandaward/internal/inventory"
 	"github.com/ratomirjovanovic/pandaward/internal/taint"
+	"github.com/ratomirjovanovic/pandaward/internal/taint/flow"
+	"github.com/ratomirjovanovic/pandaward/internal/taint/ir"
 	"github.com/ratomirjovanovic/pandaward/internal/taint/js"
 	"github.com/ratomirjovanovic/pandaward/internal/taint/jsflow"
 )
@@ -51,7 +53,10 @@ func main() {
 	only := flag.String("cve", "", "comma-separated CVE ids")
 	scan := flag.Bool("scan", false, "instead: print the findings in application code under the directories given as arguments (no library mode)")
 	cpu := flag.String("cpuprofile", "", "write a CPU profile to this file")
+	show = flag.Bool("show", false, "print the findings of each analyzed file")
+	irEngine := flag.Bool("ir", false, "measure the IR engine (internal/taint/flow, rules/taint/jsir.yaml) instead of jsflow")
 	flag.Parse()
+	useIR = *irEngine
 	if *cpu != "" {
 		f, err := os.Create(*cpu)
 		if err == nil && pprof.StartCPUProfile(f) == nil {
@@ -182,9 +187,53 @@ func analyze(spec *taint.Spec, dir string, c cve) (map[string][]taint.Finding, b
 		}
 		found = true
 		file := js.Parse(f, string(b), js.OptionsFor(f))
+		if useIR {
+			out[f] = analyzeIR(file, string(b))
+			continue
+		}
 		out[f] = jsflow.Analyze(file, spec, jsflow.Options{Library: true})
 	}
+	if *show {
+		for f, fs := range out {
+			for _, x := range fs {
+				src := ""
+				if len(x.Steps) > 0 {
+					src = x.Steps[0].What
+				}
+				fmt.Printf("    %s %s:%d %s <- %s\n", filepath.Base(dir), f, x.Line, x.Sink.ID, src)
+			}
+		}
+	}
 	return out, found
+}
+
+// useIR selects the IR engine (-ir); show prints findings (-show).
+var (
+	useIR bool
+	show  *bool
+)
+
+var (
+	irEng  *flow.Engine
+	irSpec *taint.Spec
+)
+
+// analyzeIR runs the IR engine on one file in library mode, with the
+// structural findings jsflow finds by shape.
+func analyzeIR(file *js.File, src string) []taint.Finding {
+	if irEng == nil {
+		spec, err := taint.Load("jsir")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		irEng, irSpec = flow.New(spec), spec
+	}
+	m := js.Lower(file, file.Path, nil)
+	p := irEng.NewProject(func(string) (*ir.Module, []string) { return nil, nil })
+	p.Library = true
+	out := p.AnalyzeOne(m, strings.Split(src, "\n"))
+	return append(out, jsflow.Structural(file, irSpec, jsflow.Options{Library: true})...)
 }
 
 func count(m map[string][]taint.Finding, rule string) int {
@@ -211,6 +260,10 @@ func scanApps(dirs []string) {
 			fmt.Fprintln(os.Stderr, root, err)
 			continue
 		}
+		if useIR {
+			files, total = scanIR(inv, root, files, total)
+			continue
+		}
 		res, run := adapters.ByName(adapters.TaintAdapter).Run(context.Background(), &adapters.Context{Root: root, Inv: inv, Cfg: cfg})
 		fmt.Fprintln(os.Stderr, root+":", run.Detail)
 		var k int
@@ -223,4 +276,37 @@ func scanApps(dirs []string) {
 		}
 	}
 	fmt.Printf("%d files, %d findings\n", files, total)
+}
+
+// scanIR prints the findings of the IR engine in the JavaScript and
+// TypeScript files of an inventory, one file at a time and without
+// library mode, as the application code of a scan is analyzed.
+func scanIR(inv *inventory.Inventory, root string, files, total int) (int, int) {
+	for _, f := range inv.Files {
+		if f.Lang != "javascript" && f.Lang != "typescript" {
+			continue
+		}
+		path := filepath.Join(root, filepath.FromSlash(f.Path))
+		b, err := os.ReadFile(path)
+		if err != nil {
+			continue
+		}
+		files++
+		file := js.Parse(f.Path, string(b), js.OptionsFor(f.Path))
+		spec, err := taint.Load("jsir")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		p := flow.New(spec).NewProject(func(string) (*ir.Module, []string) { return nil, nil })
+		for _, x := range p.AnalyzeOne(js.Lower(file, f.Path, nil), strings.Split(string(b), "\n")) {
+			total++
+			what := ""
+			if len(x.Steps) > 0 {
+				what = x.Steps[0].What
+			}
+			fmt.Printf("%s:%d %s\n    %s\n", path, x.Line, x.Sink.ID, what)
+		}
+	}
+	return files, total
 }

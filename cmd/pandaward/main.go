@@ -1504,7 +1504,7 @@ func cmdDoctor(ctx context.Context, args []string, w io.Writer) error {
 		return err
 	}
 	if *asJSON {
-		return printJSON(w, map[string]any{"version": version.Version, "initialized": initialized, "tools": tools})
+		return printJSON(w, map[string]any{"version": version.Version, "initialized": initialized, "tools": tools, "advice": adapters.SemgrepAdvice()})
 	}
 	fmt.Fprintf(w, "pandaward %s (catalog %s)\n", version.Version, catalog.Version)
 	if initialized {
@@ -1513,7 +1513,7 @@ func cmdDoctor(ctx context.Context, args []string, w io.Writer) error {
 	} else {
 		fmt.Fprintln(w, "Project: not initialized here (run `pandaward init`)")
 	}
-	fmt.Fprintln(w, "\nBuilt-in adapters (always available, offline): inventory, secrets, code, cicd, infra, supply, mobile, sarif-import (for files in .pandaward/sarif or scan.sarif_files)")
+	fmt.Fprintln(w, "\nBuilt-in adapters (always available, offline): inventory, secrets, code, taint (data flow in JavaScript and TypeScript), cicd, infra, supply, mobile, sarif-import (for files in .pandaward/sarif or scan.sarif_files)")
 	fmt.Fprintln(w, "Optional scanners (never installed or downloaded by PandaWard):")
 	for _, t := range tools {
 		state := "not installed"
@@ -1525,6 +1525,9 @@ func cmdDoctor(ctx context.Context, args []string, w io.Writer) error {
 			net = " [needs scan.allow_tool_network for its advisory DB]"
 		}
 		fmt.Fprintf(w, "  %-12s %s%s\n", t.Name, state, net)
+	}
+	if advice := adapters.SemgrepAdvice(); advice != "" {
+		fmt.Fprintf(w, "  Advice: %s\n", advice)
 	}
 	zapPath := ""
 	if cfg != nil {

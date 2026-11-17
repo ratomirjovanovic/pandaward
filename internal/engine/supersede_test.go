@@ -55,3 +55,26 @@ func TestRedecideWithoutSupersededSignals(t *testing.T) {
 		t.Error("without a completed semgrep run nothing is replaced")
 	}
 }
+
+// In the Python files the taint engine analyzed, the bundled rules it
+// replaces do not count; elsewhere they do, as do rules it does not
+// replace, rules a project adds and the built-in heuristics.
+func TestSupersededInTaintFiles(t *testing.T) {
+	inv := &inventory.Inventory{Files: []*inventory.File{
+		{Path: "app.js", Lang: "javascript"},
+		{Path: "app.py", Lang: "python"},
+		{Path: "tests/test_app.py", Lang: "python"},
+	}}
+	sigs := []model.Signal{
+		{Collector: "semgrep", RuleID: "semgrep.pandaward-py-xss", File: "app.py"},            // 0 replaced
+		{Collector: "semgrep", RuleID: "semgrep.pandaward-py-tls-verify-off", File: "app.py"}, // 1 kept
+		{Collector: "semgrep", RuleID: "semgrep.my-own-rule", File: "app.py"},                 // 2 kept
+		{Collector: "builtin-code", RuleID: "code.py-eval", File: "app.py"},                   // 3 kept: runs without Semgrep
+		{Collector: "semgrep", RuleID: "semgrep.pandaward-py-xss", File: "tests/test_app.py"}, // 4 kept
+		{Collector: "builtin-code", RuleID: "code.sql-concat", File: "app.js"},                // 5 kept
+	}
+	got := supersededInTaintFiles(sigs, inv, nil)
+	if len(got) != 1 || got[0] == "" {
+		t.Errorf("superseded %v", got)
+	}
+}

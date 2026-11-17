@@ -1,6 +1,7 @@
 package jsflow
 
 import (
+	"github.com/ratomirjovanovic/pandaward/internal/taint/redos"
 	"regexp"
 	"strings"
 
@@ -140,4 +141,66 @@ func (a *analyzer) shapeOnTainted(c *js.Call, recv val) {
 func isEmptyString(x js.Expr) bool {
 	l, ok := x.(*js.Lit)
 	return ok && l.Kind == js.TString && l.Val == ""
+}
+
+// regexps reports regular expressions written out in a file (a literal, or
+// RegExp with a string) that backtrack exponentially, and in a library
+// also those that take quadratic time, found by the ambiguity of their
+// automaton (internal/taint/redos).
+func (a *analyzer) regexps(f *js.File) {
+	var k *taint.Sink
+	for _, s := range a.spec.Sinks {
+		if s.ID == "taint.js-redos" {
+			k = s
+		}
+	}
+	if k == nil {
+		return
+	}
+	check := func(line int, pat, flags string) {
+		r := redos.Analyze(pat, flags)
+		what := ""
+		switch {
+		case r.Exponential:
+			what = "the regular expression /" + pat + "/ backtracks exponentially on some input"
+		case r.Polynomial && a.opt.Library:
+			what = "the regular expression /" + pat + "/ takes quadratic time on some input"
+		default:
+			return
+		}
+		key := k.ID + "|" + itoa(line)
+		if a.seen[key] {
+			return
+		}
+		a.seen[key] = true
+		a.out = append(a.out, taint.Finding{Sink: k, File: a.file, Line: line, EndLine: line, Library: a.opt.Library,
+			Steps: []taint.Step{{Line: line, What: what}, {Line: line, What: k.Title}}})
+	}
+	for _, st := range f.Stmts {
+		js.Inspect(st, func(n js.Node) bool {
+			switch n := n.(type) {
+			case *js.Lit:
+				if n.Kind == js.TRegex {
+					if end := strings.LastIndexByte(n.Val, '/'); end > 0 {
+						check(n.Line, n.Val[1:end], n.Val[end+1:])
+					}
+				}
+			case *js.Call:
+				id, ok := n.Callee.(*js.Ident)
+				if !ok || id.Name != "RegExp" || len(n.Args) == 0 {
+					return true
+				}
+				if lit, ok := n.Args[0].(*js.Lit); ok && lit.Kind == js.TString {
+					flags := ""
+					if len(n.Args) > 1 {
+						if fl, ok := n.Args[1].(*js.Lit); ok && fl.Kind == js.TString {
+							flags = fl.Val
+						}
+					}
+					check(n.Line, lit.Val, flags)
+				}
+			}
+			return true
+		})
+	}
 }

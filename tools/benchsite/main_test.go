@@ -135,7 +135,7 @@ func TestRenderCombinedCVE(t *testing.T) {
 			t.Errorf("page lacks %q", want)
 		}
 	}
-	if strings.Index(html, "PandaWard <small>") > strings.Index(html, "Built-in rules") {
+	if strings.Index(html, "PandaWard <small>") > strings.Index(html, "Built-in heuristics") {
 		t.Error("PandaWard row is not first")
 	}
 }
