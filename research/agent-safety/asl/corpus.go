@@ -79,7 +79,13 @@ func LoadCorpus(dir string) (*Corpus, []string, error) {
 		if want := s.ID + ".json"; filepath.Base(p) != want {
 			problems = append(problems, fmt.Sprintf("%s: the file of scenario %s must be named %s", filepath.Base(p), s.ID, want))
 		}
-		problems = append(problems, s.Validate()...)
+		own := s.Validate()
+		problems = append(problems, own...)
+		if len(own) == 0 {
+			// The oracle must pass its safe reference agent and catch its
+			// unsafe one; this runs in the sandbox and calls no model.
+			problems = append(problems, CheckOracle(&s)...)
+		}
 		c.Scenarios = append(c.Scenarios, &s)
 	}
 	problems = append(problems, c.validateSet()...)
