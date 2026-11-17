@@ -54,3 +54,12 @@ func TestDefaultEnginesAreListed(t *testing.T) {
 		t.Fatalf("%v %v", got, err)
 	}
 }
+
+// A scan that did not happen is not "no findings".
+func TestFatalExit(t *testing.T) {
+	for code, want := range map[int]bool{0: false, 1: false, 2: true, 7: true, 3: true, 124: true} {
+		if got := fatalExit(code); got != want {
+			t.Errorf("fatalExit(%d) = %v, want %v", code, got, want)
+		}
+	}
+}

@@ -6,6 +6,7 @@ package engines
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -184,6 +185,18 @@ const (
 	OpengrepRules = "PANDAWARD_OPENGREP_RULES"
 )
 
+// opengrepRuleDirs are the directories of the opengrep-rules repository that
+// opengrep-default runs: the languages the benchmarks cover and the generic
+// rules. The repository root is not a rule set (it holds YAML that is not a
+// rule), so the tool refuses it with an invalid-configuration error.
+var opengrepRuleDirs = []string{"java", "python", "javascript", "typescript", "generic"}
+
+// fatalExit reports whether the exit code of semgrep or opengrep scan means the
+// scan did not happen. 0 is a clean scan and 1 a scan with findings; anything
+// else, such as 2 (fatal error) or 7 (invalid configuration), is not a result
+// and must never be read as "no findings".
+func fatalExit(code int) bool { return code != 0 && code != 1 }
+
 // defaultRules runs Semgrep or Opengrep with the standard rules and no
 // PandaWard rule, config or flag beyond reading the results as JSON: no
 // metrics, no cache of the user, a clean home directory. It scans the whole
@@ -220,13 +233,32 @@ func defaultRules(ctx context.Context, inv *inventory.Inventory, engine string) 
 	cancel()
 	rctx, cancel := context.WithTimeout(ctx, 3*time.Hour)
 	defer cancel()
-	cmd := exec.CommandContext(rctx, path, "scan", "--config", cfg, "--json", "--quiet")
+	args := []string{"scan"}
+	if engine == "opengrep-default" {
+		found := 0
+		for _, d := range opengrepRuleDirs {
+			dir := filepath.Join(cfg, d)
+			if st, err := os.Stat(dir); err == nil && st.IsDir() {
+				args = append(args, "--config", dir)
+				found++
+			}
+		}
+		if found == 0 {
+			return r, fmt.Errorf("%s: none of %s exists in %s", engine, strings.Join(opengrepRuleDirs, ", "), cfg)
+		}
+	} else {
+		args = append(args, "--config", cfg)
+	}
+	args = append(args, "--json", "--quiet", ".")
+	cmd := exec.CommandContext(rctx, path, args...)
 	cmd.Dir, cmd.Env = inv.Root, env
 	var stdout, stderr strings.Builder
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	cmd.Args = append(cmd.Args, ".")
-	if err := cmd.Run(); err != nil && stdout.Len() == 0 {
-		return r, fmt.Errorf("%s did not complete: %v %s", engine, err, firstLine(stderr.String()))
+	if err := cmd.Run(); err != nil {
+		var ee *exec.ExitError
+		if !errors.As(err, &ee) || fatalExit(ee.ExitCode()) || stdout.Len() == 0 {
+			return r, fmt.Errorf("%s did not complete: %v %s", engine, err, firstLine(stderr.String()))
+		}
 	}
 	fs, err := parseDefaultJSON(stdout.String())
 	if err != nil {
