@@ -32,17 +32,33 @@ func Analyze(pattern, flags string) Result {
 	if p.bad || p.pos < len(p.src) || p.backref {
 		return Result{}
 	}
-	b := &builder{}
-	start := b.new()
-	acc := b.new()
-	if !b.build(n, start, acc) || b.over {
-		return Result{}
-	}
-	nfa := b.finish(start, acc, p.anchored && !p.multi, p.endAnchored && !p.multi)
+	nfa := compile(n, p, false)
 	if nfa == nil {
 		return Result{}
 	}
-	return nfa.analyze()
+	res := nfa.analyze()
+	if res.Polynomial {
+		// A loop that runs at most a few hundred times does work that does not
+		// grow with the input. If the finding is gone when such loops are not
+		// loops, it needed them and is not reported (a fix that bounds the
+		// loops, as moment's for CVE-2017-18214, is a fix). Exponential
+		// ambiguity is not affected.
+		if bounded := compile(n, p, true); bounded != nil && !bounded.polynomial() {
+			return Result{}
+		}
+	}
+	return res
+}
+
+// compile builds the automaton of a parsed pattern.
+func compile(n *node, p *parser, dropBounded bool) *nfa {
+	b := &builder{dropBounded: dropBounded}
+	start := b.new()
+	acc := b.new()
+	if !b.build(n, start, acc) || b.over {
+		return nil
+	}
+	return b.finish(start, acc, p.anchored && !p.multi, p.endAnchored && !p.multi)
 }
 
 // ---- character sets
