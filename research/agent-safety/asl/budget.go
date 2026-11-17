@@ -256,8 +256,8 @@ func (r *Reservation) settle(in, out int, unknown bool) error {
 	return l.save()
 }
 
-// Report summarizes spend per run and model for the research report.
-type Report struct {
+// SpendReport summarizes spend per run and model for the research report.
+type SpendReport struct {
 	Cap, Spent Micro
 	ByModel    map[string]Micro
 	ByRun      map[string]Micro
@@ -265,10 +265,10 @@ type Report struct {
 }
 
 // Report returns the totals.
-func (l *Ledger) Report() Report {
+func (l *Ledger) Report() SpendReport {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	r := Report{Cap: l.st.Cap, ByModel: map[string]Micro{}, ByRun: map[string]Micro{}, Calls: len(l.st.Entries)}
+	r := SpendReport{Cap: l.st.Cap, ByModel: map[string]Micro{}, ByRun: map[string]Micro{}, Calls: len(l.st.Entries)}
 	for _, e := range l.st.Entries {
 		r.Spent += e.Cost
 		r.ByModel[e.Model] += e.Cost
@@ -278,7 +278,7 @@ func (l *Ledger) Report() Report {
 }
 
 // Runs lists the run ids in the ledger.
-func (r Report) Runs() []string {
+func (r SpendReport) Runs() []string {
 	var out []string
 	for k := range r.ByRun {
 		out = append(out, k)

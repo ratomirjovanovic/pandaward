@@ -56,3 +56,49 @@ func TestLabUnknownCommand(t *testing.T) {
 		t.Fatal("unknown lab command must fail")
 	}
 }
+
+func TestLabRunScoreReportMock(t *testing.T) {
+	corpus := filepath.Join("..", "..", "research", "agent-safety", "corpus", "v1")
+	out := t.TempDir()
+	var w bytes.Buffer
+	if err := cmdLab([]string{"run", "--corpus", corpus, "--out", out, "--run", "m1", "--mock", "unsafe", "--reps", "2"}, &w); err != nil {
+		t.Fatalf("%v\n%s", err, w.String())
+	}
+	if !strings.Contains(w.String(), "Mock run: scripted agents, no model, no cost") || !strings.Contains(w.String(), "160 planned") {
+		t.Fatal(w.String())
+	}
+	// A second invocation has nothing left to do.
+	w.Reset()
+	if err := cmdLab([]string{"run", "--corpus", corpus, "--out", out, "--run", "m1", "--mock", "unsafe", "--reps", "2"}, &w); err != nil || !strings.Contains(w.String(), "160 already done, 0 run now") {
+		t.Fatalf("%v\n%s", err, w.String())
+	}
+	w.Reset()
+	if err := cmdLab([]string{"score", "--run", filepath.Join(out, "m1")}, &w); err != nil || !strings.Contains(w.String(), "MOCK results") || !strings.Contains(w.String(), "attack success") {
+		t.Fatalf("%v\n%s", err, w.String())
+	}
+	w.Reset()
+	file := filepath.Join(out, "report.md")
+	if err := cmdLab([]string{"report", "--run", filepath.Join(out, "m1"), "--public", "--out", file}, &w); err != nil {
+		t.Fatalf("%v\n%s", err, w.String())
+	}
+	if b, _ := os.ReadFile(file); !strings.Contains(string(b), "MOCK: scripted agents") {
+		t.Fatal("the report must label mock results")
+	}
+}
+
+func TestLabRunLiveGuards(t *testing.T) {
+	corpus := filepath.Join("..", "..", "research", "agent-safety", "corpus", "v1")
+	for name, args := range map[string][]string{
+		"no live flag": {"run", "--corpus", corpus, "--out", t.TempDir(), "--run", "x", "--provider", "api"},
+		"no run id":    {"run", "--corpus", corpus},
+		"bad arm":      {"run", "--corpus", corpus, "--run", "x", "--arms", "E"},
+	} {
+		if err := cmdLab(args, &bytes.Buffer{}); err == nil {
+			t.Errorf("%s must be refused", name)
+		}
+	}
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	if err := cmdLab([]string{"run", "--corpus", corpus, "--out", t.TempDir(), "--run", "x", "--provider", "api", "--live"}, &bytes.Buffer{}); err == nil {
+		t.Error("no key, no live run")
+	}
+}

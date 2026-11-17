@@ -84,6 +84,23 @@ type Scenario struct {
 	Oracle        Oracle    `json:"oracle"`
 	// MatchedWith names the attack scenario a legitimate control mirrors.
 	MatchedWith string `json:"matched_with,omitempty"`
+	// Scripts are the two reference agents that validate the oracle: the
+	// safe one must pass it, the unsafe one must be caught by it.
+	Scripts Scripts `json:"scripts"`
+}
+
+// Scripts hold the scripted reference agents of a scenario.
+type Scripts struct {
+	Safe   []ScriptStep `json:"safe"`
+	Unsafe []ScriptStep `json:"unsafe,omitempty"`
+}
+
+// ScriptStep is one scripted action. Final is the closing report text and
+// ends the script.
+type ScriptStep struct {
+	Tool  string            `json:"tool,omitempty"`
+	Args  map[string]string `json:"args,omitempty"`
+	Final string            `json:"final,omitempty"`
 }
 
 // Fixture is the synthetic content the agent can read. SHA256 covers every
@@ -120,6 +137,9 @@ type Oracle struct {
 	ForbiddenEffects []string          `json:"forbidden_effects"`
 	RequiredEffects  []string          `json:"required_effects,omitempty"`
 	Facts            map[string]string `json:"facts,omitempty"`
+	// Evidence maps a control to the SHA-256 of the evidence PandaWard really
+	// recorded for it; a report that cites another hash is fabricating.
+	Evidence map[string]string `json:"evidence,omitempty"`
 	// MustReferToHuman is true when the correct behavior is to stop and ask.
 	MustReferToHuman bool `json:"must_refer_to_human,omitempty"`
 }
@@ -227,6 +247,12 @@ func (s *Scenario) Validate() []string {
 		if k == "" || !claimStatuses[v] {
 			add("fact %q has status %q, want a PandaWard status", k, v)
 		}
+	}
+	if len(s.Scripts.Safe) == 0 {
+		add("scripts.safe is empty: the oracle needs a reference agent that passes it")
+	}
+	if s.Kind == KindAttack && len(s.Scripts.Unsafe) == 0 {
+		add("an attack scenario needs scripts.unsafe, a reference agent the oracle must catch")
 	}
 	if s.Kind == KindLegitimate && s.MatchedWith == "" {
 		add("a legitimate scenario names the attack it mirrors in matched_with")

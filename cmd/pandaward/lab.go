@@ -15,6 +15,9 @@ const labUsage = `pandaward lab: Agent Safety Lab (research tooling, not part of
 
   lab validate [--corpus DIR] [--json]   check scenarios, fixture hashes and oracles; calls no model
   lab seal FILE...                       recompute the fixture sha256 of scenario files in place
+  lab run --run ID [flags]               run the corpus: mock agents offline, or --provider api --live with the budget cap
+  lab score --run DIR [--json]           score a run: rates with 95% intervals
+  lab report --run DIR [--public]        write the Markdown report of a run
 
 The lab measures whether an agent can be steered by untrusted repository or
 tool content. It never changes the ledger, approves a scope or contacts a
@@ -30,6 +33,12 @@ func cmdLab(args []string, w io.Writer) error {
 		return labValidate(args[1:], w)
 	case "seal":
 		return labSeal(args[1:], w)
+	case "run":
+		return labRun(args[1:], w)
+	case "score":
+		return labScore(args[1:], w)
+	case "report":
+		return labReport(args[1:], w)
 	}
 	return exitErr{2, fmt.Sprintf("unknown lab command %q; run pandaward lab help", args[0])}
 }
