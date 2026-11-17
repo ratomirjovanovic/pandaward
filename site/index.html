@@ -131,6 +131,22 @@ pandaward assess</pre>
     </script>
   </section>
 
+  <section id="roadmap">
+    <h2>Roadmap</h2>
+    <p class="sub">Released in 0.2.16: a built-in data flow engine for JavaScript, TypeScript, Python and Java, ReDoS detection, and public benchmarks measured on every change.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Step</th><th>Scope</th><th>State</th></tr></thead>
+      <tbody>
+        <tr><td>Accuracy</td><td>JavaScript XSS, findings still reported after a fix, Python request wrapper classes, a second benchmark the rules were not tuned on</td><td>in progress</td></tr>
+        <tr><td>More languages</td><td>Go, C#, Rust, Ruby, Kotlin, PHP, C and C++, each with a parser, a rule spec and a public benchmark</td><td>planned</td></tr>
+        <tr><td>Built-in DAST baseline</td><td>no control stays BLOCKED only because ZAP is missing</td><td>planned</td></tr>
+        <tr><td>Mobile and LLM endpoints</td><td>storage checks, MobSF adapter, LLM endpoint tests</td><td>in progress</td></tr>
+        <tr><td>1.0</td><td>frozen schemas, at least 3 vulnerable and 3 safe cases per rule, external review</td><td>in progress</td></tr>
+      </tbody>
+    </table></div>
+    <p class="note">Data flow analysis covers JavaScript, TypeScript, Python and Java today. Other languages get inventory, secrets, dependency checks and the bundled rules, and are listed here only as planned. PandaWard stays free and local. <a href="https://github.com/ratomirjovanovic/pandaward/issues">Issues</a> have the details.</p>
+  </section>
+
   <section>
     <h2>What it is not</h2>
     <p class="note">PandaWard is alpha software and an automated technical assessment. It is not a certification, attestation, legal opinion or independently signed penetration test, and it cannot prove the absence of vulnerabilities. Runtime checks cover the cases you declare in the scope manifest, against the targets you approve; PASS means those cases held, not that the application has no other flaw.</p>
