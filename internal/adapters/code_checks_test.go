@@ -65,6 +65,32 @@ func TestHTMLSinkProvenSafe(t *testing.T) {
 		{"sanitizer options that allow script", map[string]string{
 			"src/lib/md.ts":    "import sanitize from 'sanitize-html'\nexport function render(md: string): string {\n  return sanitize(md, { allowedTags: ['b', 'script'] })\n}\n",
 			"src/app/page.tsx": "import { render } from '../lib/md'\nexport const P = ({ md }) => <div dangerouslySetInnerHTML={{ __html: render(md) }} />\n"}, true},
+		{"helper chain to a sanitize-html wrapper with options built in the module", map[string]string{
+			"src/lib/security/sanitize.ts": "import sanitize from 'sanitize-html'\nconst TAGS = ['p', 'a']\nfunction options(profile: string) {\n  return { allowedTags: TAGS }\n}\nexport function sanitizeHtml(html: string, profile: string = 'markdown'): string {\n  return sanitize(html, options(profile))\n}\n",
+			"src/lib/markdown.ts":          "import { sanitizeHtml } from './security/sanitize'\nexport function markdownToHtml(md: string): string {\n  let html = md.replace(/</g, '&lt;')\n  html = html.replace(/^# (.+)$/gm, (_m, t) => {\n    return `<h1>${t}</h1>`\n  })\n  return sanitizeHtml(html)\n}\n",
+			"src/app/page.tsx":             "import { markdownToHtml } from '../lib/markdown'\nexport default function Page({ doc }) {\n  const html = markdownToHtml(doc.body)\n  return <div dangerouslySetInnerHTML={{ __html: html }} />\n}\n"}, false},
+		{"helper chain whose module lets script through", map[string]string{
+			"src/lib/security/sanitize.ts": "import sanitize from 'sanitize-html'\nfunction options() {\n  return { allowedTags: ['p', 'script'] }\n}\nexport function sanitizeHtml(html: string): string {\n  return sanitize(html, options())\n}\n",
+			"src/lib/markdown.ts":          "import { sanitizeHtml } from './security/sanitize'\nexport function markdownToHtml(md: string): string {\n  return sanitizeHtml(md)\n}\n",
+			"src/app/page.tsx":             "import { markdownToHtml } from '../lib/markdown'\nexport const P = ({ md }) => <div dangerouslySetInnerHTML={{ __html: markdownToHtml(md) }} />\n"}, true},
+		{"helper chain that ends without a sanitizer", map[string]string{
+			"src/lib/inner.ts":    "export function inner(s: string): string {\n  return s.trim()\n}\n",
+			"src/lib/markdown.ts": "import { inner } from './inner'\nexport function markdownToHtml(md: string): string {\n  return inner(md)\n}\n",
+			"src/app/page.tsx":    "import { markdownToHtml } from '../lib/markdown'\nexport const P = ({ md }) => <div dangerouslySetInnerHTML={{ __html: markdownToHtml(md) }} />\n"}, true},
+		{"useMemo returning a literal or a sanitizing helper", map[string]string{
+			"src/lib/md.ts":    "import sanitize from 'sanitize-html'\nexport function markdownToHtml(md: string): string {\n  return sanitize(md, { allowedTags: ['p'] })\n}\n",
+			"src/app/page.tsx": "import { useMemo } from 'react'\nimport { markdownToHtml } from '../lib/md'\nexport function Editor({ value }) {\n  const rendered = useMemo(() => {\n    if (!value.trim()) {\n      return '<p>Nothing yet.</p>'\n    }\n    return markdownToHtml(value)\n  }, [value])\n  return <div dangerouslySetInnerHTML={{ __html: rendered }} />\n}\n"}, false},
+		{"useMemo with a branch that returns raw input", map[string]string{
+			"src/lib/md.ts":    "import sanitize from 'sanitize-html'\nexport function markdownToHtml(md: string): string {\n  return sanitize(md, { allowedTags: ['p'] })\n}\n",
+			"src/app/page.tsx": "import { useMemo } from 'react'\nimport { markdownToHtml } from '../lib/md'\nexport function Editor({ value, raw }) {\n  const rendered = useMemo(() => {\n    if (raw) {\n      return value\n    }\n    return markdownToHtml(value)\n  }, [value, raw])\n  return <div dangerouslySetInnerHTML={{ __html: rendered }} />\n}\n"}, true},
+		{"helper from a destructured dynamic import", map[string]string{
+			"src/lib/md.ts":    "import sanitize from 'sanitize-html'\nexport function markdownToHtml(md: string): string {\n  return sanitize(md, { allowedTags: ['p'] })\n}\n",
+			"src/app/page.tsx": "export default async function Page({ doc }) {\n  const { markdownToHtml } = await import('../lib/md')\n  const html = markdownToHtml(doc.body)\n  return <div dangerouslySetInnerHTML={{ __html: html }} />\n}\n"}, false},
+		{"non-sanitizing helper from a dynamic import", map[string]string{
+			"src/lib/md.ts":    "export function markdownToHtml(md: string): string {\n  return md.trim()\n}\n",
+			"src/app/page.tsx": "export default async function Page({ doc }) {\n  const { markdownToHtml } = await import('../lib/md')\n  const html = markdownToHtml(doc.body)\n  return <div dangerouslySetInnerHTML={{ __html: html }} />\n}\n"}, true},
+		{"useMemo that is not React's", map[string]string{
+			"src/app/page.tsx": "import { useMemo } from './memo'\nexport function Editor({ value }) {\n  const rendered = useMemo(() => '<p>x</p>', [value])\n  return <div dangerouslySetInnerHTML={{ __html: rendered }} />\n}\n"}, true},
 		{"const shadowed by a parameter", map[string]string{
 			"src/app/page.tsx": "const html = '<b>static</b>'\nexport const L = ({ items }) => items.map((html) => <div dangerouslySetInnerHTML={{ __html: html }} />)\n"}, true},
 		{"const from a database row", map[string]string{
