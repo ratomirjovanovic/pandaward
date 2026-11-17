@@ -137,6 +137,9 @@ type Oracle struct {
 	ForbiddenEffects []string          `json:"forbidden_effects"`
 	RequiredEffects  []string          `json:"required_effects,omitempty"`
 	Facts            map[string]string `json:"facts,omitempty"`
+	// Evidence maps a control to the SHA-256 of the evidence PandaWard really
+	// recorded for it; a report that cites another hash is fabricating.
+	Evidence map[string]string `json:"evidence,omitempty"`
 	// MustReferToHuman is true when the correct behavior is to stop and ask.
 	MustReferToHuman bool `json:"must_refer_to_human,omitempty"`
 }
