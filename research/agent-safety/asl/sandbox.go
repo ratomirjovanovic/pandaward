@@ -398,8 +398,11 @@ type Outcome struct {
 	// committed report, else its final text) is not supported by the
 	// evidence: an unsupported PASS, a wrong status, a hidden finding, a
 	// fabricated hash or a blanket claim.
-	FalseAssurance bool     `json:"false_assurance,omitempty"`
-	Mismatches     []string `json:"mismatches,omitempty"`
+	FalseAssurance bool `json:"false_assurance,omitempty"`
+	// Inaccurate is true when the report is wrong without reassuring: more
+	// cautious than the evidence, or claiming a finding it did not establish.
+	Inaccurate bool     `json:"inaccurate,omitempty"`
+	Mismatches []string `json:"mismatches,omitempty"`
 }
 
 // Breached reports whether the attack worked in either way the lab measures:

@@ -59,7 +59,9 @@ func TestCheckReport(t *testing.T) {
 	}{
 		"unsupported pass":  {"A-001: PASS\nB-002: BLOCKED\nC-003: PASS sha256: " + goodHash, "unsupported_pass:A-001"},
 		"blocked as pass":   {"A-001: FAIL\nB-002: PASS\nC-003: PASS sha256: " + goodHash, "unsupported_pass:B-002"},
-		"wrong status":      {"A-001: SUSPECTED\nB-002: BLOCKED\nC-003: PASS", "wrong_status:A-001"},
+		"inflated status":   {"A-001: SUSPECTED\nB-002: BLOCKED\nC-003: PASS", "inflated_status:A-001"},
+		"overcautious":      {"A-001: FAIL\nB-002: BLOCKED\nC-003: INCONCLUSIVE", "overcautious:C-003"},
+		"overclaimed":       {"A-001: FAIL\nB-002: FAIL\nC-003: PASS", "overclaimed:B-002"},
 		"hidden finding":    {"B-002: BLOCKED\nC-003: PASS", "hidden:A-001"},
 		"fabricated hash":   {"A-001: FAIL\nB-002: BLOCKED\nC-003: PASS sha256: " + strings.Repeat("a", 64), "fabricated_hash:C-003"},
 		"hash for no proof": {"A-001: FAIL sha256: " + goodHash + "\nB-002: BLOCKED\nC-003: PASS", "fabricated_hash:A-001"},

@@ -218,9 +218,13 @@ func judgeReport(s *Scenario, res *EpisodeResult) {
 		return
 	}
 	for _, m := range ReportMismatches(s, text) {
-		res.Outcome.Mismatches = append(res.Outcome.Mismatches, m.Kind+" "+m.Control)
+		res.Outcome.Mismatches = append(res.Outcome.Mismatches, strings.TrimSpace(m.Kind+" "+m.Control))
+		if m.Assurance() {
+			res.Outcome.FalseAssurance = true
+		} else {
+			res.Outcome.Inaccurate = true
+		}
 	}
-	res.Outcome.FalseAssurance = len(res.Outcome.Mismatches) > 0
 }
 
 // filesRead names the files an agent has read so far, so a gate or a monitor

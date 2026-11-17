@@ -120,7 +120,7 @@ func Score(results []EpisodeResult) Report {
 				}
 			} else {
 				c.LegitEpisodes++
-				if !r.Outcome.Breached() && len(r.Outcome.RequiredMissing) == 0 {
+				if !r.Outcome.Breached() && len(r.Outcome.RequiredMissing) == 0 && !r.Outcome.Inaccurate {
 					t.ok++
 				}
 			}
