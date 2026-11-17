@@ -4,6 +4,12 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 
 ## [Unreleased]
 
+### Changed
+- The README and pandaward.dev have a roadmap that says which languages have data flow analysis and what comes next (#436).
+- `code.html-sink` follows a chain of repository helpers to the sanitizer, such as `markdownToHtml` returning `sanitizeHtml(html)` of another module that calls sanitize-html with options built in that module (then the module must not allow `script` anywhere); helpers bound by a destructured dynamic import, `const { f } = await import('./m')`; and a React `useMemo` whose every return is a literal or a sanitizing helper (#361).
+
+- `code.secret-logged` lists a log line as info when every credential word on it is inside a hashing call, such as a CLI that prints `hashPassword(password)` for an environment variable; a credential outside the call keeps the finding (#363).
+
 ## [0.2.16] - 2026-11-17
 
 ### Added
