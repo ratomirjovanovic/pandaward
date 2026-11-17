@@ -225,10 +225,12 @@ pandaward_record_hypothesis {"annotations":{"destructiveHint":false,"openWorldHi
 pandaward_request_active_test {"annotations":{"openWorldHint":false,"readOnlyHint":true},"input":{"additionalProperties":false,"properties":{},"type":"object"}}
 pandaward_retest {"annotations":{"destructiveHint":false,"openWorldHint":false,"readOnlyHint":false},"input":{"additionalProperties":false,"properties":{"changed_only":{"type":"boolean"}},"type":"object"}}
 pandaward_scan_passive {"annotations":{"destructiveHint":false,"openWorldHint":false,"readOnlyHint":false},"input":{"additionalProperties":false,"properties":{},"type":"object"}}
+pandaward_verify_report {"annotations":{"openWorldHint":false,"readOnlyHint":true},"input":{"additionalProperties":false,"properties":{"complete":{"type":"boolean"},"report":{"type":"string"}},"required":["report"],"type":"object"}}
 
 ## config-yaml version 1
 attest.max_age_days int
 hooks.auto_retest bool
+hooks.verify_report bool
 inventory.exclude[] string
 inventory.include_ignored bool
 inventory.max_file_bytes int64

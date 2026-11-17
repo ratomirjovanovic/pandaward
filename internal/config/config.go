@@ -80,6 +80,10 @@ type Config struct {
 		// AutoRetest lets the Claude Code Stop hook run a changed-only
 		// retest after a turn that edited files.
 		AutoRetest bool `yaml:"auto_retest"`
+		// VerifyReport lets the Stop hook check the control claims in
+		// Claude's last message against the ledger and hand a PASS that the
+		// ledger does not support back to Claude.
+		VerifyReport bool `yaml:"verify_report"`
 	} `yaml:"hooks"`
 	Attest struct {
 		// MaxAgeDays is how long an accepted attestation of a manual
@@ -110,6 +114,7 @@ func Default(name string) *Config {
 	c.Report.IncludeUntested = true
 	c.Policy.AIAnalysis = "opt_in"
 	c.Hooks.AutoRetest = true
+	c.Hooks.VerifyReport = true
 	c.Attest.MaxAgeDays = 180
 	return c
 }

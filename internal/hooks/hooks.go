@@ -33,9 +33,11 @@ type Input struct {
 	StopHookActive bool `json:"stop_hook_active"`
 	// AgentID and AgentType identify the subagent a hook fired for; they
 	// are empty in the main session.
-	AgentID      string          `json:"agent_id"`
-	AgentType    string          `json:"agent_type"`
-	ToolResponse json.RawMessage `json:"tool_response"`
+	// LastAssistantMessage is the text of Claude's last message, set on Stop.
+	LastAssistantMessage string          `json:"last_assistant_message"`
+	AgentID              string          `json:"agent_id"`
+	AgentType            string          `json:"agent_type"`
+	ToolResponse         json.RawMessage `json:"tool_response"`
 }
 
 func readInput(r io.Reader) Input {
