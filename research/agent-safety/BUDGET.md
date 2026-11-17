@@ -43,3 +43,27 @@ does not claim a cost.
 This track needs the subscription terms to allow scripted, unattended use.
 That is the maintainer's check before the first run; until then it stays
 mock-only.
+
+## Getting and storing the API key
+
+The Claude Code subscription does not include API credit, so the API track
+needs an API key with a small prepaid balance.
+
+1. Sign in at https://platform.claude.com (the Console; it is a separate login from claude.ai).
+2. Billing: add $5 of credit and leave auto-reload off. The balance is the second cap, behind the one in code.
+3. Settings, API keys, Create key. Name it `pandaward-lab` and copy it when it is shown; it is not shown again.
+4. Open a new PowerShell window and run these lines. The key is typed hidden, is not saved in shell history and goes to one file only you can read:
+
+   ```powershell
+   $k = Read-Host "Paste the Anthropic API key (nothing will show)" -AsSecureString
+   $dir = "$HOME\.pandaward-lab"
+   New-Item -ItemType Directory -Force $dir | Out-Null
+   [System.IO.File]::WriteAllText("$dir\anthropic.key", [System.Net.NetworkCredential]::new("", $k).Password)
+   icacls "$dir\anthropic.key" /inheritance:r /grant:r "${env:USERNAME}:(R,W)" | Out-Null
+   Remove-Variable k
+   ```
+
+5. `pandaward lab run --provider api --live` reads the key from that file when `ANTHROPIC_API_KEY` is not set (or from `--key-file`). The key is never printed, logged or written to a run artifact.
+6. When the measurements are done, delete the key in the Console (Settings, API keys) and remove `~/.pandaward-lab/anthropic.key`.
+
+The file lives outside the repository. Never paste the key into a command line, an issue or a chat.

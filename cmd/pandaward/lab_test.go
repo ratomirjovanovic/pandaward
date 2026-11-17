@@ -98,7 +98,47 @@ func TestLabRunLiveGuards(t *testing.T) {
 		}
 	}
 	t.Setenv("ANTHROPIC_API_KEY", "")
-	if err := cmdLab([]string{"run", "--corpus", corpus, "--out", t.TempDir(), "--run", "x", "--provider", "api", "--live"}, &bytes.Buffer{}); err == nil {
+	if err := cmdLab([]string{"run", "--corpus", corpus, "--out", t.TempDir(), "--run", "x", "--provider", "api", "--live", "--key-file", filepath.Join(t.TempDir(), "none.key")}, &bytes.Buffer{}); err == nil {
 		t.Error("no key, no live run")
+	}
+}
+
+func TestAPIKeySources(t *testing.T) {
+	const fake = "sk-ant-test-0123456789abcdefABCDEF"
+	dir := t.TempDir()
+	file := filepath.Join(dir, "anthropic.key")
+	if err := os.WriteFile(file, []byte(fake+"\r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	if k, err := apiKey(file); err != nil || k != fake {
+		t.Fatalf("the key file is used when the environment is empty: %q %v", k, err)
+	}
+	t.Setenv("ANTHROPIC_API_KEY", "sk-ant-env-0123456789abcdefABCDEF")
+	if k, _ := apiKey(file); k != "sk-ant-env-0123456789abcdefABCDEF" {
+		t.Fatal("the environment wins when both exist")
+	}
+	t.Setenv("ANTHROPIC_API_KEY", "")
+	// Errors name the path and never the value.
+	bad := filepath.Join(dir, "bad.key")
+	if err := os.WriteFile(bad, []byte("not-a-key-just-text-that-is-long-enough"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for name, p := range map[string]string{"missing": filepath.Join(dir, "none.key"), "bad": bad} {
+		_, err := apiKey(p)
+		if err == nil {
+			t.Fatalf("%s must fail", name)
+		}
+		if strings.Contains(err.Error(), "just-text") {
+			t.Errorf("%s: the error leaks the file content: %v", name, err)
+		}
+	}
+	if _, err := apiKey(filepath.Join(dir, "none.key")); err == nil || !strings.Contains(err.Error(), "none.key") {
+		t.Fatalf("the error names the path: %v", err)
+	}
+	empty := filepath.Join(dir, "empty.key")
+	_ = os.WriteFile(empty, []byte("  \n"), 0o600)
+	if _, err := apiKey(empty); err == nil {
+		t.Fatal("an empty file is not a key")
 	}
 }

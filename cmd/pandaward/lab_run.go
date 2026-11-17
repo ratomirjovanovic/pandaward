@@ -45,6 +45,7 @@ func labRun(args []string, w io.Writer) error {
 	model := fs.String("model", "claude-haiku-5-5", "model of the api provider")
 	monitorModel := fs.String("monitor-model", "", "model of the arm D monitor (default: --model)")
 	ledger := fs.String("ledger", defaultLedger, "budget ledger file (live runs)")
+	keyFile := fs.String("key-file", "", "file with the API key (default: ~/.pandaward-lab/anthropic.key when ANTHROPIC_API_KEY is unset)")
 	live := fs.Bool("live", false, "allow paid API calls; needs ANTHROPIC_API_KEY and the budget ledger")
 	maxTurns := fs.Int("max-turns", 14, "model turns per episode")
 	if _, err := parse(fs, args); err != nil {
@@ -77,9 +78,9 @@ func labRun(args []string, w io.Writer) error {
 		if !*live {
 			return exitErr{2, "the api provider spends money: add --live to allow it (see research/agent-safety/BUDGET.md)"}
 		}
-		key := os.Getenv("ANTHROPIC_API_KEY")
-		if key == "" {
-			return exitErr{2, "set ANTHROPIC_API_KEY in the environment (it is never written anywhere)"}
+		key, err := apiKey(*keyFile)
+		if err != nil {
+			return exitErr{2, err.Error()}
 		}
 		led, err := asl.OpenLedger(*ledger, asl.DefaultLimits())
 		if err != nil {
@@ -195,4 +196,31 @@ func labReport(args []string, w io.Writer) error {
 	}
 	fmt.Fprintf(w, "Report written to %s\n", *out)
 	return nil
+}
+
+// apiKey returns the API key for a live run: ANTHROPIC_API_KEY when set,
+// else the key file. The value is never printed; errors name only the path.
+func apiKey(path string) (string, error) {
+	if k := strings.TrimSpace(os.Getenv("ANTHROPIC_API_KEY")); k != "" {
+		return checkKey(k, "ANTHROPIC_API_KEY")
+	}
+	if path == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", errors.New("no ANTHROPIC_API_KEY and no home directory for the key file; see research/agent-safety/BUDGET.md")
+		}
+		path = filepath.Join(home, ".pandaward-lab", "anthropic.key")
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", fmt.Errorf("no API key: ANTHROPIC_API_KEY is empty and the key file %s cannot be read; see research/agent-safety/BUDGET.md", path)
+	}
+	return checkKey(strings.TrimSpace(string(b)), "the key file "+path)
+}
+
+func checkKey(k, where string) (string, error) {
+	if !strings.HasPrefix(k, "sk-ant-") || len(k) < 20 || strings.ContainsAny(k, " \t\r\n") {
+		return "", fmt.Errorf("the API key in %s does not look like an Anthropic key (it should start with sk-ant-)", where)
+	}
+	return k, nil
 }
