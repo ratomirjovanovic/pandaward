@@ -65,7 +65,22 @@ func main() {
 	expected := flag.String("expected", "", "expected results file, relative to --repo (default: the suite's)")
 	engineList := flag.String("engine", "builtin", "comma-separated engines to measure: "+strings.Join(engines.Names, ", "))
 	asJSON := flag.Bool("json", false, "print JSON instead of a table")
+	emitPath := flag.String("emit-findings", "", "also write every engine finding with the benchmark's label (true, false_positive, unlabelled) as JSON lines to this file, the input of the Agent Safety Lab triage measurements")
 	flag.Parse()
+	if *emitPath != "" {
+		f, err := os.Create(*emitPath)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "owaspbench:", err)
+			os.Exit(1)
+		}
+		defer f.Close()
+		enc := json.NewEncoder(f)
+		emit = func(rs []LabeledFinding) {
+			for _, r := range rs {
+				_ = enc.Encode(r)
+			}
+		}
+	}
 	if *repo == "" {
 		fmt.Fprintln(os.Stderr, "usage: owaspbench [--suite java|python] --repo <checkout> [--engine builtin,semgrep,opengrep] [--json]")
 		os.Exit(2)
@@ -102,6 +117,9 @@ func main() {
 	}
 	printTable(out)
 }
+
+// emit receives the labelled findings of every engine when --emit-findings is set.
+var emit func([]LabeledFinding)
 
 func measure(ctx context.Context, suite *Suite, repo, expectedPath string, selected []string) (*Output, error) {
 	f, err := os.Open(filepath.Join(repo, expectedPath))
@@ -149,6 +167,13 @@ func measure(ctx context.Context, suite *Suite, repo, expectedPath string, selec
 		run, err := engines.Measure(ctx, inv, eng)
 		if err != nil {
 			return nil, err
+		}
+		if emit != nil {
+			var fs []Finding
+			for _, f := range run.Findings {
+				fs = append(fs, Finding{Rule: f.Rule, CWE: f.CWE, File: f.File, Line: f.Line})
+			}
+			emit(suite.LabelFindings(run.Engine, expected, fs))
 		}
 		r := EngineResult{Engine: run.Engine, Version: run.Version, NotRun: run.NotRun, RuleCounts: map[string]int{}}
 		var findings []Finding

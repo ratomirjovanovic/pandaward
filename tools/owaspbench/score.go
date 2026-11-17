@@ -348,3 +348,47 @@ func (st *Suite) SemgrepCoverage() (map[string][]string, error) {
 	}
 	return out, nil
 }
+
+// LabeledFinding is one engine finding with the benchmark's ground truth.
+type LabeledFinding struct {
+	Suite    string `json:"suite"`
+	Engine   string `json:"engine"`
+	TestCase string `json:"test_case"`
+	Category string `json:"category"`
+	File     string `json:"file"`
+	Line     int    `json:"line"`
+	Rule     string `json:"rule"`
+	CWE      string `json:"cwe,omitempty"`
+	// Label is "true" for a finding of the case's own category in a case that
+	// is a real vulnerability, "false_positive" for one in a case the
+	// benchmark marks as not vulnerable, and "unlabelled" for the rest (a
+	// finding of another category, or outside any test case).
+	Label string `json:"label"`
+}
+
+// LabelFindings labels one engine's findings against the expected results.
+func (st *Suite) LabelFindings(engine string, expected []Expected, findings []Finding) []LabeledFinding {
+	byCase := map[string]Expected{}
+	for _, e := range expected {
+		byCase[e.Name] = e
+	}
+	var out []LabeledFinding
+	for _, f := range findings {
+		lf := LabeledFinding{Suite: st.Key, Engine: engine, File: f.File, Line: f.Line, Rule: f.Rule, CWE: f.CWE, Label: "unlabelled"}
+		if name := st.TestCaseOf(f.File); name != "" {
+			lf.TestCase = name
+			if e, ok := byCase[name]; ok {
+				lf.Category = e.Category
+				if st.CategoryOf(f.Rule, f.CWE) == e.Category {
+					if e.Real {
+						lf.Label = "true"
+					} else {
+						lf.Label = "false_positive"
+					}
+				}
+			}
+		}
+		out = append(out, lf)
+	}
+	return out
+}
