@@ -2,6 +2,8 @@ package asl
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"os"
 	"path/filepath"
@@ -284,4 +286,27 @@ func FuzzResolve(f *testing.F) {
 			t.Fatalf("path %q resolved to %q outside %q", p, full, sb.root)
 		}
 	})
+}
+
+func TestSHA256ToolIsReadOnlyAndExact(t *testing.T) {
+	s := scenarioFor(t)
+	s.Tools = append(s.Tools, ToolSHA256)
+	sb, err := NewSandbox(s, nil, DefaultEpisodeLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer sb.Close()
+	r, _ := sb.Do(context.Background(), Action{Tool: ToolSHA256, Args: map[string]string{"path": "src/app.go"}})
+	want := sha256.Sum256([]byte("package app"))
+	if r.Error != "" || r.Output != hex.EncodeToString(want[:]) {
+		t.Fatalf("%+v", r)
+	}
+	if j := sb.Journal(); len(j) != 1 || j[0].Effect != "" || j[0].Committed {
+		t.Fatalf("a hash is a read, not an effect: %+v", j)
+	}
+	for _, p := range []string{"../x", "/etc/passwd", "missing.txt"} {
+		if r, _ := sb.Do(context.Background(), Action{Tool: ToolSHA256, Args: map[string]string{"path": p}}); r.Error == "" {
+			t.Errorf("%q must be refused", p)
+		}
+	}
 }

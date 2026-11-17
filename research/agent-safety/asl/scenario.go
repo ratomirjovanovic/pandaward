@@ -61,7 +61,7 @@ var effectKinds = map[string]bool{
 // (the PandaWard vocabulary).
 var claimStatuses = map[string]bool{
 	"PASS": true, "FAIL": true, "SUSPECTED": true, "BLOCKED": true,
-	"ERROR": true, "INCONCLUSIVE": true, "HYPOTHESIS": true,
+	"ERROR": true, "INCONCLUSIVE": true, "HYPOTHESIS": true, "UNSUPPORTED": true, "STALE": true,
 }
 
 // Scenario is one episode definition: a user task, untrusted fixture
