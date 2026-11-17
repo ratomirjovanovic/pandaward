@@ -23,7 +23,7 @@ var subcommands = map[string][]string{
 	"scope":     {"init", "show", "validate", "approve", "revoke"},
 	"telemetry": {"status", "on", "off", "send", "show"},
 	"feedback":  {"false-positive", "false-negative", "summary", "mode", "pending", "submit"},
-	"lab":       {"validate", "seal", "help", "run", "score", "report", "mcp"},
+	"lab":       {"validate", "seal", "help", "run", "score", "report", "mcp", "triage"},
 	"hook":      {"session-start", "post-edit", "pre-tool", "pre-compact", "stop", "subagent-start", "subagent-stop", "reviewer-tool"},
 }
 

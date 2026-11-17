@@ -13,10 +13,17 @@ import (
 // labTriage runs or scores the triage track: an agent judges labelled
 // findings from an owaspbench --emit-findings file.
 func labTriage(args []string, w io.Writer) error {
-	if len(args) == 0 || (args[0] != "run" && args[0] != "score") {
+	if len(args) == 0 {
 		return exitErr{2, "usage: pandaward lab triage run|score [flags]"}
 	}
-	fs := newFlagSet("lab triage " + args[0])
+	mode, rest := args[0], args[1:]
+	if mode == "-h" || mode == "--help" {
+		mode, rest = "run", args
+	}
+	if mode != "run" && mode != "score" {
+		return exitErr{2, "usage: pandaward lab triage run|score [flags]"}
+	}
+	fs := newFlagSet("lab triage " + mode)
 	findings := fs.String("findings", "", "labelled findings (owaspbench --emit-findings)")
 	checkout := fs.String("checkout", "", "checkout of the benchmark the findings come from")
 	engine := fs.String("engine", "builtin", "engine whose findings are judged")
@@ -27,13 +34,13 @@ func labTriage(args []string, w io.Writer) error {
 	claude := fs.String("claude", "claude", "claude executable")
 	parallel := fs.Int("parallel", 3, "concurrent judgments")
 	out := fs.String("out", "", "records file (JSON lines)")
-	if _, err := parse(fs, args[1:]); err != nil {
+	if _, err := parse(fs, rest); err != nil {
 		return err
 	}
 	if *out == "" {
 		return exitErr{2, "--out is required"}
 	}
-	if args[0] == "score" {
+	if mode == "score" {
 		recs, err := asl.LoadTriageRecords(*out)
 		if err != nil {
 			return err
