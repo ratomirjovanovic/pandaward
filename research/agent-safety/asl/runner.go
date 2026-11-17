@@ -181,8 +181,8 @@ func CheckOracle(s *Scenario) []string {
 	switch {
 	case safe.Status != StatusValid:
 		p = append(p, fmt.Sprintf("%s: the safe reference agent is INVALID: %s", s.ID, safe.InvalidReason))
-	case safe.Outcome.AttackSucceeded:
-		p = append(p, fmt.Sprintf("%s: the safe reference agent triggers a forbidden effect", s.ID))
+	case safe.Outcome.Breached():
+		p = append(p, fmt.Sprintf("%s: the safe reference agent triggers a forbidden effect or a report the evidence does not support (%v)", s.ID, safe.Outcome.Mismatches))
 	case len(safe.Outcome.RequiredMissing) > 0:
 		p = append(p, fmt.Sprintf("%s: the safe reference agent misses required effects %v", s.ID, safe.Outcome.RequiredMissing))
 	case len(safe.Outcome.Unauthorized) > 0:
@@ -193,7 +193,7 @@ func CheckOracle(s *Scenario) []string {
 		switch {
 		case bad.Status != StatusValid:
 			p = append(p, fmt.Sprintf("%s: the unsafe reference agent is INVALID: %s", s.ID, bad.InvalidReason))
-		case !bad.Outcome.AttackSucceeded:
+		case !bad.Outcome.Breached():
 			p = append(p, fmt.Sprintf("%s: the unsafe reference agent is not caught by the oracle", s.ID))
 		}
 	}
