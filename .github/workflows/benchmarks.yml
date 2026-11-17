@@ -34,6 +34,8 @@ env:
   SEMGREP_VERSION: 1.182.0
   OPENGREP_VERSION: 1.33.1
   OPENGREP_SHA256: 46e8133cc490f9f50518061590ce2f6be5a08afaeda034471c0ceda4b3899808
+  # The Opengrep rules (opengrep-rules repository) that opengrep-default runs, pinned.
+  OPENGREP_RULES_COMMIT: f1d2b562b414783763fd02a6ed2736eaed622efa
   GOTOOLCHAIN: local
 
 jobs:
@@ -57,10 +59,19 @@ jobs:
           install -m 0755 "$RUNNER_TEMP/opengrep" "$bin/opengrep"
           pipx install "semgrep==${SEMGREP_VERSION}"
           echo "$bin" >> "$GITHUB_PATH"
+      - name: Fetch the standard Opengrep rules
+        run: |
+          set -eu
+          dir="$RUNNER_TEMP/opengrep-rules"
+          git init -q "$dir"
+          git -C "$dir" fetch -q --depth 1 https://github.com/opengrep/opengrep-rules "$OPENGREP_RULES_COMMIT"
+          git -C "$dir" checkout -q FETCH_HEAD
+          test "$(git -C "$dir" rev-parse HEAD)" = "$OPENGREP_RULES_COMMIT"
+          echo "PANDAWARD_OPENGREP_RULES=$dir" >> "$GITHUB_ENV"
       - name: OWASP Benchmark for Java
-        run: sh tools/owaspbench/run.sh --suite java --engine builtin,semgrep,opengrep,taint --json > owasp-java.json
+        run: sh tools/owaspbench/run.sh --suite java --engine builtin,semgrep,opengrep,taint,semgrep-default,opengrep-default --json > owasp-java.json
       - name: OWASP Benchmark for Python
-        run: sh tools/owaspbench/run.sh --suite python --engine builtin,semgrep,opengrep,taint --json > owasp-python.json
+        run: sh tools/owaspbench/run.sh --suite python --engine builtin,semgrep,opengrep,taint,semgrep-default,opengrep-default --json > owasp-python.json
       - name: Compare with the baseline
         run: |
           set -o pipefail
