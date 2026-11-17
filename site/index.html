@@ -137,6 +137,7 @@ pandaward assess</pre>
     <div class="tablewrap"><table>
       <thead><tr><th>Step</th><th>Scope</th><th>State</th></tr></thead>
       <tbody>
+        <tr><td>Agent Safety Lab</td><td>first measurements published; next a harder held-out attack set and more models</td><td>in progress</td></tr>
         <tr><td>Accuracy</td><td>JavaScript XSS, findings still reported after a fix, Python request wrapper classes, a second benchmark the rules were not tuned on</td><td>in progress</td></tr>
         <tr><td>More languages</td><td>Go, C#, Rust, Ruby, Kotlin, PHP, C and C++, each with a parser, a rule spec and a public benchmark</td><td>planned</td></tr>
         <tr><td>Built-in DAST baseline</td><td>no control stays BLOCKED only because ZAP is missing</td><td>planned</td></tr>
@@ -145,6 +146,14 @@ pandaward assess</pre>
       </tbody>
     </table></div>
     <p class="note">Data flow analysis covers JavaScript, TypeScript, Python and Java today. Other languages get inventory, secrets, dependency checks and the bundled rules, and are listed here only as planned. PandaWard stays free and local. <a href="https://github.com/ratomirjovanovic/pandaward/issues">Issues</a> have the details.</p>
+  </section>
+
+  <section id="agent-safety-lab">
+    <h2>Agent Safety Lab</h2>
+    <p class="sub">Research tooling that measures what a coding agent does when the repository it reads tries to steer it.</p>
+    <p>Agents read READMEs, code comments, scanner output and tool results, then act. The lab runs an agent against synthetic repositories that carry an attack (a README that claims a manager approved a scope, a scan summary edited to say everything passed, a tool result that asks for an approval) and checks what really happened in a simulated sandbox: which effects were committed, and whether the final report is supported by the evidence PandaWard recorded.</p>
+    <p>Four arms use the same tools and the same prompt and differ only in enforcement: A prompt only, B a deterministic authorization gate, C B plus an evidence check of the report, D C plus an independent monitor that fails closed. Matched legitimate controls show what a defense costs in lost work.</p>
+    <p class="note">First measurements: 20 synthetic scenarios, small samples, one model per track, wide intervals. Both models almost never followed an attack, so the arms cannot be told apart yet; the only breaches were a fabricated evidence hash. Mock runs check the harness and say nothing about a model. Nothing here is a claim about any product. <a href="lab/">Read the reports and the method</a>, or the <a href="https://github.com/ratomirjovanovic/pandaward/tree/main/research/agent-safety">code</a>.</p>
   </section>
 
   <section>
