@@ -89,6 +89,7 @@ Integration and tooling:
   capabilities    Control catalog with adapter maturity
   telemetry       Opt-in usage counters: status, on, off, show (off by default)
   benchmark       TP/FP/FN/TN per built-in rule on the bundled corpus (--json, --strict)
+  lab             Agent Safety Lab, research tooling: validate scenarios (lab help)
   selftest        Run the hostile-repository suite: can repository text steer PandaWard? (--json)
   mcp             Serve the MCP stdio interface
   hook <name>     Claude Code lifecycle hook (session-start, post-edit, pre-tool, pre-compact, stop)
@@ -174,6 +175,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		err = cmdTest(ctx, rest, stdout, stderr)
 	case "doctor":
 		err = cmdDoctor(ctx, rest, stdout)
+	case "lab":
+		err = cmdLab(rest, stdout)
 	case "benchmark":
 		err = cmdBenchmark(ctx, rest, stdout)
 	case "selftest":
