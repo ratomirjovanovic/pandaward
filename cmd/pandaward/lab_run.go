@@ -187,6 +187,8 @@ func labReport(args []string, w io.Writer) error {
 	public := fs.Bool("public", false, "fail if the report contains anything that must not be published")
 	ledger := fs.String("ledger", "", "budget ledger to report the spend from")
 	htmlOut := fs.String("html", "", "also write the report as a standalone HTML page for the site")
+	css := fs.String("css", "../style.css", "stylesheet link of the HTML page")
+	back := fs.String("back", "../", "link back to the site root from the HTML page")
 	if _, err := parse(fs, args); err != nil {
 		return err
 	}
@@ -211,7 +213,7 @@ func labReport(args []string, w io.Writer) error {
 		return exitErr{1, err.Error()}
 	}
 	if *htmlOut != "" {
-		page := asl.HTMLPage("Agent Safety Lab report: run "+m.Run, text, "../style.css", "../")
+		page := asl.HTMLPage("Agent Safety Lab report: run "+m.Run, text, *css, *back)
 		if *public {
 			if err := asl.CheckPublic(page); err != nil {
 				return exitErr{1, err.Error()}
