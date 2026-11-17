@@ -24,9 +24,13 @@ type RunConfig struct {
 	Seed   int64
 	// Split limits the corpus: dev, heldout or all.
 	Split string
+	// Only limits the run to these scenario ids (a pilot or a smoke test).
+	Only []string
 	// Provider is mock or api. Mock runs scripted agents (Mock says safe or
 	// unsafe) and are always labeled mock.
-	Provider     string
+	Provider string
+	// CC drives the Claude Code track (Provider cc).
+	CC           *CCConfig
 	Mock         string
 	Model        string
 	MonitorModel string
@@ -47,10 +51,12 @@ type Manifest struct {
 	Provider     string        `json:"provider"`
 	Mock         string        `json:"mock,omitempty"`
 	Model        string        `json:"model,omitempty"`
+	ClaudeCode   string        `json:"claude_code_version,omitempty"`
 	MonitorModel string        `json:"monitor_model,omitempty"`
 	CorpusVer    string        `json:"corpus_version"`
 	CorpusSHA256 string        `json:"corpus_sha256"`
 	Split        string        `json:"split"`
+	Only         []string      `json:"only,omitempty"`
 	Arms         []Arm         `json:"arms"`
 	Reps         int           `json:"reps"`
 	Seed         int64         `json:"seed"`
@@ -79,6 +85,9 @@ func (c *RunConfig) selected() []*Scenario {
 			if s.Split != c.Split {
 				continue
 			}
+		}
+		if len(c.Only) > 0 && !contains(c.Only, s.ID) {
+			continue
 		}
 		out = append(out, s)
 	}
@@ -131,7 +140,7 @@ func (c *RunConfig) manifest(n int) Manifest {
 	scs := c.selected()
 	return Manifest{
 		Schema: Schema, Run: c.Run, Provider: c.Provider, Mock: c.Mock, Model: c.Model, MonitorModel: c.MonitorModel,
-		CorpusVer: c.Corpus.Version, CorpusSHA256: CorpusHash(scs), Split: orAll(c.Split), Arms: c.Arms, Reps: c.Reps,
+		CorpusVer: c.Corpus.Version, CorpusSHA256: CorpusHash(scs), Split: orAll(c.Split), Only: c.Only, Arms: c.Arms, Reps: c.Reps,
 		Seed: c.Seed, Scenarios: len(scs), Planned: n, Limits: c.Limits, MaxTurns: c.MaxTurns, Version: c.Version, CreatedAt: now,
 	}
 }
@@ -158,11 +167,21 @@ func Execute(ctx context.Context, c *RunConfig) (RunSummary, error) {
 	if c.Reps < 1 || len(c.Arms) == 0 {
 		return sum, errors.New("need at least one arm and one repetition")
 	}
-	if c.Provider != ProviderMock && c.Provider != ProviderAPI {
+	if c.Provider != ProviderMock && c.Provider != ProviderAPI && c.Provider != ProviderCC {
 		return sum, fmt.Errorf("unknown provider %q", c.Provider)
 	}
 	if c.Provider == ProviderAPI && (c.Ledger == nil || c.APIKey == "") {
 		return sum, errors.New("a live run needs a budget ledger and an API key")
+	}
+	if c.Provider == ProviderCC {
+		if c.CC == nil || c.CC.Claude == "" || c.CC.PandaWard == "" || c.CC.CorpusDir == "" {
+			return sum, errors.New("the Claude Code track needs the claude path, the pandaward path and the corpus directory")
+		}
+		for _, a := range c.Arms {
+			if a == ArmD {
+				return sum, errors.New("arm D needs an API monitor and is not available on the Claude Code track: use arms A, B and C")
+			}
+		}
 	}
 	dir := filepath.Join(c.OutDir, c.Run)
 	sum.Directory = dir
@@ -172,6 +191,9 @@ func Execute(ctx context.Context, c *RunConfig) (RunSummary, error) {
 	plan := c.Plan()
 	sum.Planned = len(plan)
 	mf := c.manifest(len(plan))
+	if c.Provider == ProviderCC {
+		mf.ClaudeCode = c.CC.Version(ctx)
+	}
 	mpath := filepath.Join(dir, "manifest.json")
 	if b, err := os.ReadFile(mpath); err == nil {
 		var old Manifest
@@ -209,6 +231,10 @@ func Execute(ctx context.Context, c *RunConfig) (RunSummary, error) {
 			return sum, nil
 		}
 		res, budget := c.episode(ctx, it)
+		if c.Provider == ProviderCC && budget {
+			sum.Stopped = "usage limit reached: the run stops here and resumes later at the next unfinished episode"
+			return sum, ErrUsageLimit
+		}
 		res.Rep = it.rep
 		line, _ := json.Marshal(res)
 		if _, err := f.Write(append(line, '\n')); err != nil {
@@ -236,6 +262,9 @@ func (c *RunConfig) episode(ctx context.Context, it planItem) (EpisodeResult, bo
 		}
 		gate := GateFor(it.arm, s, EvidenceGate{}, &MonitorGate{Model: MockMonitor{}, Ctx: ctx})
 		return RunEpisode(ctx, s, it.arm, &Scripted{Steps: steps}, ProviderMock, gate, c.Limits), false
+	}
+	if c.Provider == ProviderCC {
+		return c.ccEpisode(ctx, it)
 	}
 	epID := fmt.Sprintf("%s-%s-%d", s.ID, it.arm, it.rep)
 	client, err := NewClient(c.Model, c.APIKey, c.Ledger, c.Run, epID)
