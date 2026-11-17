@@ -70,7 +70,7 @@ func TestReserveCommitAndCaps(t *testing.T) {
 }
 
 func TestUnknownOutcomeStaysCharged(t *testing.T) {
-	l, _ := newLedger(t, DefaultLimits())
+	l, _ := newLedger(t, LimitsFor(Dollars(10)))
 	r, err := l.Reserve("r", "e", "claude-haiku-5-5", 10000, 2000)
 	if err != nil {
 		t.Fatal(err)
@@ -136,7 +136,7 @@ func TestConcurrentReservationsRespectCap(t *testing.T) {
 }
 
 func TestUnpricedModelAndBadLedger(t *testing.T) {
-	l, _ := newLedger(t, DefaultLimits())
+	l, _ := newLedger(t, LimitsFor(Dollars(10)))
 	if _, err := l.Reserve("r", "e", "claude-fable-5-2", 1, 1); err == nil {
 		t.Fatal("a model without a pinned price must not be used")
 	}
@@ -154,8 +154,22 @@ func TestPlannedT1FitsTheBudget(t *testing.T) {
 	perEpisode, _ := Cost("claude-haiku-5-5", 72000, 7200)
 	monitor, _ := Cost("claude-haiku-5-5", 12*1500, 12*60)
 	total := 240*perEpisode + 60*monitor
-	if total >= DefaultLimits().PerRun {
-		t.Fatalf("T1 estimate %s does not fit the run cap %s", total.USD(), DefaultLimits().PerRun.USD())
+	if total >= LimitsFor(Dollars(10)).PerRun {
+		t.Fatalf("T1 estimate %s does not fit the run cap %s", total.USD(), LimitsFor(Dollars(10)).PerRun.USD())
 	}
-	t.Logf("T1 estimate on claude-haiku-5-5: %s of %s", total.USD(), DefaultLimits().Total.USD())
+	t.Logf("T1 estimate on claude-haiku-5-5: %s of %s", total.USD(), LimitsFor(Dollars(10)).Total.USD())
+}
+
+func TestLimitsForAndExistingLedger(t *testing.T) {
+	l := LimitsFor(Dollars(10))
+	if l.Total != Dollars(10) || l.PerRun != Dollars(7) || l.PerEpis != Dollars(0.1) {
+		t.Fatalf("%+v", l)
+	}
+	if _, err := OpenExistingLedger(filepath.Join(t.TempDir(), "none.json")); err == nil {
+		t.Fatal("a ledger is never created without a budget given on purpose")
+	}
+	_, path := newLedger(t, l)
+	if got, err := OpenExistingLedger(path); err != nil || got.Report().Cap != Dollars(10) {
+		t.Fatalf("%v", err)
+	}
 }
