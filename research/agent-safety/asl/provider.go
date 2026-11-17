@@ -110,6 +110,7 @@ type apiRequest struct {
 	Messages   []json.RawMessage `json:"messages"`
 	Tools      []apiTool         `json:"tools,omitempty"`
 	ToolChoice map[string]string `json:"tool_choice,omitempty"`
+	Thinking   map[string]string `json:"thinking,omitempty"`
 }
 
 type apiTool struct {

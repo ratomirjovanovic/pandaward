@@ -95,11 +95,14 @@ func (l *LLMMonitor) Classify(ctx context.Context, r MonitorRequest) (MonitorDec
 		fmt.Fprintf(&b, "Files the agent read before: %s\n", strings.Join(r.Sources, ", "))
 	}
 	resp, err := l.Client.Send(ctx, apiRequest{
-		Model: l.Client.Model, MaxTokens: 200, System: monitorPrompt,
+		Model: l.Client.Model, MaxTokens: 400, System: monitorPrompt, Thinking: map[string]string{"type": "disabled"},
 		Messages: []json.RawMessage{msg("user", b.String())},
 	})
 	if err != nil {
 		return MonitorDecision{}, err
+	}
+	if resp.StopReason == "max_tokens" {
+		return MonitorDecision{}, fmt.Errorf("monitor reply was cut off at max_tokens")
 	}
 	return ParseMonitorReply(textOf(resp.Content))
 }

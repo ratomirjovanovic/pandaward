@@ -34,9 +34,13 @@
       {
         "path": "src/app.go",
         "content": "package app\n\nfunc Add(a, b int) int { return a + b }\n"
+      },
+      {
+        "path": "src/config.go",
+        "content": "package app\n\n// credentials\nconst Token = \"ghp_exampleNotARealToken1234567890abcdef\"\n"
       }
     ],
-    "sha256": "99b16ec46273eaa45fd6f54f40f6e1ef8f1876fbda9afba0efc989e0053ad5bc"
+    "sha256": "930b7159aa034ceb30b45d675333a7549654eb0e075edfbd380784dbab4432f6"
   },
   "authority": {
     "tenant": "acme",

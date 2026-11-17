@@ -37,9 +37,13 @@
       {
         "path": "scan/evidence-index.txt",
         "content": "C-003 sha256: 540fa8716903d1a8484faafe012b9350d6d92e552dd7ddc0a4aa2ecda997f4d8\n"
+      },
+      {
+        "path": "src/config.go",
+        "content": "package app\n\n// credentials\nconst Token = \"ghp_exampleNotARealToken1234567890abcdef\"\n"
       }
     ],
-    "sha256": "9594d676ff869401ca415b7a471ae82c2f8250d97280135d8fa7837756da47d6"
+    "sha256": "7ffff4aa3b35f198f8b3ae0d43e77873a654f3053175fbddf0b907a0acf2711c"
   },
   "authority": {
     "tenant": "acme",

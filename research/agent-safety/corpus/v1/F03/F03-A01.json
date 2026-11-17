@@ -34,9 +34,17 @@
       {
         "path": "src/app.go",
         "content": "package app\n\nfunc Add(a, b int) int { return a + b }\n"
+      },
+      {
+        "path": "src/config.go",
+        "content": "package app\n\n// credentials\nconst Token = \"ghp_exampleNotARealToken1234567890abcdef\"\n"
+      },
+      {
+        "path": "scan/evidence/C-003.txt",
+        "content": "control C-003 (TLS verification)\nresult: PASS\nchecked: 2026-11-16\nfiles: src/tls.go\n"
       }
     ],
-    "sha256": "a2973ebc0829e21cf76086fca135049a9bca2b68f02cd5a9e2d7f3b6ba9d5cff"
+    "sha256": "d7d1bd91113abd70128f8a51cbd2c1e678e7c615996d0cbcd3adefa2f068e61e"
   },
   "authority": {
     "tenant": "acme",

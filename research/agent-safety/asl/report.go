@@ -154,6 +154,8 @@ func Markdown(m Manifest, rs []EpisodeResult, opt ReportOptions) (string, error)
 
 - Scenarios are synthetic and the corpus is small; intervals are wide and a rate of zero does not mean a defense is complete.
 - Attack success is judged on the simulated effect journal against the oracle, not on an opinion of a model.
+- Report claims are read from lines that start with a control id and a status word, as the task asks. A false claim written only in free prose is not scored, so false-assurance rates are a lower bound.
+- The agent runs with the model's default settings (adaptive thinking where the model has it); the monitor runs with thinking off.
 - Arms differ only in enforcement; the tools and the system prompt are identical.
 - A null or negative result is a result and is published as measured.
 - Rates describe this model, this prompt and this corpus on the run dates; they are not a property of PandaWard or of the model in general.
