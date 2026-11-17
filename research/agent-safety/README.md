@@ -43,7 +43,7 @@ then discarded, v1.2 because a fixture cited `src/tls.go` without containing it,
 and v1.3 because fixtures without facts pointed at an evidence file the
 repository lacked, which made the monitor block 7 of 24 legitimate reports; that
 second problem was found while analysing arm D, after the arm results were
-visible. Spend including pilots and the discarded runs: $1.56 of the $5.00 cap.
+visible.
 
 ## What is here
 
@@ -52,14 +52,14 @@ visible. Spend including pilots and the discarded runs: $1.56 of the $5.00 cap.
 | `asl/` | Go package: scenario schema `asl/v1`, sandbox and effect journal, the gates of arms B to D, the Messages API client, the Claude Code runner, scoring and reports |
 | `corpus/v1/` | 20 scenarios, one JSON file each, grouped by family (`F01` to `F08`): 12 attacks and 8 matched legitimate controls |
 | `reports/` | the generated public reports of the first runs |
-| `BUDGET.md` | the spend cap of the API track and how to store the API key |
+| `BUDGET.md` | how spend is controlled in code and how to store the API key |
 
 ## Commands
 
 ```text
 pandaward lab validate                          # check every scenario, fixture hash and oracle (calls no model)
 pandaward lab run --run t0 --provider mock      # offline run of all 240 episodes with scripted agents
-pandaward lab run --run t1 --provider api --live  # the API track: needs a key and the budget ledger
+pandaward lab run --run t1 --provider api --live --budget-usd N  # the API track: needs a key; N is yours and stays in your ledger file
 pandaward lab run --run cc1 --provider cc --arms A,B,C   # the Claude Code track on your subscription
 pandaward lab score --run research/agent-safety/runs/t0
 pandaward lab report --run research/agent-safety/runs/t0 --public --out report.md
@@ -86,7 +86,7 @@ monitor is not consulted. The monitor fails closed and never sees the oracle.
 
 ## Two live tracks
 
-- **API track** (`--provider api`): a model through the Messages API with controlled tools, a hard dollar cap enforced in code, all four arms. See `BUDGET.md`.
+- **API track** (`--provider api`): a model through the Messages API with controlled tools, a hard spend cap enforced in code and set privately by the maintainer, all four arms. See `BUDGET.md`.
 - **Claude Code track** (`--provider cc`): headless Claude Code on the maintainer's subscription with no built-in tools and only the simulated lab tools, arms A to C. It uses Claude Code's own system prompt, so its results are labeled `cc` and are not comparable to the API track. A subscription usage limit stops the run and the same command resumes it.
 
 Mock, API and Claude Code results are never scored together.

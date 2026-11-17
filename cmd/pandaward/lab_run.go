@@ -46,6 +46,7 @@ func labRun(args []string, w io.Writer) error {
 	model := fs.String("model", "claude-haiku-5-5", "model of the api provider")
 	monitorModel := fs.String("monitor-model", "", "model of the arm D monitor (default: --model)")
 	ledger := fs.String("ledger", defaultLedger, "budget ledger file (live runs)")
+	budgetUSD := fs.Float64("budget-usd", 0, "total budget of a new ledger in US dollars, set once when the ledger is created and kept only in the ledger file")
 	keyFile := fs.String("key-file", "", "file with the API key (default: ~/.pandaward-lab/anthropic.key when ANTHROPIC_API_KEY is unset)")
 	claudePath := fs.String("claude", "claude", "claude executable of the cc provider")
 	live := fs.Bool("live", false, "allow paid API calls; needs ANTHROPIC_API_KEY and the budget ledger")
@@ -90,13 +91,12 @@ func labRun(args []string, w io.Writer) error {
 		if err != nil {
 			return exitErr{2, err.Error()}
 		}
-		led, err := asl.OpenLedger(*ledger, asl.DefaultLimits())
+		led, err := openLedger(*ledger, *budgetUSD)
 		if err != nil {
 			return exitErr{1, err.Error()}
 		}
 		cfg.Ledger, cfg.APIKey = led, key
-		r := led.Report()
-		fmt.Fprintf(w, "Live run on %s: %s spent of the %s cap so far.\n", *model, r.Spent.USD(), r.Cap.USD())
+		fmt.Fprintf(w, "Live run on %s: the budget ledger is enforced before every request.\n", *model)
 	case asl.ProviderCC:
 		exe, err := os.Executable()
 		if err != nil {
@@ -121,10 +121,6 @@ func labRun(args []string, w io.Writer) error {
 	fmt.Fprintf(w, "Run %s: %d planned, %d already done, %d run now, %d invalid. Output: %s\n", *run, sum.Planned, sum.Done, sum.Ran, sum.Invalid, sum.Directory)
 	if sum.Stopped != "" {
 		fmt.Fprintln(w, "Stopped early: "+sum.Stopped)
-	}
-	if cfg.Ledger != nil {
-		r := cfg.Ledger.Report()
-		fmt.Fprintf(w, "Spent so far: %s of %s.\n", r.Spent.USD(), r.Cap.USD())
 	}
 	switch {
 	case errors.Is(err, asl.ErrUsageLimit):
@@ -201,7 +197,10 @@ func labReport(args []string, w io.Writer) error {
 	}
 	opt := asl.ReportOptions{Public: *public}
 	if *ledger != "" {
-		led, err := asl.OpenLedger(*ledger, asl.DefaultLimits())
+		if *public {
+			return exitErr{2, "a public report never contains spend or budget figures: leave out --ledger with --public"}
+		}
+		led, err := asl.OpenExistingLedger(*ledger)
 		if err != nil {
 			return exitErr{1, err.Error()}
 		}
@@ -300,4 +299,17 @@ func labMCP(args []string, w io.Writer) error {
 		}
 	}
 	return exitErr{2, fmt.Sprintf("no scenario %q in %s", *id, *dir)}
+}
+
+// openLedger opens the budget ledger of a live run. A ledger that does not exist
+// is created only when the person gives a budget on purpose; its amounts live in
+// the ledger file and nowhere in the code or the public reports.
+func openLedger(path string, budgetUSD float64) (*asl.Ledger, error) {
+	if _, err := os.Stat(path); err == nil {
+		return asl.OpenExistingLedger(path)
+	}
+	if budgetUSD <= 0 {
+		return nil, fmt.Errorf("there is no budget ledger at %s: create it with --budget-usd on this run", path)
+	}
+	return asl.OpenLedger(path, asl.LimitsFor(asl.Dollars(budgetUSD)))
 }

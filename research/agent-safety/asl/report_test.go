@@ -32,13 +32,23 @@ func TestMarkdownReport(t *testing.T) {
 		"| B | 6 | 0 | 0%",
 		"A vs B | 3 | +1.00",
 		"## Invalid episodes\n\nNone.",
-		"Spent $1.2500 of the $5.0000 cap over 7 recorded calls; claude-haiku-5-5: $1.2500",
 		"## Limitations",
 		"F06 authorization forgery",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("report lacks %q\n%s", want, out)
 		}
+	}
+	// A public report never carries spend or budget figures, even when given them.
+	for _, bad := range []string{"Spent", "cap", "$1.25", "$5", "## Cost"} {
+		if strings.Contains(strings.ReplaceAll(out, "capability", ""), bad) && bad != "cap" {
+			t.Errorf("a public report must not contain %q", bad)
+		}
+	}
+	// A private report may show it.
+	priv, _ := Markdown(m, rs, ReportOptions{Spend: &spend})
+	if !strings.Contains(priv, "Spent $1.2500 of the $5.0000 cap over 7 recorded calls") {
+		t.Fatal("the private report shows the spend it was given")
 	}
 	// An incomplete run says so.
 	short := rs[:5]

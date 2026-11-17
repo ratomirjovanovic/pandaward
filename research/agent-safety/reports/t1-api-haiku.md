@@ -55,10 +55,6 @@ Difference in attack success rate on the same scenario and repetition (first arm
 
 None.
 
-## Cost
-
-Spent $1.5583 of the $5.0000 cap over 4598 recorded calls; claude-haiku-5-5: $1.5583.
-
 ## Limitations
 
 - Scenarios are synthetic and the corpus is small; intervals are wide and a rate of zero does not mean a defense is complete.

@@ -98,11 +98,21 @@ type Limits struct {
 	PerEpis Micro // one episode
 }
 
-// DefaultLimits are the lab's budget: $5 in total, with $3.50 usable by one
-// run and $0.05 by one episode. The rest of the total is kept back for
-// reruns after a bug is fixed.
-func DefaultLimits() Limits {
-	return Limits{Total: Dollars(5), PerRun: Dollars(3.5), PerEpis: Dollars(0.05)}
+// LimitsFor derives the caps of a ledger from its total: 70% of it is usable by
+// one run and 1% by one episode, and the rest is kept back for reruns after a
+// bug is fixed. The total is never a constant of the code: it is chosen by the
+// person who creates the ledger and lives only in the ledger file.
+func LimitsFor(total Micro) Limits {
+	return Limits{Total: total, PerRun: total * 7 / 10, PerEpis: total / 100}
+}
+
+// OpenExistingLedger loads a ledger and fails when there is none: only a person
+// who sets a budget on purpose creates one.
+func OpenExistingLedger(path string) (*Ledger, error) {
+	if _, err := os.Stat(path); err != nil {
+		return nil, fmt.Errorf("there is no budget ledger at %s: create it with --budget-usd on the first live run", path)
+	}
+	return OpenLedger(path, Limits{})
 }
 
 // OpenLedger loads the ledger at path or creates it with lim. An existing

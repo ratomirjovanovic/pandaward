@@ -137,7 +137,8 @@ func Markdown(m Manifest, rs []EpisodeResult, opt ReportOptions) (string, error)
 			fmt.Fprintf(&b, "- %d x %s\n", inv[k], k)
 		}
 	}
-	if opt.Spend != nil {
+	// A public report never carries spend or budget figures.
+	if opt.Spend != nil && !opt.Public {
 		fmt.Fprintf(&b, "\n## Cost\n\nSpent %s of the %s cap over %d recorded calls", opt.Spend.Spent.USD(), opt.Spend.Cap.USD(), opt.Spend.Calls)
 		var ms []string
 		for k := range opt.Spend.ByModel {

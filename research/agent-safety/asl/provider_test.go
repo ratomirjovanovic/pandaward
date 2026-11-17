@@ -57,7 +57,7 @@ func newFake(t *testing.T, replies ...fakeReply) (*fakeAPI, *Client, *Ledger) {
 	f := &fakeAPI{t: t, replies: replies, countOK: true}
 	srv := httptest.NewServer(f)
 	t.Cleanup(srv.Close)
-	l, _ := newLedger(t, DefaultLimits())
+	l, _ := newLedger(t, LimitsFor(Dollars(10)))
 	c, err := NewClient("claude-haiku-5-5", "test-key-not-real", l, "run1", "ep1")
 	if err != nil {
 		t.Fatal(err)
@@ -209,7 +209,7 @@ func TestCountTokensFallbackOverReserves(t *testing.T) {
 }
 
 func TestLiveClientHostAndKey(t *testing.T) {
-	l, _ := newLedger(t, DefaultLimits())
+	l, _ := newLedger(t, LimitsFor(Dollars(10)))
 	if _, err := NewClient("claude-haiku-5-5", "", l, "r", "e"); err == nil {
 		t.Fatal("no key, no client")
 	}
