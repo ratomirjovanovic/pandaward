@@ -266,6 +266,10 @@ const (
 	// a candidate false positive (the fixed-commit false positive of the
 	// benchmark); it is labelled likely false, not proven false.
 	LabelFixed = "fixed"
+	// LabelFixedPatched: a LabelFixed finding on lines the fix changed. The
+	// code was patched and is still flagged, which is a false positive by the
+	// benchmark's own definition. This is the clean set for measuring triage.
+	LabelFixedPatched = "fixed_patched"
 	// LabelUnlabelled: a pre-patch finding in a vulnerable file that covers no
 	// labelled line. The benchmark does not say whether it is real, so
 	// triage measurements leave it out.
@@ -294,7 +298,11 @@ type LabeledFinding struct {
 // and unlabelled otherwise; post-patch findings by a rule that detected the
 // CVE, in those files, are the candidate false positives. Findings elsewhere
 // are not part of the ground truth and are left out.
-func LabelFindings(c CVE, engine string, pre, post []engines.Finding) []LabeledFinding {
+//
+// patched maps a vulnerable file to the post-patch line ranges the fix changed
+// (see PatchedRanges); with it, a post-patch finding on those lines is labelled
+// fixed_patched instead of fixed. It may be nil.
+func LabelFindings(c CVE, engine string, pre, post []engines.Finding, patched map[string][][2]int) []LabeledFinding {
 	vulnFiles := map[string]bool{}
 	for _, w := range c.PrePatch.Weaknesses {
 		vulnFiles[cleanPath(w.Location.File)] = true
@@ -329,8 +337,12 @@ func LabelFindings(c CVE, engine string, pre, post []engines.Finding) []LabeledF
 		if end < f.Line {
 			end = f.Line
 		}
+		label := LabelFixed
+		if touches(patched[file], f.Line, end) {
+			label = LabelFixedPatched
+		}
 		out = append(out, LabeledFinding{CVE: c.ID, Engine: engine, Repository: c.Repository, Side: "post", Commit: c.PostPatch.Commit,
-			File: file, Line: f.Line, EndLine: end, Rule: f.Rule, CWE: f.CWE, Label: LabelFixed})
+			File: file, Line: f.Line, EndLine: end, Rule: f.Rule, CWE: f.CWE, Label: label})
 	}
 	return out
 }

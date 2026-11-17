@@ -179,7 +179,7 @@ func TestLabelFindings(t *testing.T) {
 	otherRule := engines.Finding{Rule: "code.shell", File: "lib/render.js", Line: 50, EndLine: 50}
 	elsewhere := engines.Finding{Rule: "code.html-sink", File: "lib/other.js", Line: 42, EndLine: 42}
 
-	lf := LabelFindings(c, "builtin", []engines.Finding{hit, span, otherLine, elsewhere}, []engines.Finding{hit, otherRule, elsewhere})
+	lf := LabelFindings(c, "builtin", []engines.Finding{hit, span, otherLine, elsewhere}, []engines.Finding{hit, otherRule, elsewhere}, nil)
 	var labels []string
 	for _, f := range lf {
 		labels = append(labels, f.Side+":"+f.Label+":"+f.File)
@@ -196,7 +196,7 @@ func TestLabelFindings(t *testing.T) {
 		t.Fatalf("%+v", lf)
 	}
 	// A CVE the engine did not detect has no candidate false positives.
-	if lf := LabelFindings(c, "builtin", []engines.Finding{otherLine}, []engines.Finding{hit}); len(lf) != 1 || lf[0].Label != LabelUnlabelled {
+	if lf := LabelFindings(c, "builtin", []engines.Finding{otherLine}, []engines.Finding{hit}, nil); len(lf) != 1 || lf[0].Label != LabelUnlabelled {
 		t.Fatalf("%+v", lf)
 	}
 }

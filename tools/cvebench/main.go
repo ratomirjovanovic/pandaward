@@ -331,6 +331,10 @@ func measureCVE(ctx context.Context, c CVE, work string, selected []string) ([]O
 	if err != nil {
 		return nil, nil, nil, err
 	}
+	var patched map[string][][2]int
+	if emit != nil {
+		patched = PatchedRanges(ctx, pre, post, c)
+	}
 	var outcomes []Outcome
 	notRun, versions := map[string]string{}, map[string]string{}
 	pre1, post1 := map[string][]engines.Finding{}, map[string][]engines.Finding{}
@@ -351,7 +355,7 @@ func measureCVE(ctx context.Context, c CVE, work string, selected []string) ([]O
 		pre1[e], post1[e] = rp.Findings, ra.Findings
 		outcomes = append(outcomes, Score(c, e, rp.Findings, ra.Findings))
 		if emit != nil {
-			emit(LabelFindings(c, e, rp.Findings, ra.Findings))
+			emit(LabelFindings(c, e, rp.Findings, ra.Findings, patched))
 		}
 	}
 	if sg := combinedSemgrep(selected); sg != "" {
@@ -363,7 +367,7 @@ func measureCVE(ctx context.Context, c CVE, work string, selected []string) ([]O
 			mp, mq := merge(pre1["builtin"], pre1[sg], pre1["taint"]), merge(post1["builtin"], post1[sg], post1["taint"])
 			outcomes = append(outcomes, Score(c, Combined, mp, mq))
 			if emit != nil {
-				emit(LabelFindings(c, Combined, mp, mq))
+				emit(LabelFindings(c, Combined, mp, mq, patched))
 			}
 		} else {
 			notRun[Combined] = "needs the built-in engine and " + sg
