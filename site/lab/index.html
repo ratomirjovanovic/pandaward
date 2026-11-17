@@ -20,6 +20,22 @@
 <li><b>A discipline for benchmarks.</b> Intervals on every rate, a paired comparison on the same cases, a held-out split frozen before a run, a scan that did not happen counted as an error and not as zero, and discarded runs listed instead of hidden. The standard-rule rows on the <a href="../benchmarks/">benchmark page</a> were built this way.</li>
 </ul>
 
+<h2>Triage of findings: measured on labelled data</h2>
+<p>The OWASP Benchmark labels every test case as vulnerable or not, so a finding in a non-vulnerable case is a labelled false positive. An agent (headless Claude Code on the maintainer's subscription, no tools, the source file in the prompt) judged each finding; the label is the oracle. A verdict removes a finding from view only in this measurement: it is a hypothesis and never closes a finding.</p>
+<div class="tablewrap"><table>
+<thead><tr><th>Findings</th><th>Shown precision, raw scan</th><th>Shown precision, after triage</th><th>False positives removed</th><th>True findings dropped</th></tr></thead>
+<tbody>
+<tr><td>PandaWard built-in rules, development, 160</td><td>50% [42-58%]</td><td>76% [67-83%]</td><td>69% [58-78%] (55/80)</td><td>0 of 80</td></tr>
+<tr><td>PandaWard built-in rules, held-out, 87</td><td>51% [40-61%]</td><td>80% [68-88%]</td><td>74% [60-85%] (32/43)</td><td>0 of 44</td></tr>
+<tr><td>semgrep p/default, development, 117 valid of 120</td><td>49% [40-58%]</td><td>88% [78-94%]</td><td>87% [76-93%] (52/60)</td><td>0 of 57</td></tr>
+</tbody></table></div>
+<ul>
+<li>In all three runs the agent kept every true finding and removed most of the false positives. With zero drops the 95% interval still allows losing up to about 5 to 8 true findings in 100, so this is not a promise of no loss.</li>
+<li>The held-out split was frozen by a hash of the case name before any run and was used once, after the development runs, with the same settings.</li>
+<li>Limits: OWASP is a synthetic, public benchmark and may be in the model's training data, so the numbers can be better than on real code; the built-in findings that can be labelled are all SQL injection; one model, one prompt; the evidence gate (cited line must exist and match) removed nothing because every verdict passed it; three semgrep findings got no verdict and are counted as invalid.</li>
+<li>Not shipped yet. The criterion (#480) is a result that holds on real applications with hand triage (#470), because a benchmark this clean says little about messy code. Records and method: <a href="https://github.com/ratomirjovanovic/pandaward/tree/main/research/agent-safety/triage">research/agent-safety/triage</a>.</li>
+</ul>
+
 <h2>What it taught, including where we were wrong</h2>
 <p>Labelling findings on the CVE benchmark gave four post-fix findings that looked like false positives. One was a real engine flaw (the bounded loops above). Two were not false positives: the marked fix repaired only one alternative of a pattern, so the other branch is still ambiguous, and the patched serialize-to-js code still has a real path to <code>new Function</code> when its <code>unsafe</code> option is set. We had reported the second as a false positive, found the mistake when we read the code, and retracted it in the issue. The data has a limit too: the clean false-positive set from this benchmark is tiny (4 findings per engine against 14 to 19 true ones), too small to measure anything tightly.</p>
 
@@ -28,7 +44,7 @@
 <div class="tablewrap"><table>
 <thead><tr><th>Work</th><th>What it would give PandaWard</th><th>Blocked by</th></tr></thead>
 <tbody>
-<tr><td>Agent-assisted triage of findings (<a href="https://github.com/ratomirjovanovic/pandaward/issues/480">#480</a>)</td><td>Fewer false positives, measured on labelled findings, with the cost (true findings wrongly dismissed) reported. Runs on the user's own Claude Code, so it costs them nothing extra. A verdict stays a hypothesis until a person decides.</td><td>A labelled set with enough false positives; the CVE benchmark has too few. Real-application scans with hand triage (<a href="https://github.com/ratomirjovanovic/pandaward/issues/470">#470</a>) are the likely source.</td></tr>
+<tr><td>Agent-assisted triage of findings (<a href="https://github.com/ratomirjovanovic/pandaward/issues/480">#480</a>), first measurement above</td><td>Fewer false positives, now measured on a synthetic benchmark; next, on real applications, with the cost (true findings wrongly dismissed) reported. Runs on the user's own Claude Code, so it costs them nothing extra. A verdict stays a hypothesis until a person decides.</td><td>A labelled real-application set; the benchmark is synthetic and public. Real-application scans with hand triage (<a href="https://github.com/ratomirjovanovic/pandaward/issues/470">#470</a>) are the likely source.</td></tr>
 <tr><td>Rule and taint-spec candidates from misses (<a href="https://github.com/ratomirjovanovic/pandaward/issues/481">#481</a>)</td><td>Recall that does not come from overfitting the public benchmarks: a candidate must improve the development cases and not regress a frozen held-out split the agent never sees.</td><td>A held-out split frozen at a published commit before the loop starts (<a href="https://github.com/ratomirjovanovic/pandaward/issues/467">#467</a>).</td></tr>
 <tr><td>Finding what PandaWard misses, with proof (<a href="https://github.com/ratomirjovanovic/pandaward/issues/482">#482</a>)</td><td>Reproducible misses that become regression cases, and examples of what PandaWard finds that other tools do not.</td><td>Disclosure windows for anything found in other people's projects.</td></tr>
 </tbody></table></div>
