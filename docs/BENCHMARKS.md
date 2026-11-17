@@ -170,9 +170,12 @@ The [OpenSSF CVE Benchmark](https://github.com/ossf-cve-benchmark/ossf-cve-bench
 sh tools/cvebench/run.sh --engine builtin,taint,semgrep,opengrep    # table
 sh tools/cvebench/run.sh --engine opengrep --cve CVE-2018-3721       # one CVE
 sh tools/cvebench/run.sh --engine builtin --json                     # JSON
+sh tools/cvebench/run.sh --engine builtin,taint --emit-findings findings.jsonl   # every finding with its label
 ```
 
 `run.sh` fetches the benchmark at a pinned commit and runs `go run ./tools/cvebench`. For every CVE the tool fetches the project at both commits (one commit each, depth 1) into a reusable work directory, with git hooks, LFS, symlinks and the user's git configuration off; nothing from a project is built, installed or run. It walks each checkout with the same inventory settings as `pandaward scan`, runs each engine and scores, following the benchmark's own reports:
+
+`--emit-findings FILE` also writes every finding in the vulnerable files as one JSON line with a ground-truth label, for measuring triage of findings: `true` is a pre-patch finding that covers a labelled vulnerable line, `unlabelled` is a pre-patch finding in those files that covers none (the benchmark does not say whether it is real, so measurements leave it out), and `fixed` is a post-patch finding by a rule that detected the CVE, in a file that held a labelled weakness. `fixed` is a candidate false positive, not a proven one: a file can hold other instances of the same weakness that the fix did not touch, so a measurement that needs clean false positives must restrict it to the code the fix changed.
 
 - **detected**: a finding covers a labelled vulnerable line in the commit before the fix;
 - **CWE match**: one of those findings carries one of the CVE's CWEs;
