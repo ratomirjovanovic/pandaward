@@ -4,6 +4,8 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 
 ## [Unreleased]
 
+## [0.2.16] - 2026-11-17
+
 ### Added
 - The built-in taint engine analyzes JavaScript and TypeScript with the same IR engine as Python and Java (#406): files are one project, calls follow imports across files, Next.js route handlers (`request: Request`, `NextResponse.redirect`) and JSX are understood, and a redirect to the request's own host is not reported. The AST engine stays available with `PANDAWARD_JS_ENGINE=jsflow`.
 - Regular expressions that backtrack catastrophically (ReDoS, CWE-1333) are found by the ambiguity of their automaton, not by patterns (#406): nested quantifiers and overlapping alternatives (`^(a+)+$`, `^(\w+\s?)*$`) are reported in any JavaScript or TypeScript file, and quadratic ones (`/ *, */`) in libraries, where the caller chooses the text. A pattern that succeeds at its first match, such as `^(a+)+`, is not reported. On the labelled files of the OpenSSF CVE benchmark the engine now detects 97 of 220 weaknesses and recognizes 56 fixes, from 72 and 46 with the AST engine; 20 of the 29 ReDoS cases are detected. On 48 local projects it reports nothing in their own code and 7 patterns in bundled WordPress scripts, each a real one.
