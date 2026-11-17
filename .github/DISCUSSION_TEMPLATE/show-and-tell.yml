@@ -1,0 +1,16 @@
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Share how you use PandaWard: a project you secured, a CI setup, a rule you wrote, a report you are proud of. Leave out secrets and anything you may not publish.
+  - type: textarea
+    id: story
+    attributes:
+      label: What did you build or find?
+    validations:
+      required: true
+  - type: textarea
+    id: setup
+    attributes:
+      label: Setup
+      description: Version, plugin or CLI, optional scanners, and anything others would need to try it.

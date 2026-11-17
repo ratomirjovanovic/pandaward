@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/ratomirjovanovic/pandaward/internal/config"
@@ -50,28 +51,38 @@ func semgrepArgs(t *testing.T, tool *externalTool, engine string) []string {
 	return args
 }
 
-// Without a configured engine semgrep wins and opengrep is the fallback;
-// opengrep runs with intra-file taint and without the --metrics flag it
-// does not have.
+// Without a configured engine opengrep wins, since it follows taint through
+// functions in the same file, and semgrep is the fallback; opengrep runs
+// with intra-file taint and without the --metrics flag it does not have.
 func TestSemgrepEngineSelection(t *testing.T) {
 	fakeTools(t, "semgrep", "opengrep")
 	tool := semgrepTool(t)
 	args := semgrepArgs(t, tool, "")
-	if tool.found != "semgrep" || !slices.Contains(args, "--metrics=off") || slices.Contains(args, "--taint-intrafile") {
+	if tool.found != "opengrep" || slices.Contains(args, "--metrics=off") || !slices.Contains(args, "--taint-intrafile") {
 		t.Fatalf("default engine: found %q, args %v", tool.found, args)
 	}
-	args = semgrepArgs(t, tool, "opengrep")
-	if tool.found != "opengrep" || slices.Contains(args, "--metrics=off") || !slices.Contains(args, "--taint-intrafile") {
-		t.Fatalf("opengrep engine: found %q, args %v", tool.found, args)
+	args = semgrepArgs(t, tool, "semgrep")
+	if tool.found != "semgrep" || !slices.Contains(args, "--metrics=off") || slices.Contains(args, "--taint-intrafile") {
+		t.Fatalf("semgrep engine: found %q, args %v", tool.found, args)
+	}
+
+	fakeTools(t, "semgrep")
+	tool = semgrepTool(t)
+	semgrepArgs(t, tool, "")
+	if tool.found != "semgrep" {
+		t.Fatalf("fallback: found %q, want semgrep", tool.found)
+	}
+
+	tool.prefer = "opengrep"
+	if _, err := tool.Lookup(); err == nil {
+		t.Fatal("a configured engine that is not installed must not fall back")
+	}
+	if got := tool.binaries(); got != "opengrep" {
+		t.Fatalf("binaries() = %q", got)
 	}
 
 	fakeTools(t, "opengrep")
 	tool = semgrepTool(t)
-	semgrepArgs(t, tool, "")
-	if tool.found != "opengrep" {
-		t.Fatalf("fallback: found %q, want opengrep", tool.found)
-	}
-
 	tool.prefer = "semgrep"
 	if _, err := tool.Lookup(); err == nil {
 		t.Fatal("a configured engine that is not installed must not fall back")
@@ -86,5 +97,21 @@ func TestSemgrepEngineConfig(t *testing.T) {
 	cfg.Scan.SemgrepEngine = "codeql"
 	if err := cfg.Validate(); err == nil {
 		t.Fatal("an unknown engine must be rejected")
+	}
+}
+
+// doctor recommends Opengrep unless it is installed.
+func TestSemgrepAdvice(t *testing.T) {
+	fakeTools(t, "semgrep", "opengrep")
+	if a := SemgrepAdvice(); a != "" {
+		t.Fatalf("advice with Opengrep installed: %q", a)
+	}
+	fakeTools(t, "semgrep")
+	if a := SemgrepAdvice(); !strings.Contains(a, "Semgrep runs the bundled rules; install Opengrep") {
+		t.Fatalf("advice with Semgrep only: %q", a)
+	}
+	fakeTools(t)
+	if a := SemgrepAdvice(); !strings.HasPrefix(a, "Install Opengrep") {
+		t.Fatalf("advice without either: %q", a)
 	}
 }

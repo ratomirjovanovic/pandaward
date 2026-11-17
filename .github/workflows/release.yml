@@ -200,8 +200,8 @@ jobs:
         run: |
           set -eu
           mkdir -p bench
-          sh tools/owaspbench/run.sh --suite java --engine builtin,semgrep,opengrep --json > bench/owasp-java.json
-          sh tools/owaspbench/run.sh --suite python --engine builtin,semgrep,opengrep --json > bench/owasp-python.json
+          sh tools/owaspbench/run.sh --suite java --engine builtin,semgrep,opengrep,taint --json > bench/owasp-java.json
+          sh tools/owaspbench/run.sh --suite python --engine builtin,semgrep,opengrep,taint --json > bench/owasp-python.json
       - name: Latest weekly CVE benchmark
         continue-on-error: true
         run: |

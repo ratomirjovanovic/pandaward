@@ -41,13 +41,17 @@ type Config struct {
 		AllowToolNetwork bool   `yaml:"allow_tool_network"`
 		SemgrepConfig    string `yaml:"semgrep_config"`
 		// SemgrepEngine picks the engine that runs the Semgrep rules:
-		// "semgrep", "opengrep", or empty for semgrep and, when it is not
-		// installed, opengrep.
+		// "semgrep", "opengrep", or empty for opengrep and, when it is not
+		// installed, semgrep. Opengrep follows taint through functions in
+		// the same file, which Semgrep CE does not.
 		SemgrepEngine string `yaml:"semgrep_engine"`
 		// SemgrepIncludeTests keeps results of non-bundled semgrep rules in
 		// test and fixture code, which are skipped by default.
 		SemgrepIncludeTests bool     `yaml:"semgrep_include_tests"`
 		Adapters            []string `yaml:"adapters"`
+		// TaintEngine runs the built-in taint engine (builtin-taint)
+		// alongside builtin-code, also when scan.adapters does not list it.
+		TaintEngine bool `yaml:"taint_engine"`
 		// SARIFFiles lists SARIF results to import, relative to the project
 		// root, in addition to .pandaward/sarif/*.sarif.
 		SARIFFiles []string `yaml:"sarif_files"`
@@ -92,7 +96,7 @@ const MaxAttestDays = 365
 func Default(name string) *Config {
 	c := &Config{SchemaVersion: 1, Profile: "local-passive"}
 	c.Project.Name = name
-	c.Inventory.Exclude = []string{"node_modules", "vendor", "dist", "build", ".git", ".next", ".next-*", ".nuxt", "target", "bin", "obj", ".venv", "venv", "__pycache__", ".pandaward", "coverage", ".terraform", "Pods", ".gradle"}
+	c.Inventory.Exclude = []string{"node_modules", "vendor", "dist", "build", ".git", ".next", ".next-*", ".nuxt", "target", "bin", "obj", ".venv", "venv", "__pycache__", ".pandaward", "coverage", ".terraform", "Pods", ".gradle", ".wrangler"}
 	c.Inventory.MaxFileBytes = 2 << 20
 	c.Inventory.MaxFiles = 200000
 	c.Scan.MaxDurationMinutes = 45
@@ -100,7 +104,8 @@ func Default(name string) *Config {
 	c.Scan.FailOnAdapterError = true
 	c.Scan.AllowToolNetwork = false
 	c.Scan.SemgrepConfig = ""
-	c.Scan.Adapters = []string{"builtin-inventory", "builtin-secrets", "builtin-code", "builtin-cicd", "builtin-infra", "builtin-supply", "builtin-mobile", "apktool", "mobsf", "gitleaks", "semgrep", "osv-scanner", "trivy"}
+	c.Scan.TaintEngine = true
+	c.Scan.Adapters = []string{"builtin-inventory", "builtin-secrets", "builtin-code", "builtin-taint", "builtin-cicd", "builtin-infra", "builtin-supply", "builtin-mobile", "apktool", "mobsf", "gitleaks", "semgrep", "osv-scanner", "trivy"}
 	c.Report.Formats = []string{"html", "markdown", "json", "sarif"}
 	c.Report.IncludeUntested = true
 	c.Policy.AIAnalysis = "opt_in"

@@ -137,14 +137,27 @@ func (e *Engine) Inventory() (*inventory.Inventory, error) {
 
 // Adapters returns the enabled adapter names: scan.adapters plus
 // sarif-import, which is opted into by providing SARIF files instead.
+// builtin-taint runs with builtin-code unless scan.taint_engine is false,
+// so configs written before it was a default get it too.
 func (e *Engine) Adapters() []string {
-	out := append([]string{}, e.Cfg.Scan.Adapters...)
-	for _, a := range out {
-		if a == adapters.SARIFImport {
-			return out
+	var out []string
+	code, taint, sarif := false, false, false
+	for _, a := range e.Cfg.Scan.Adapters {
+		if a == adapters.TaintAdapter && !e.Cfg.Scan.TaintEngine {
+			continue
 		}
+		out = append(out, a)
+		code = code || a == "builtin-code"
+		taint = taint || a == adapters.TaintAdapter
+		sarif = sarif || a == adapters.SARIFImport
 	}
-	return append(out, adapters.SARIFImport)
+	if code && !taint && e.Cfg.Scan.TaintEngine {
+		out = append(out, adapters.TaintAdapter)
+	}
+	if !sarif {
+		out = append(out, adapters.SARIFImport)
+	}
+	return out
 }
 
 // PlanItem is one control decision before execution.
@@ -489,7 +502,11 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 		if !enabled[ad.Name()] {
 			continue
 		}
-		for _, cid := range ad.Controls() {
+		controls := ad.Controls()
+		if c, ok := ad.(adapters.Contributor); ok {
+			controls = append(append([]string{}, controls...), c.Contributes()...)
+		}
+		for _, cid := range controls {
 			if r := results[cid]; r != nil && r.Status != model.StatusNotApplicable {
 				todo = append(todo, ad)
 				break
@@ -603,11 +620,33 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 	// semgrep adapter (Semgrep or Opengrep) did not complete. A retest that
 	// carries the semgrep results over keeps the replacement.
 	var superseded map[int]string
+	// hidden are duplicates of carried taint findings: not reported again,
+	// but still counted for their control, which the carried run did not
+	// decide in this assessment.
+	var hidden map[int]string
 	if ranOK["semgrep"] || carried["semgrep"] {
 		superseded = supersededSignals(allSignals, inv)
 	}
+	// A taint finding shows where the data comes from; the heuristic for
+	// the same control on the same line adds nothing.
+	if ranOK[adapters.TaintAdapter] || carried[adapters.TaintAdapter] {
+		var kept []model.Signal
+		if carried[adapters.TaintAdapter] {
+			// Its signals are not in this run; its open findings are.
+			for _, f := range ledger {
+				if f.Collector == adapters.TaintAdapter && f.Status.Active() {
+					kept = append(kept, model.Signal{Collector: f.Collector, ControlID: f.ControlID, RuleID: f.RuleID, File: f.File, StartLine: f.StartLine, EndLine: f.EndLine})
+				}
+			}
+		}
+		superseded, hidden = supersededByTaint(allSignals, kept, superseded)
+		superseded = supersededInTaintFiles(allSignals, inv, superseded)
+	}
 	replacedBy := map[string]string{} // fingerprint -> bundled rule
 	for i, rule := range superseded {
+		replacedBy[ids.FP[i]] = rule
+	}
+	for i, rule := range hidden {
 		replacedBy[ids.FP[i]] = rule
 	}
 	redecide(results, allSignals, decided, gone, superseded)
@@ -615,6 +654,9 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 	for i, s := range allSignals {
 		fp := ids.FP[i]
 		if _, ok := superseded[i]; ok || seen[fp] {
+			continue
+		}
+		if _, ok := hidden[i]; ok {
 			continue
 		}
 		seen[fp] = true
@@ -666,7 +708,12 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 			}
 			continue
 		}
-		if !ranOK[f.Collector] {
+		// A finding whose file the scan no longer covers (deleted, excluded or
+		// git-ignored) is closed even when its collector did not run: an
+		// adapter with no input files left is skipped, and its findings would
+		// otherwise stay open as STALE forever.
+		gone := e.outOfScope(f, inv)
+		if !ranOK[f.Collector] && !gone {
 			f.Stale = true
 			_ = e.St.UpsertFinding(e.ProjectID, f)
 			continue
@@ -676,7 +723,13 @@ func (e *Engine) scan(ctx context.Context, progress func(string), cy *carryState
 		f.Stale = false
 		f.AssessmentID = asmt.ID
 		why := "signal no longer observed by " + f.Collector + " in " + asmt.ID
-		if rule, ok := replacedBy[f.Fingerprint]; ok {
+		if gone {
+			f.Note = strings.TrimSpace(f.Note + " " + f.File + " is no longer scanned in " + asmt.ID + " (deleted, excluded or git-ignored).")
+			why = f.File + " no longer scanned in " + asmt.ID
+		} else if rule, ok := replacedBy[f.Fingerprint]; ok && strings.HasPrefix(rule, taintPrefix) {
+			f.Note = strings.TrimSpace(f.Note + " Replaced in " + asmt.ID + " by the taint engine finding " + strings.TrimPrefix(rule, taintPrefix) + " on the same line, which shows where the data comes from; this finding is not reported while the taint engine completes.")
+			why = f.Collector + " finding replaced by " + strings.TrimPrefix(rule, taintPrefix) + " in " + asmt.ID
+		} else if ok {
 			f.Note = strings.TrimSpace(f.Note + " Replaced in " + asmt.ID + " by the bundled rule " + rule + ", which decides this weakness for the file's language; the built-in heuristic is not reported while Semgrep or Opengrep completes.")
 			why = "built-in heuristic replaced by " + rule + " in " + asmt.ID
 		} else {
@@ -824,7 +877,7 @@ func raise(results map[string]*model.ControlResult, sigs []model.Signal, foreign
 		if sigs := by[cid]; len(sigs) > 0 {
 			st, why := decide(sigs, cid, "")
 			if rank[st] > rank[r.Status] {
-				r.Status, r.Reason = st, why+" from "+sigs[0].Collector+" (was "+string(r.Status)+": "+r.Reason+")"
+				r.Status, r.Reason = st, why+" from "+sigs[0].Collector+" (was "+string(r.Status)+", because "+r.Reason+")"
 			}
 		}
 		if fs := dismissed[cid]; len(fs) > 0 {
@@ -929,13 +982,16 @@ func redecide(results map[string]*model.ControlResult, sigs []model.Signal, deci
 		}
 		var kept []model.Signal
 		var dismissed []model.Finding
-		replaced := 0
+		replaced, byTaint := 0, 0
 		for i := rg.from; i < rg.to; i++ {
 			if sigs[i].ControlID != cid {
 				continue
 			}
-			if _, ok := superseded[i]; ok {
+			if rule, ok := superseded[i]; ok {
 				replaced++
+				if strings.HasPrefix(rule, taintPrefix) {
+					byTaint++
+				}
 			} else if f, ok := gone[i]; ok {
 				dismissed = append(dismissed, f)
 			} else {
@@ -949,8 +1005,11 @@ func redecide(results map[string]*model.ControlResult, sigs []model.Signal, deci
 		if len(dismissed) > 0 {
 			notes = append(notes, dismissedNote(dismissed))
 		}
-		if replaced > 0 {
-			notes = append(notes, fmt.Sprintf("%d built-in heuristic signal(s) replaced by bundled Semgrep rules", replaced))
+		if n := replaced - byTaint; n > 0 {
+			notes = append(notes, fmt.Sprintf("%d built-in heuristic signal(s) replaced by bundled Semgrep rules", n))
+		}
+		if byTaint > 0 {
+			notes = append(notes, fmt.Sprintf("%d heuristic or bundled rule signal(s) replaced by taint engine findings", byTaint))
 		}
 		note := strings.Join(notes, "; ")
 		if len(kept) == 0 {
@@ -981,6 +1040,109 @@ func supersededSignals(sigs []model.Signal, inv *inventory.Inventory) map[int]st
 		}
 	}
 	return out
+}
+
+// taintPrefix marks a supersession by a builtin-taint signal.
+const taintPrefix = "taint:"
+
+// supersededByTaint adds to superseded the builtin-code signals, and those
+// of bundled Semgrep rules, that a builtin-taint signal of the same control
+// covers in the same file and lines, each with that signal's rule. Rules a
+// project adds itself are kept. The taint signal takes over the severity
+// and confidence of what it replaces: the flow is no weaker evidence than a
+// pattern on the same line. Matches with carriedTaint, findings of a taint
+// run carried over from the last assessment, are returned in hidden.
+func supersededByTaint(sigs, carriedTaint []model.Signal, superseded map[int]string) (map[int]string, map[int]string) {
+	type at struct{ control, file string }
+	type ref struct {
+		i int // index in sigs, or -1 for a carried finding
+		s model.Signal
+	}
+	taint := map[at][]ref{}
+	for _, s := range carriedTaint {
+		k := at{s.ControlID, s.File}
+		taint[k] = append(taint[k], ref{-1, s})
+	}
+	for i, s := range sigs {
+		if s.Collector == adapters.TaintAdapter && s.File != "" {
+			k := at{s.ControlID, s.File}
+			taint[k] = append(taint[k], ref{i, s})
+		}
+	}
+	if len(taint) == 0 {
+		return superseded, nil
+	}
+	var hidden map[int]string
+	for i, s := range sigs {
+		bundled := s.Collector == "semgrep" && strings.Contains(s.RuleID, "pandaward-")
+		if s.Collector != "builtin-code" && !bundled || s.StartLine == 0 {
+			continue
+		}
+		if _, ok := superseded[i]; ok {
+			continue
+		}
+		end := max(s.EndLine, s.StartLine)
+		for _, t := range taint[at{s.ControlID, s.File}] {
+			if t.s.StartLine > end || s.StartLine > max(t.s.EndLine, t.s.StartLine) {
+				continue
+			}
+			if t.i < 0 {
+				if hidden == nil {
+					hidden = map[int]string{}
+				}
+				hidden[i] = taintPrefix + t.s.RuleID
+				break
+			}
+			if superseded == nil {
+				superseded = map[int]string{}
+			}
+			superseded[i] = taintPrefix + t.s.RuleID
+			ts := &sigs[t.i]
+			if model.SeverityRank(s.Severity) > model.SeverityRank(ts.Severity) {
+				ts.Severity = s.Severity
+			}
+			if confidenceRank(s.Confidence) > confidenceRank(ts.Confidence) {
+				ts.Confidence = s.Confidence
+			}
+			break
+		}
+	}
+	return superseded, hidden
+}
+
+// supersededInTaintFiles adds the signals of bundled Semgrep rules and
+// built-in heuristics that the taint engine replaces in the files it analyzed (#406): in Python it
+// decides those weaknesses from the data flow, and the rules' own
+// findings there were false positives on real code (docs/BENCHMARKS.md).
+func supersededInTaintFiles(sigs []model.Signal, inv *inventory.Inventory, superseded map[int]string) map[int]string {
+	for i, s := range sigs {
+		if _, ok := superseded[i]; ok || s.Collector != "semgrep" && s.Collector != "builtin-code" {
+			continue
+		}
+		f := inv.FileByPath(s.File)
+		if f == nil {
+			continue
+		}
+		if rule := adapters.TaintReplaces(s.RuleID, f.Lang, f.Path); rule != "" {
+			if superseded == nil {
+				superseded = map[int]string{}
+			}
+			superseded[i] = taintPrefix + rule
+		}
+	}
+	return superseded
+}
+
+func confidenceRank(c model.Confidence) int {
+	switch c {
+	case model.Confirmed:
+		return 3
+	case model.StronglySupported:
+		return 2
+	case model.Hypothesis:
+		return 1
+	}
+	return 0
 }
 
 // dismissedNote says how many signals were dismissed and by whom.
@@ -1165,6 +1327,28 @@ func edgeStatus(tests []string, byID map[string]model.ControlResult) (model.Stat
 // walk the tree themselves (gitleaks with --no-git scans everything), and
 // generated files there are not the project's code. The same holds for
 // directories git ignores and does not track, which the walk skipped.
+// outOfScope reports whether the file of finding f is no longer part of the
+// scanned tree: deleted, excluded by configuration, or in a git-ignored
+// directory the walk skipped. Gitleaks keeps listing secrets in ignored
+// directories (see dropExcluded), so those stay in scope.
+func (e *Engine) outOfScope(f model.Finding, inv *inventory.Inventory) bool {
+	rel := filepath.ToSlash(f.File)
+	if rel == "" || filepath.IsAbs(f.File) || strings.HasPrefix(rel, "../") {
+		return false
+	}
+	if inventory.Excluded(e.Root, rel, e.Cfg.Inventory.Exclude) {
+		return true
+	}
+	if inv.InIgnoredDir(rel) && !(f.ControlID == "E-005" && f.Severity == model.SevInfo) {
+		return true
+	}
+	if inv.FileByPath(rel) != nil {
+		return false
+	}
+	_, err := os.Lstat(filepath.Join(e.Root, filepath.FromSlash(rel)))
+	return os.IsNotExist(err)
+}
+
 func (e *Engine) dropExcluded(out *adapters.Result, inv *inventory.Inventory) int {
 	kept := out.Signals[:0]
 	n := 0
@@ -1181,7 +1365,7 @@ func (e *Engine) dropExcluded(out *adapters.Result, inv *inventory.Inventory) in
 		// A secret on disk matters wherever it is, so gitleaks keeps listing
 		// it in a git-ignored directory (as info, see IgnoredLocal).
 		ignored := inv.InIgnoredDir(rel) && !(s.ControlID == "E-005" && s.Severity == model.SevInfo)
-		if rel != "" && (inventory.Excluded(rel, e.Cfg.Inventory.Exclude) || ignored) {
+		if rel != "" && (inventory.Excluded(e.Root, rel, e.Cfg.Inventory.Exclude) || ignored) {
 			n++
 			continue
 		}

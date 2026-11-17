@@ -3,10 +3,12 @@ import codecs
 import configparser
 import hashlib
 import os
+import pathlib
 import pickle
 import random
 import secrets
 import subprocess
+import urllib.parse
 import xml.dom.minidom
 import xml.sax
 import xml.sax.handler
@@ -30,6 +32,28 @@ def evaluate():
     eval(code)
     # ok: pandaward-py-eval
     eval("1 + 1")
+    return "done"
+
+
+@app.route("/literal")
+def evaluate_literal():
+    expr = request.form.get("expr")
+    # ruleid: pandaward-py-eval
+    eval("1 + " + expr)
+    if not expr.startswith("'") or not expr.endswith("'") or "'" in expr[1:-1]:
+        return "must be a plain string literal"
+    # ok: pandaward-py-eval
+    eval(expr)
+    return "done"
+
+
+@app.route("/literal-no-return")
+def evaluate_literal_unchecked():
+    expr = request.form.get("expr")
+    if not expr.startswith("'") or not expr.endswith("'") or "'" in expr[1:-1]:
+        print("not a literal")
+    # ruleid: pandaward-py-eval
+    eval(expr)
     return "done"
 
 
@@ -122,6 +146,50 @@ def files():
     return send_file(os.path.join("/srv/files", name))
 
 
+@app.route("/files-check")
+def files_check():
+    name = request.args.get("name")
+    base = pathlib.Path("/srv/files")
+    p = (base / name).resolve()
+    # ruleid: pandaward-py-path-traversal
+    p.read_text()
+    # ruleid: pandaward-py-path-traversal
+    os.path.exists(f"/srv/files/{name}")
+    if not str(p).startswith(str(base)):
+        return "invalid path"
+    # ok: pandaward-py-path-traversal
+    p.read_text()
+    return "done"
+
+
+@app.route("/files-dotdot")
+def files_dotdot():
+    name = request.args.get("name")
+    if "../" in name:
+        return "invalid name"
+    # ok: pandaward-py-path-traversal
+    open(f"/srv/files/{name}").close()
+    return "done"
+
+
+@app.route("/config-keys")
+def config_keys():
+    name = request.args.get("name")
+    # Another key than the one holding the input is not followed.
+    conf = configparser.ConfigParser()
+    conf.add_section("s")
+    conf.set("s", "fixed", "report.txt")
+    conf.set("s", "user", name)
+    # ok: pandaward-py-path-traversal
+    open(conf.get("s", "fixed"))
+    other = configparser.ConfigParser()
+    other.add_section("s")
+    other.set("s", "user", name)
+    # ruleid: pandaward-py-path-traversal
+    open(other.get("s", "user"))
+    return "done"
+
+
 @app.route("/files-safe")
 def files_safe():
     name = secure_filename(request.args.get("name"))
@@ -175,6 +243,16 @@ def next_page():
         # ok: pandaward-py-open-redirect
         return redirect(url_for("home"))
     # ruleid: pandaward-py-open-redirect
+    return redirect(target)
+
+
+@app.route("/go-allowed")
+def go_allowed():
+    target = request.args.get("next")
+    url = urllib.parse.urlparse(target)
+    if url.netloc not in ["example.org"] or url.scheme != "https":
+        return "invalid url"
+    # ok: pandaward-py-open-redirect
     return redirect(target)
 
 

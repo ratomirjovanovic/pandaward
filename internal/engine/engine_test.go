@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/ratomirjovanovic/pandaward/internal/adapters"
+	"github.com/ratomirjovanovic/pandaward/internal/config"
 	"github.com/ratomirjovanovic/pandaward/internal/evidence"
 	"github.com/ratomirjovanovic/pandaward/internal/model"
 	"github.com/ratomirjovanovic/pandaward/internal/testfixture"
@@ -49,12 +50,17 @@ func TestVulnerableFixture(t *testing.T) {
 	for _, f := range fs {
 		rules[f.RuleID] = true
 	}
+	// On JavaScript lines with a flow from the request, the taint finding
+	// replaces the heuristic.
+	byTaint := map[string]string{"code.js-eval": "taint.js-code-injection", "code.js-shell": "taint.js-command-injection",
+		"code.sql-concat": "taint.js-sql-injection", "code.html-sink": "taint.js-xss",
+		"code.py-eval": "taint.py-code-injection", "code.py-shell": "taint.py-command-injection"}
 	for _, want := range []string{"secret.stripe-live-key", "secret.github-token", "code.js-eval", "code.py-eval", "code.js-shell", "code.py-shell", "code.sql-concat",
 		"code.py-deserialize", "code.tls-verify-off", "code.jwt-decode-no-verify", "code.html-sink", "code.cors-wildcard-credentials", "code.webhook-no-signature",
 		"code.llm-output-exec", "cicd.unpinned-action", "cicd.script-injection", "cicd.prt-untrusted-checkout", "cicd.no-permissions", "infra.container-root",
 		"infra.unpinned-base-image", "infra.public-storage", "infra.world-open-admin-port", "supply.missing-lockfile", "mobile.android-debuggable",
 		"mobile.android-allow-backup", "mobile.android-exported-component", "inventory.undeclared-route"} {
-		if !rules[want] {
+		if !rules[want] && !rules[byTaint[want]] {
 			t.Errorf("expected rule %s to fire", want)
 		}
 	}
@@ -122,6 +128,48 @@ func TestRemediationAndReopen(t *testing.T) {
 	defer e.Close()
 	if res.Reopened < 1 {
 		t.Fatalf("expected reopened findings, got %d", res.Reopened)
+	}
+}
+
+// Findings in files that are gone close even when their collector is skipped
+// because no input files are left; they must not stay open as STALE.
+func TestFindingsCloseWhenFileGone(t *testing.T) {
+	root := testfixture.VulnerableRepo(t)
+	e, _ := scan(t, root)
+	fs, err := e.St.Findings(e.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	infra := map[string]bool{}
+	for _, f := range fs {
+		if f.Collector == "builtin-infra" && f.Status.Active() {
+			infra[f.File] = true
+		}
+	}
+	e.Close()
+	if len(infra) == 0 {
+		t.Fatal("fixture has no infra findings")
+	}
+	for p := range infra {
+		if err := os.Remove(filepath.Join(root, filepath.FromSlash(p))); err != nil {
+			t.Fatal(err)
+		}
+	}
+	e, res := scan(t, root)
+	defer e.Close()
+	for _, r := range res.Runs {
+		if r.Adapter == "builtin-infra" && r.ExitClass == model.ExitOK {
+			t.Log("builtin-infra still ran; the test does not exercise the skipped-adapter path")
+		}
+	}
+	fs, err = e.St.Findings(e.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range fs {
+		if infra[f.File] && f.Collector == "builtin-infra" && (f.Status != model.FindingRemediated || f.Stale) {
+			t.Errorf("%s %s in deleted %s: status %s stale %v", f.ID, f.RuleID, f.File, f.Status, f.Stale)
+		}
 	}
 }
 
@@ -223,5 +271,113 @@ func TestHypothesisValidation(t *testing.T) {
 	}
 	if f.Confidence != model.Hypothesis || f.Status != model.FindingOpen {
 		t.Fatalf("hypothesis must stay HYPOTHESIS/OPEN: %+v", f)
+	}
+}
+
+// builtin-taint owns no control: its findings raise the controls of their
+// weakness, and a scan with it enabled keeps working.
+func TestTaintEngineDefault(t *testing.T) {
+	has := func(list []string, name string) bool {
+		for _, a := range list {
+			if a == name {
+				return true
+			}
+		}
+		return false
+	}
+	e := &Engine{Cfg: config.Default("x")}
+	if !has(e.Adapters(), "builtin-taint") {
+		t.Fatalf("a new config must run builtin-taint: %v", e.Adapters())
+	}
+	// A config written before builtin-taint was a default.
+	e.Cfg.Scan.Adapters = []string{"builtin-inventory", "builtin-code", "semgrep"}
+	if got := e.Adapters(); !has(got, "builtin-taint") || !has(got, "sarif-import") {
+		t.Fatalf("builtin-taint must run with builtin-code: %v", got)
+	}
+	e.Cfg.Scan.Adapters = []string{"builtin-inventory", "semgrep"}
+	if has(e.Adapters(), "builtin-taint") {
+		t.Fatal("builtin-taint must not run without builtin-code or an explicit entry")
+	}
+	e.Cfg.Scan.TaintEngine = false
+	e.Cfg.Scan.Adapters = []string{"builtin-code", "builtin-taint"}
+	if has(e.Adapters(), "builtin-taint") {
+		t.Fatal("scan.taint_engine: false must turn builtin-taint off")
+	}
+}
+
+func TestTaintAdapterRaisesControls(t *testing.T) {
+	root := testfixture.VulnerableRepo(t)
+	e, _, err := Init(root, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+	e.Cfg.Scan.Adapters = []string{"builtin-inventory", "builtin-code", "builtin-taint"}
+	res, err := e.Scan(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fs, err := e.St.Findings(e.ProjectID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	n := 0
+	for _, f := range fs {
+		if f.Collector == "builtin-taint" {
+			n++
+		}
+	}
+	if n < 3 {
+		t.Fatalf("%d builtin-taint findings, want at least 3", n)
+	}
+	cm := controlMap(t, e, res.AssessmentID)
+	if st := cm["D-002"].Status; st != model.StatusFail && st != model.StatusSuspected {
+		t.Fatalf("D-002 is %s after a command injection flow", st)
+	} // A heuristic finding on the line of a taint finding for the same
+	// control is replaced by it.
+	type at struct {
+		control, file string
+		line          int
+	}
+	byTaint := map[at]bool{}
+	for _, f := range fs {
+		if f.Collector == "builtin-taint" {
+			byTaint[at{f.ControlID, f.File, f.StartLine}] = true
+		}
+	}
+	for _, f := range fs {
+		if f.Collector == "builtin-code" && f.Status.Active() && byTaint[at{f.ControlID, f.File, f.StartLine}] {
+			t.Errorf("builtin-code finding %s %s:%d duplicates a taint finding", f.RuleID, f.File, f.StartLine)
+		}
+	}
+}
+
+func TestSupersededByTaint(t *testing.T) {
+	sig := func(collector, rule, control, file string, line int) model.Signal {
+		return model.Signal{Collector: collector, RuleID: rule, ControlID: control, File: file, StartLine: line, EndLine: line}
+	}
+	sigs := []model.Signal{
+		sig("builtin-code", "code.js-shell", "D-002", "a.js", 2),
+		sig("semgrep", "semgrep.pandaward-js-shell-exec", "D-002", "a.js", 2),
+		sig("semgrep", "semgrep.my-own-rule", "D-002", "a.js", 2),
+		sig("builtin-code", "code.js-shell", "D-002", "a.js", 9),
+		sig("builtin-code", "code.js-eval", "D-001", "a.js", 2),
+		sig("builtin-taint", "taint.js-command-injection", "D-002", "a.js", 2),
+	}
+	got, _ := supersededByTaint(sigs, nil, nil)
+	if len(got) != 2 || got[0] != "taint:taint.js-command-injection" || got[1] == "" {
+		t.Fatalf("superseded: %v", got)
+	}
+	// Taint carried over from the last assessment still replaces them.
+	carriedTaint := []model.Signal{sig("builtin-taint", "taint.js-command-injection", "D-002", "a.js", 9)}
+	got, hidden := supersededByTaint(sigs[:5], carriedTaint, nil)
+	if _, ok := hidden[3]; !ok || len(hidden) != 1 || len(got) != 0 {
+		t.Fatalf("carried taint must hide, not supersede: %v %v", got, hidden)
+	}
+	// The taint signal takes over a stronger confidence.
+	sigs[0].Confidence, sigs[5].Confidence = model.Confirmed, model.StronglySupported
+	supersededByTaint(sigs, nil, nil)
+	if sigs[5].Confidence != model.Confirmed {
+		t.Fatalf("taint signal confidence %s, want CONFIRMED", sigs[5].Confidence)
 	}
 }

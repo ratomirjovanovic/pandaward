@@ -53,12 +53,19 @@ type Adapter interface {
 	Run(ctx context.Context, c *Context) (Result, model.Run)
 }
 
+// Contributor is an adapter that owns no control but reports findings for
+// controls other adapters own; it runs when one of them applies.
+type Contributor interface {
+	Contributes() []string
+}
+
 // Registry returns all adapters in execution order.
 func Registry() []Adapter {
 	return []Adapter{
 		&inventoryAdapter{},
 		&secretsAdapter{},
 		&codeAdapter{},
+		taintAdapter{},
 		&cicdAdapter{},
 		&infraAdapter{},
 		&supplyAdapter{},
