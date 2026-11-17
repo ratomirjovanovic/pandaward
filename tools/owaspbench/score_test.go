@@ -251,3 +251,26 @@ func TestPythonCategories(t *testing.T) {
 		}
 	}
 }
+
+func TestLabelFindings(t *testing.T) {
+	st := Suites["java"]
+	cwe := "CWE-89"
+	cat := st.CategoryOf("", cwe)
+	if cat == "" {
+		t.Fatal("CWE-89 has no category in the java suite")
+	}
+	expected := []Expected{{Name: "BenchmarkTest00001", Category: cat, Real: true}, {Name: "BenchmarkTest00002", Category: cat, Real: false}}
+	dir := st.TestCodeDir + "/"
+	fs := []Finding{
+		{CWE: cwe, File: dir + "BenchmarkTest00001.java", Line: 5},
+		{CWE: cwe, File: dir + "BenchmarkTest00002.java", Line: 5},
+		{CWE: cwe, File: "src/other/Thing.java", Line: 1},
+	}
+	got := st.LabelFindings("x", expected, fs)
+	want := []string{"true", "false_positive", "unlabelled"}
+	for i, w := range want {
+		if got[i].Label != w {
+			t.Errorf("finding %d: %q, want %q", i, got[i].Label, w)
+		}
+	}
+}
