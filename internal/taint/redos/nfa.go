@@ -3,6 +3,13 @@ package redos
 // maxStates bounds the automaton: larger patterns are not analyzed.
 const maxStates = 160
 
+// maxBoundedRep is the largest upper bound of a counted repetition ({m,n}) that
+// still counts as bounded for the polynomial check: a loop that runs at most
+// this many times does work that does not grow with the input. Larger bounds
+// stay loops. 256 is the bound that fixes of real ReDoS reports use (the
+// moment fix for CVE-2017-18214 is {0,256}).
+const maxBoundedRep = 256
+
 type edge struct {
 	on set
 	to int
@@ -12,6 +19,10 @@ type builder struct {
 	eps   [][]int
 	trans [][]edge
 	over  bool
+	// dropBounded builds a counted repetition with a large finite bound (at
+	// most maxBoundedRep) without its loop, only its minimum copies. It is
+	// used to ask whether a polynomial finding needs such a loop.
+	dropBounded bool
 }
 
 func (b *builder) new() int {
@@ -66,7 +77,11 @@ func (b *builder) build(n *node, from, to int) bool {
 			min = 8
 		}
 		if max >= 0 && max-min > 12 {
-			max = -1
+			if b.dropBounded && max <= maxBoundedRep {
+				max = min // the loop is bounded: no cycle
+			} else {
+				max = -1
+			}
 		}
 		cur := from
 		for i := 0; i < min; i++ {
