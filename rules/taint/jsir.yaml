@@ -278,6 +278,9 @@ sanitizers:
     calls: [shell-quote.quote, shell-escape, shellescape, any-shell-escape]
   - kinds: [path]
     calls: [path.basename, sanitize-filename]
+  # JSON.stringify of a value is a quoted, escaped string literal.
+  - kinds: [code]
+    calls: [JSON.stringify]
   - kinds: [xss]
     calls: [escape-html, he.encode, he.escape, lodash.escape, validator.escape, DOMPurify.sanitize, dompurify.sanitize, xss, sanitize-html, encodeURI, JSON.stringify]
   - kinds: [sql]

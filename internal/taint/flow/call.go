@@ -78,6 +78,19 @@ func (f *fnRun) call(in *ir.Instr, st State) *Value {
 		f.eventCall(c)
 		f.jsxSinks(c)
 	}
+	// app.route('/path') is a router: .get(handler) on it registers one.
+	if c.method == "route" && len(c.args) == 1 {
+		name := f.receiverName(c.in)
+		for _, rc := range f.e.spec.Sources.RouteCalls {
+			if contains(rc.Receivers, name) || contains(rc.Receivers, c.recv.Inst) {
+				return &Value{Inst: "router"}
+			}
+		}
+	}
+	// promisify(exec) is exec, called for its promise.
+	if len(c.args) == 1 && (contains(c.names, "util.promisify") || contains(c.names, "promisify")) {
+		return c.args[0]
+	}
 	r := f.weakSource(c, f.callResolved(c, st))
 	// new URL("/login", request.url): the address is the base's host with
 	// a path the code chose, which is not a redirect to another site.
@@ -720,7 +733,7 @@ func (f *fnRun) propSinks(in *ir.Instr, base, v *Value) {
 		for _, p := range s.Props {
 			if p == in.Name || recv != "" && p == recv+"."+in.Name || base.Q != "" && p == base.Q+"."+in.Name {
 				if v.tainted(s.Kind) {
-					f.found(s, in.Pos.Line, v)
+					f.foundSpan(s, in.Pos, v.T)
 				}
 			}
 		}

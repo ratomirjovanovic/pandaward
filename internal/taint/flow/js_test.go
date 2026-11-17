@@ -371,3 +371,70 @@ export function Raw(props) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// TestJSFixes checks the forms a fix takes: JSON.stringify of a value put
+// in code, a field checked with an anchored pattern before the program
+// exits, a $name variable, util.promisify, prototype methods assigned in a
+// constructor and the lines of a multi-line value written to a property.
+func TestJSFixes(t *testing.T) {
+	cases := []struct{ name, src, want string }{
+		{"stringify", `exports.compile = function (format) {
+  return new Function('return ' + JSON.stringify(format));
+};
+exports.bad = function (format) {
+  return new Function('return ' + format);
+};`, "taint.js-code-injection:5"},
+		{"exit after check", `var exec = require('child_process').exec;
+module.exports = function (file) {
+  var $c = JSON.parse(require('fs').readFileSync(file));
+  if (!/^[a-z]+$/.test($c.name)) {
+    process.exit(-1);
+  }
+  exec('zip ' + $c.name);
+};`, ""},
+		{"no check", `var exec = require('child_process').exec;
+module.exports = function (file) {
+  var $c = JSON.parse(require('fs').readFileSync(file));
+  exec('zip ' + $c.name);
+};`, "taint.js-command-injection:4"},
+		{"promisify", `const { promisify } = require('util');
+const { exec } = require('child_process');
+const run = promisify(exec);
+module.exports = async function (cmd) { return await run(cmd); };`, "taint.js-command-injection:4"},
+		{"prototype in constructor", `const { execSync } = require('child_process');
+function Info(name) {
+  this.name = name;
+  Info.prototype.get = function () {
+    return execSync('info ' + this.name);
+  };
+}
+module.exports = Info;`, "taint.js-command-injection:5"},
+		{"multi-line value", `module.exports = function (el) {
+  el.innerHTML = '<a>' +
+    location.hash +
+    '</a>';
+};`, "taint.js-xss:2-4"},
+	}
+	for _, c := range cases {
+		if got := strings.Join(jsFlows(t, c.src), " "); got != c.want {
+			t.Errorf("%s: got %q, want %q", c.name, got, c.want)
+		}
+	}
+}
+
+// TestJSRouteChain checks that handlers registered on app.route(path) are
+// routes, so the request reaches the helpers they call.
+func TestJSRouteChain(t *testing.T) {
+	src := `import { Request, Response } from 'express';
+function show(name: any, response: Response) {
+  return response.send('Dashboard ' + name);
+}
+export function setup(app: any) {
+  app.route('/:d').get((request: Request, response: Response) => {
+    show(request.params.d, response);
+  });
+}`
+	if got := strings.Join(jsFlowsIn(t, "routes.ts", src), " "); got != "taint.js-xss:3" {
+		t.Errorf("got %q", got)
+	}
+}

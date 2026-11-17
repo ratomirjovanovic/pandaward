@@ -123,6 +123,19 @@ func (p *Project) exported(r *run) {
 			}
 		}
 	}
+	// exports.parser = { parse: function () {} }: the functions of an
+	// exported object are exported with it.
+	for _, name := range sortedKeys(all) {
+		v := all[name]
+		if name == "default" || v.Inst != "dict" {
+			continue
+		}
+		for k, fv := range v.Fields {
+			if _, ok := all[k]; !ok && fv.Fn != nil && !strings.HasPrefix(k, ".") && !strings.HasPrefix(k, "#") && !strings.HasPrefix(k, "$") {
+				all[k] = fv
+			}
+		}
+	}
 	for _, name := range sortedKeys(all) {
 		v := all[name]
 		// module.exports = new Client(): the methods of the instance, as
