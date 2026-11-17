@@ -59,6 +59,7 @@ Assessment (local, no target network traffic):
   retest          Show files changed since the last scan, re-scan, show the delta
                   (--changed re-runs only adapters for impacted controls)
   status          Resumable state, coverage, blockers and next action
+  verify-report   Check an agent's report against the ledger: unsupported PASS, fabricated evidence hash, all-clear claims
   findings        List/show findings; human triage: false-positive, accept-risk, reopen, confirm, remediated
   attest          Manual controls: --list, <control> --show, <control> --propose --file proposal.json;
                   a person decides with <control> --accept|--reject --by <name> [--note text]
@@ -143,6 +144,8 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		err = cmdScan(ctx, rest, stdout, stderr, true)
 	case "status":
 		err = cmdStatus(rest, stdout)
+	case "verify-report":
+		err = cmdVerifyReport(rest, stdin, stdout)
 	case "findings":
 		err = cmdFindings(rest, stdout)
 	case "attest":

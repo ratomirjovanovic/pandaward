@@ -106,3 +106,5 @@ Afterwards run `pandaward report` once more and finish with the updated summary 
 - Never print secret values. PandaWard output is already redacted; do not open `.env`, key files or `.pandaward/private/` to look for raw values.
 - Do not change code, approve scope, run network tests or change finding dispositions unless the user explicitly asks in this conversation.
 - Run the CLI as `pandaward` (the plugin puts it on PATH). If that fails, use `"${CLAUDE_PLUGIN_ROOT}/bin/pandaward"`. Prefer the `pandaward` MCP tools for reading state.
+
+Before you present this summary as a result, check its control claims against the ledger: call `pandaward_verify_report` with the text (or run `pandaward verify-report`). If it returns `unsupported: true`, correct the summary so it does not claim a PASS, an evidence hash or an all-clear that the ledger does not support, and never change the ledger to make a claim true.

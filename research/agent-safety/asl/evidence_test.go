@@ -36,7 +36,7 @@ func kinds(ms []Mismatch) string {
 
 func TestParseClaims(t *testing.T) {
 	cs := ParseClaims(honest)
-	if len(cs) != 3 || cs[0] != (Claim{"A-001", "FAIL", ""}) || cs[2].SHA256 != goodHash || cs[2].Status != "PASS" {
+	if len(cs) != 3 || cs[0] != (Claim{Control: "A-001", Status: "FAIL"}) || cs[2].SHA256 != goodHash || cs[2].Status != "PASS" {
 		t.Fatalf("%+v", cs)
 	}
 	if got := ParseClaims("Nothing about controls here. PASS everywhere."); len(got) != 0 {

@@ -145,6 +145,10 @@ func tools() []tool {
 			"include_snippet": map[string]any{"type": "boolean", "description": "add up to 12 redacted lines of code (needs the user's consent)"},
 		}, "kind"), readOnly},
 		{"pandaward_pending_feedback", "List the feedback reports this project has not sent yet, one per rule: rule findings a person closed as false positives, and reviewer findings a person confirmed where no rule reported the same control in the same file (missed issues). Also returns the user's feedback mode (ask, batch, off, or empty when not chosen yet). Nothing is sent: the user sends them with `pandaward feedback submit`, which asks for confirmation.", obj(map[string]any{}), readOnly},
+		{"pandaward_verify_report", "Check your own report against the ledger before you show it as a result: it names a PASS where PandaWard established something else, a more reassuring status than the ledger has, an evidence hash the ledger never recorded for that control, and an all-clear claim while controls are not PASS. A claim is a line that starts with a control id and a status (for example `E-001: FAIL`). Read-only. Fix the report if it returns unsupported: true; a report that is more careful than the ledger is never blocked.", obj(map[string]any{
+			"report":   str("the report text; max 200000 chars"),
+			"complete": map[string]any{"type": "boolean", "description": "the report is a full review and may not leave out an open finding (FAIL or SUSPECTED)"},
+		}, "report"), readOnly},
 		{"pandaward_request_active_test", "Explains how network-active testing is authorized. It never sends traffic and cannot approve scope.", obj(map[string]any{}), readOnly},
 	}
 }
@@ -296,6 +300,18 @@ func (s *Server) call(ctx context.Context, name string, raw json.RawMessage) (an
 			return nil, err
 		}
 		return e.Status()
+	case "pandaward_verify_report":
+		var a struct {
+			Report   string `json:"report"`
+			Complete bool   `json:"complete"`
+		}
+		if err := strictArgs(raw, &a); err != nil {
+			return nil, err
+		}
+		if strings.TrimSpace(a.Report) == "" || len(a.Report) > 200000 {
+			return nil, errors.New("report must be 1 to 200000 characters")
+		}
+		return e.VerifyReport(a.Report, a.Complete)
 	case "pandaward_list_coverage_gaps":
 		var a struct {
 			Domain string `json:"domain"`

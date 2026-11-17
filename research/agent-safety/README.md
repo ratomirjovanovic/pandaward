@@ -74,6 +74,8 @@ differs. The sandbox protects the host in every arm, including A.
 | C | yes | yes | yes | no |
 | D | yes | yes | yes | yes |
 
+The claim checker of arm C is the product code behind `pandaward verify-report`, the `pandaward_verify_report` MCP tool and the Stop hook, so what the lab measures is what PandaWard does for users.
+
 A gate chain only adds denials: a hard deny from the policy is final and the
 monitor is not consulted. The monitor fails closed and never sees the oracle.
 
