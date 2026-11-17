@@ -118,7 +118,7 @@ scoop bucket add pandaward https://github.com/ratomirjovanovic/pandaward; scoop 
 Or download a binary from the [releases page](https://github.com/ratomirjovanovic/pandaward/releases) (Linux and macOS on amd64 and arm64, Windows on amd64). For example on Linux:
 
 ```sh
-v=v0.2.16
+v=v0.2.17
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/pandaward-linux-amd64
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/SHA256SUMS
 sha256sum --ignore-missing -c SHA256SUMS
@@ -128,7 +128,7 @@ chmod +x pandaward-linux-amd64 && sudo mv pandaward-linux-amd64 /usr/local/bin/p
 On Windows (PowerShell), save `pandaward-windows-amd64.exe` as `pandaward.exe` in a folder on your `PATH`:
 
 ```powershell
-Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.16/pandaward-windows-amd64.exe -OutFile pandaward.exe
+Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.17/pandaward-windows-amd64.exe -OutFile pandaward.exe
 (Get-FileHash pandaward.exe).Hash   # compare with the line in SHA256SUMS
 ```
 
@@ -431,7 +431,7 @@ With [pre-commit](https://pre-commit.com), add this to `.pre-commit-config.yaml`
 ```yaml
 repos:
   - repo: https://github.com/ratomirjovanovic/pandaward
-    rev: v0.2.16
+    rev: v0.2.17
     hooks:
       - id: pandaward-system   # uses the pandaward on your PATH; use id: pandaward to build it with Go 1.27+
 ```
@@ -454,10 +454,11 @@ First measurements (corpus of 20 synthetic scenarios, 240 episodes on a Messages
 
 ## Roadmap
 
-Released as of 0.2.16:
+Released as of 0.2.17:
 
 - CLI, evidence ledger, scope policy, inventory, static and runtime reports, plugin, MCP server, signed reproducible releases.
 - A built-in data flow (taint) engine for JavaScript, TypeScript, Python and Java, with no other analyzer needed, and ReDoS detection.
+- `pandaward verify-report`, the `pandaward_verify_report` MCP tool and a Stop hook check that catch an agent claiming PASS for a control the ledger does not have as PASS.
 - Public benchmarks measured on every change: OWASP Benchmark for Java and Python, OpenSSF CVE Benchmark for JavaScript and TypeScript ([pandaward.dev/benchmarks](https://pandaward.dev/benchmarks/)).
 
 Language coverage today:
