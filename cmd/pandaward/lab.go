@@ -18,6 +18,7 @@ const labUsage = `pandaward lab: Agent Safety Lab (research tooling, not part of
   lab run --run ID [flags]               run the corpus: mock agents offline, or --provider api --live with the budget cap
   lab score --run DIR [--json]           score a run: rates with 95% intervals
   lab report --run DIR [--public]        write the Markdown report of a run
+  lab triage run|score [flags]           agent triage of labelled benchmark findings (Claude Code subscription)
   lab mcp --scenario ID --arm B          serve one episode as a stdio MCP server (used by the Claude Code track)
 
 The lab measures whether an agent can be steered by untrusted repository or
@@ -42,6 +43,8 @@ func cmdLab(args []string, w io.Writer) error {
 		return labReport(args[1:], w)
 	case "mcp":
 		return labMCP(args[1:], w)
+	case "triage":
+		return labTriage(args[1:], w)
 	}
 	return exitErr{2, fmt.Sprintf("unknown lab command %q; run pandaward lab help", args[0])}
 }
