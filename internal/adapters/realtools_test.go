@@ -30,6 +30,9 @@ func TestRealTools(t *testing.T) {
 	}
 	defer e.Close()
 	e.Cfg.Scan.AllowToolNetwork = true
+	// The taint engine replaces bundled Semgrep findings on its lines (tested
+	// in the engine); here the scanners' own results are checked.
+	e.Cfg.Scan.TaintEngine = false
 	res, err := e.Scan(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)

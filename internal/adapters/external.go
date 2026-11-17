@@ -43,8 +43,10 @@ type externalTool struct {
 	// note, set by normalize, is added to the run detail.
 	note string
 	// alts are other binaries that run the same rules and output format
-	// (opengrep for semgrep), tried after binary.
+	// (opengrep for semgrep), tried after binary unless altsFirst.
 	alts []string
+	// altsFirst tries alts before binary when no engine is configured.
+	altsFirst bool
 	// choose returns the one binary the project configured, or "" for
 	// binary and then alts. It is read at the start of a run.
 	choose func(c *Context) string
@@ -63,6 +65,9 @@ func (t *externalTool) Network() bool      { return t.network }
 // installed one.
 func (t *externalTool) Lookup() (string, error) {
 	names := append([]string{t.binary}, t.alts...)
+	if t.altsFirst {
+		names = append(append([]string{}, t.alts...), t.binary)
+	}
 	if t.prefer != "" {
 		names = []string{t.prefer}
 	}
@@ -289,7 +294,12 @@ func gitleaks() Adapter {
 		name: "gitleaks", binary: "gitleaks", controls: []string{"E-005"}, verArgs: []string{"version"},
 		okExit: map[int]bool{0: true},
 		args: func(c *Context, out string) ([]string, error) {
-			return []string{"detect", "--no-git", "--source", c.Root, "--redact", "--no-banner", "--exit-code", "0", "--report-format", "json", "--report-path", out}, nil
+			args := []string{"detect", "--no-git", "--source", c.Root, "--redact", "--no-banner", "--exit-code", "0", "--report-format", "json", "--report-path", out}
+			cfg, err := gitleaksConfig(c)
+			if err != nil {
+				return nil, err
+			}
+			return append(args, "--config", cfg), nil
 		},
 		normalize: func(c *Context, raw []byte) ([]model.Signal, error) {
 			var items []struct {
@@ -349,6 +359,71 @@ func gitleaks() Adapter {
 	return t
 }
 
+// gitleaksConfig writes a gitleaks config into the run directory that
+// extends the project's own .gitleaks.toml (or the default rules) and
+// allowlists the directories inventory.exclude skips. Gitleaks then does not
+// walk node_modules, target or .next at all: those signals were dropped
+// anyway, and a Rust or Node build directory could take longer than the
+// adapter timeout to read.
+func gitleaksConfig(c *Context) (string, error) {
+	var b strings.Builder
+	b.WriteString("[extend]\n")
+	if own := filepath.Join(c.Root, ".gitleaks.toml"); regularFile(own) {
+		b.WriteString("path = '''" + own + "'''\n")
+	} else {
+		b.WriteString("useDefault = true\n")
+	}
+	b.WriteString("\n[allowlist]\ndescription = \"PandaWard inventory.exclude\"\npaths = [\n")
+	var exclude []string
+	if c.Cfg != nil {
+		exclude = c.Cfg.Inventory.Exclude
+	}
+	for _, re := range excludePathRegexes(exclude) {
+		b.WriteString("  '''" + re + "''',\n")
+	}
+	b.WriteString("]\n")
+	p := filepath.Join(c.RunDir, "gitleaks.toml")
+	return p, os.WriteFile(p, []byte(b.String()), 0o600)
+}
+
+// excludePathRegexes turns inventory.exclude entries into path regexes
+// with the same meaning as the inventory walk: a plain name matches a
+// directory of that name anywhere, an entry with a slash matches that
+// directory path, and * or ? in an entry match within one name. Separators
+// may be / or \, since gitleaks reports OS paths.
+func excludePathRegexes(exclude []string) []string {
+	const sep = `[\\/]`
+	var out []string
+	for _, e := range exclude {
+		e = strings.Trim(filepath.ToSlash(e), "/")
+		if e == "" || strings.Contains(e, "'''") {
+			continue
+		}
+		var parts []string
+		for _, seg := range strings.Split(e, "/") {
+			var r strings.Builder
+			for _, ch := range seg {
+				switch ch {
+				case '*':
+					r.WriteString(`[^\\/]*`)
+				case '?':
+					r.WriteString(`[^\\/]`)
+				default:
+					r.WriteString(regexp.QuoteMeta(string(ch)))
+				}
+			}
+			parts = append(parts, r.String())
+		}
+		out = append(out, `(^|`+sep+`)`+strings.Join(parts, sep)+sep)
+	}
+	return out
+}
+
+func regularFile(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && fi.Mode().IsRegular()
+}
+
 // placeholderHit re-reads a single-line gitleaks match and reports whether
 // the value is placeholder-shaped. Private keys are not judged: their
 // encoding legitimately holds long runs of repeated characters.
@@ -364,7 +439,7 @@ func semgrep() Adapter {
 	// normalize records a note on t, so t exists before its fields.
 	t := &externalTool{}
 	*t = externalTool{
-		name: "semgrep", binary: "semgrep", alts: []string{"opengrep"}, controls: []string{"D-006"}, verArgs: []string{"--version"},
+		name: "semgrep", binary: "semgrep", alts: []string{"opengrep"}, altsFirst: true, controls: []string{"D-006"}, verArgs: []string{"--version"},
 		okExit: map[int]bool{0: true, 1: true},
 		choose: func(c *Context) string {
 			if c.Cfg == nil {
@@ -377,6 +452,14 @@ func semgrep() Adapter {
 			bundled, err := rules.WriteSemgrep(filepath.Join(c.ToolHome, "pandaward-semgrep-rules"))
 			if err != nil {
 				return nil, err
+			}
+			if err := addRequestSources(bundled, requestWrapperSources(c.Inv)); err != nil {
+				return nil, err
+			}
+			if extra := configAlgorithmRules(c.Inv); extra != nil {
+				if err := os.WriteFile(filepath.Join(bundled, "generated-config-algorithms.yaml"), extra, 0o600); err != nil {
+					return nil, err
+				}
 			}
 			args := []string{"scan", "--config", bundled}
 			cfg := c.Cfg.Scan.SemgrepConfig
@@ -679,6 +762,20 @@ type ToolInfo struct {
 }
 
 // Tools reports installed optional tools.
+// SemgrepAdvice recommends Opengrep when it is not on PATH: the bundled
+// rules follow taint through the functions of a file only on Opengrep. It
+// returns "" when Opengrep is installed.
+func SemgrepAdvice() string {
+	if _, err := exec.LookPath("opengrep"); err == nil {
+		return ""
+	}
+	why := "the bundled Java, Python and JavaScript rules follow data through the functions of a file only on Opengrep, which finds clearly more on the public benchmarks (https://pandaward.dev/benchmarks/)"
+	if _, err := exec.LookPath("semgrep"); err == nil {
+		return "Semgrep runs the bundled rules; install Opengrep (https://github.com/opengrep/opengrep/releases, opengrep.exe on Windows) and it is used instead: " + why + "."
+	}
+	return "Install Opengrep (https://github.com/opengrep/opengrep/releases, opengrep.exe on Windows) to run the bundled rules: " + why + ". Semgrep works too, with fewer findings."
+}
+
 func Tools(ctx context.Context) []ToolInfo {
 	var out []ToolInfo
 	for _, t := range ExternalTools() {

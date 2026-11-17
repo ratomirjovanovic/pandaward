@@ -147,7 +147,8 @@ func TestJournal(t *testing.T) {
 
 func TestCombined(t *testing.T) {
 	for sel, want := range map[string]string{
-		"builtin,semgrep,opengrep": "semgrep",
+		"builtin,semgrep,opengrep": "opengrep",
+		"builtin,semgrep":          "semgrep",
 		"builtin,opengrep":         "opengrep",
 		"semgrep,opengrep":         "",
 		"builtin":                  "",

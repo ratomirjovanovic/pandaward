@@ -51,15 +51,26 @@ rules:
       - pattern: $TO.update($FROM)
         from: $FROM
         to: $TO
-      - pattern: $TO.set($SECTION, $KEY, $FROM)
+      # A config object carries the value to a read of the same key only.
+      - pattern: |
+          $CONF.set($SECTION, $KEY, $FROM)
+          ...
+          <... $CONF.get($SECTION, $KEY) ...>
         from: $FROM
-        to: $TO
+        to: $CONF
     pattern-sinks:
       - patterns:
           - pattern-either:
               - pattern: eval($X, ...)
               - pattern: exec($X, ...)
               - pattern: compile($X, ...)
+          # Returned unless the value is one quoted string literal: eval can
+          # only produce that string.
+          - pattern-not-inside: |
+              if not $X.startswith($Q) or not $X.endswith($Q) or $Q in $X[$A:$B]:
+                ...
+                return ...
+              ...
           - focus-metavariable: $X
 
   - id: pandaward-py-shell
@@ -157,11 +168,43 @@ rules:
               - pattern: os.open($P, ...)
               - pattern: os.remove($P)
               - pattern: os.unlink($P)
+              - patterns:
+                  - pattern: os.path.$CHECK($P)
+                  - metavariable-regex:
+                      metavariable: $CHECK
+                      regex: ^(exists|lexists|isfile|isdir|getsize|getmtime|getatime|getctime)$
+              - patterns:
+                  - pattern: os.$FS($P, ...)
+                  - metavariable-regex:
+                      metavariable: $FS
+                      regex: ^(stat|lstat|listdir|scandir|mkdir|makedirs|rmdir|removedirs|rename|renames|replace|chmod|chown|truncate|access)$
               - pattern: shutil.$SH($P, ...)
-              - pattern: pathlib.Path($P, ...)
-              - pattern: pathlib.Path(...) / $P
               - pattern: send_file($P, ...)
               - pattern: flask.send_file($P, ...)
+              # A pathlib path is used, not only built: building it and
+              # checking where it resolves is the fix.
+              - patterns:
+                  - pattern: $P.$USE(...)
+                  - metavariable-regex:
+                      metavariable: $USE
+                      regex: ^(exists|open|read_text|read_bytes|write_text|write_bytes|unlink|rmdir|mkdir|touch|rename|replace|is_file|is_dir|stat|iterdir|glob|rglob|symlink_to|hardlink_to|chmod)$
+          # Returned on a parent directory segment or when the resolved path
+          # leaves the base directory.
+          - pattern-not-inside: |
+              if <... '../' in $Y ...>:
+                ...
+                return ...
+              ...
+          - pattern-not-inside: |
+              if not <... $Y.startswith(...) ...>:
+                ...
+                return ...
+              ...
+          - pattern-not-inside: |
+              if not <... $Y.is_relative_to(...) ...>:
+                ...
+                return ...
+              ...
           - focus-metavariable: $P
     pattern-sanitizers:
       - pattern: os.path.basename(...)
@@ -269,6 +312,27 @@ rules:
               - pattern: flask.redirect($X, ...)
               - pattern: django.shortcuts.redirect($X, ...)
               - pattern: django.http.HttpResponseRedirect($X, ...)
+          # The host was checked against an allowlist, returning otherwise.
+          - pattern-not-inside: |
+              $U = urllib.parse.urlparse($X)
+              ...
+              if <... $U.netloc not in $HOSTS ...>:
+                ...
+                return ...
+              ...
+          - pattern-not-inside: |
+              try:
+                $U = urllib.parse.urlparse($X)
+                ...
+                if <... $U.netloc not in $HOSTS ...>:
+                  ...
+                  return ...
+              except:
+                ...
+              ...
+          - pattern-not-inside: |
+              if <... urllib.parse.urlparse($X).netloc in $HOSTS ...>:
+                ...
           - focus-metavariable: $X
     pattern-sanitizers:
       - pattern: flask.url_for(...)

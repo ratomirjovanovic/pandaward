@@ -104,3 +104,12 @@ func SemgrepHash() (string, error) {
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
+
+//go:embed taint/*.yaml
+var taintFS embed.FS
+
+// TaintSpec returns the bundled taint specification for a language
+// ("javascript").
+func TaintSpec(lang string) ([]byte, error) {
+	return taintFS.ReadFile("taint/" + lang + ".yaml")
+}

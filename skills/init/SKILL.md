@@ -7,7 +7,7 @@ description: Initialize a PandaWard security assessment in the current project (
 
 1. Run `pandaward init` in the project root. Do not pass `--force` unless the user asks to reset the configuration.
 2. Summarize what the inventory detected: languages, frameworks, routes, CI, IaC, mobile, AI/MCP usage, and any skipped files or sensitive files recorded by name only.
-3. Explain the default: profile `local-passive` reads the repository only and sends no traffic to any target. Optional scanners (gitleaks, semgrep, osv-scanner, trivy) are used only if the user installed them; `pandaward doctor` lists them.
+3. Explain the default: profile `local-passive` reads the repository only and sends no traffic to any target. The built-in checks include a taint engine for JavaScript and TypeScript. Optional scanners (gitleaks, Opengrep or Semgrep, osv-scanner, trivy) are used only if the user installed them; `pandaward doctor` lists them and recommends Opengrep for the bundled data flow rules.
 4. Ask the user to confirm the project is theirs or that they are authorized to assess it before continuing. Then offer to run the full guided assessment (skill `pandaward:start`) and run it yourself after a yes.
 
 ## Ground rules (always)

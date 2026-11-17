@@ -24,6 +24,9 @@ type Meta struct {
 	Label string `json:"label"`
 	// Date is the measurement or release date, YYYY-MM-DD.
 	Date string `json:"date"`
+	// Time is when the measurement ran (RFC 3339, UTC), which orders two
+	// snapshots of the same day.
+	Time string `json:"time,omitempty"`
 	// URL is the release page or the commit the numbers belong to.
 	URL string `json:"url"`
 	// Assets maps a file name (owasp-java.json, ...) to its download URL,
@@ -169,9 +172,23 @@ func Load(dirs []string) ([]Snapshot, error) {
 		if out[i].Date != out[j].Date {
 			return out[i].Date > out[j].Date
 		}
+		if out[i].Time != out[j].Time {
+			return out[i].Time > out[j].Time
+		}
 		return out[i].Label > out[j].Label
 	})
-	return out, nil
+	// The site build adds the latest run of main, which can be a commit
+	// already committed as a snapshot: keep the first of each source.
+	seen := map[string]bool{}
+	kept := out[:0]
+	for _, sn := range out {
+		if sn.URL != "" && seen[sn.URL] {
+			continue
+		}
+		seen[sn.URL] = true
+		kept = append(kept, sn)
+	}
+	return kept, nil
 }
 
 func loadOne(dir string) (Snapshot, bool, error) {
@@ -266,7 +283,7 @@ func parseCVE(b []byte) (*CVE, error) {
 	return c, nil
 }
 
-var engineLabel = map[string]string{"pandaward": "PandaWard", "builtin": "Built-in rules", "semgrep": "Semgrep", "opengrep": "Opengrep"}
+var engineLabel = map[string]string{"pandaward": "PandaWard", "builtin": "Built-in heuristics", "taint": "Built-in taint engine", "semgrep": "Semgrep", "opengrep": "Opengrep"}
 
 var funcs = template.FuncMap{
 	"engine": func(name string) string {
@@ -326,10 +343,10 @@ var funcs = template.FuncMap{
 		}
 		return nil
 	},
-	"engines": func() []string { return []string{"builtin", "semgrep", "opengrep"} },
+	"engines": func() []string { return []string{"pandaward", "builtin", "taint", "semgrep", "opengrep"} },
 	// The CVE benchmark also scores PandaWard as a whole (built-in rules
 	// plus Semgrep); older snapshots lack it and show "-".
-	"cveengines": func() []string { return []string{"pandaward", "builtin", "semgrep", "opengrep"} },
+	"cveengines": func() []string { return []string{"pandaward", "builtin", "taint", "semgrep", "opengrep"} },
 }
 
 func shortCommit(s string) string {
