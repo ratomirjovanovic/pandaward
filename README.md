@@ -446,16 +446,30 @@ A PandaWard report is an automated technical assessment. It is not a certificati
 
 ## Roadmap
 
-| Milestone | Scope | State |
-|---|---|---|
-| M0 Foundation | CLI, ledger, scope policy, inventory, static report | done |
-| M1 Public alpha | built-in adapters, optional tool adapters, bundled Semgrep rules, edges, HTML/JSON/SARIF, plugin, signed reproducible releases | done (v0.1.1) |
-| M2 Context-safe beta | per-domain invalidation, targeted retest, evidence bundles, delta reports, hostile-repository suite | done |
-| M3 Runtime beta | staging profile with role and tenant fixtures, ZAP adapter | done |
-| M4 Mobile and AI | apktool and emulator or simulator storage checks, release-blocking hostile-repository suite, MobSF adapter; LLM endpoint tests | in progress |
-| 1.0 | frozen schemas ([done](docs/SCHEMAS.md)), benchmark corpus with at least 3 vulnerable and 3 safe cases per rule, external review | in progress |
+Released as of 0.2.16:
 
-See the [issues](https://github.com/ratomirjovanovic/pandaward/issues) for details.
+- CLI, evidence ledger, scope policy, inventory, static and runtime reports, plugin, MCP server, signed reproducible releases.
+- A built-in data flow (taint) engine for JavaScript, TypeScript, Python and Java, with no other analyzer needed, and ReDoS detection.
+- Public benchmarks measured on every change: OWASP Benchmark for Java and Python, OpenSSF CVE Benchmark for JavaScript and TypeScript ([pandaward.dev/benchmarks](https://pandaward.dev/benchmarks/)).
+
+Language coverage today:
+
+| Language | What PandaWard does |
+|---|---|
+| JavaScript, TypeScript, Python, Java | data flow analysis across files, ReDoS (JavaScript and TypeScript), benchmarked |
+| Go and other languages | inventory, secrets, dependencies and the bundled Semgrep or Opengrep rules; no data flow analysis |
+
+Next, in this order, and each claimed only once it is measured:
+
+| Step | Scope | State |
+|---|---|---|
+| Accuracy | known weak spots: JavaScript XSS, findings still reported after a fix, Python request wrapper classes ([#404](https://github.com/ratomirjovanovic/pandaward/issues/404)), a second benchmark the rules were not tuned on | in progress |
+| More languages | Go, C#, Rust, Ruby, Kotlin, PHP, C and C++: for each a parser, lowering to the shared IR, a rule spec and a public benchmark | planned |
+| Built-in DAST baseline | no control stays BLOCKED only because ZAP is missing ([#265](https://github.com/ratomirjovanovic/pandaward/issues/265)) | planned |
+| Mobile and LLM endpoints | apktool and emulator or simulator storage checks, MobSF adapter, LLM endpoint tests | in progress |
+| 1.0 | frozen schemas ([done](docs/SCHEMAS.md)), at least 3 vulnerable and 3 safe cases per rule, external review | in progress |
+
+PandaWard stays free and local: no paid services, keys or runners. See the [issues](https://github.com/ratomirjovanovic/pandaward/issues) for details.
 
 ## Moving from PenSec
 
