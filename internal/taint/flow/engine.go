@@ -33,7 +33,9 @@ type Engine struct {
 	handlerSink *taint.Sink
 	// protoSink is the sink of kind proto: a store into an object that
 	// was selected by a key from the input, with a key from the input.
-	protoSink    *taint.Sink
+	protoSink *taint.Sink
+	// decoSinks are the sinks of a returned field, by handler decorator.
+	decoSinks    map[string]*taint.Sink
 	srcAttrs     map[string]bool
 	srcCalls     map[string]bool
 	params       map[string]bool
@@ -116,6 +118,12 @@ func New(spec *taint.Spec) *Engine {
 		}
 		if s.Kind == taint.Proto {
 			e.protoSink = s
+		}
+		if s.HandlerDecorator != "" {
+			if e.decoSinks == nil {
+				e.decoSinks = map[string]*taint.Sink{}
+			}
+			e.decoSinks[s.HandlerDecorator] = s
 		}
 		if s.RequiresFlag != nil {
 			for _, m := range s.RequiresFlag.Setter {
@@ -307,7 +315,7 @@ func (r *run) root(fn *ir.Function) {
 		if r.e.params[p.Name] {
 			v.Q = p.Name
 		}
-		if route && p.Name != "self" && p.Name != "cls" && p.Name != "this" && !typed[p.Name] && !numericType[p.Ann] && !javaScalar[p.Ann] {
+		if route && p.Name != "self" && p.Name != "cls" && p.Name != "this" && !typed[p.Name] && !(len(p.Decorators) > 0 && isJSPath(r.mod.Path)) && !numericType[p.Ann] && !javaScalar[p.Ann] {
 			v.T = r.newSource(p.Pos.Line, "route parameter "+p.Name)
 		}
 		for _, d := range p.Decorators {
@@ -541,6 +549,9 @@ func (f *fnRun) block(b *ir.Block, s State, push func(*ir.Block, State)) {
 				}
 			}
 		}
+		if f.report && f.route && len(f.e.decoSinks) > 0 {
+			f.returnedField(t.Value, st, t.Pos.Line)
+		}
 		if f.report && f.route && f.html && f.e.handlerSink != nil {
 			body := f.val(st, t.Value)
 			if body.Known && len(body.Elems) > 0 {
@@ -548,7 +559,8 @@ func (f *fnRun) block(b *ir.Block, s State, push func(*ir.Block, State)) {
 			}
 			// An object a helper built (a JSON response, a model) is not the
 			// input as HTML text.
-			if body.tainted(f.e.handlerSink.Kind) && !body.Opaque {
+			// A JavaScript handler that returns an object sends JSON.
+			if body.tainted(f.e.handlerSink.Kind) && !body.Opaque && !(f.javascript() && len(body.Fields) > 0) {
 				f.found(f.e.handlerSink, t.Pos.Line, body)
 			}
 		}
@@ -943,6 +955,23 @@ func pySlice(s string, lo, hi int) string {
 		return ""
 	}
 	return string(r[lo:hi])
+}
+
+// returnedField reports the field of a returned object that a decorator of
+// the handler makes a sink (@Redirect() returning {url: next}).
+func (f *fnRun) returnedField(ret ir.Operand, st State, line int) {
+	v := f.val(st, ret)
+	for _, d := range f.fn.Decorators {
+		s := f.e.decoSinks[d.Name]
+		if s == nil {
+			continue
+		}
+		for _, k := range []string{s.HandlerField, "." + s.HandlerField} {
+			if x, ok := v.Fields[k]; ok && x.tainted(s.Kind) {
+				f.found(s, line, x)
+			}
+		}
+	}
 }
 
 // guardsProto reports a module that names __proto__ or checks own

@@ -240,6 +240,11 @@ type Sink struct {
 	SafeKwargs    map[string][]string `yaml:"safe_kwargs"`
 	RequiresFlag  *Flag               `yaml:"requires_flag"`
 	HandlerReturn bool                `yaml:"handler_return"`
+	// HandlerDecorator and HandlerField make a field of the object a route
+	// handler returns the sink when the handler has that decorator (a
+	// NestJS @Redirect() handler returns {url}).
+	HandlerDecorator string `yaml:"handler_decorator"`
+	HandlerField     string `yaml:"handler_field"`
 	// TextOnly sinks need the input as text, not an object a helper
 	// built from it: a redirect to url_for(..., next=x) or a session
 	// entry holding a form object is not the flaw.
