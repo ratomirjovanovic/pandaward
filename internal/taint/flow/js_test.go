@@ -474,3 +474,39 @@ module.exports = run;`
 		t.Errorf("got %q", got)
 	}
 }
+
+// TestJSPrototypeTwoKeys checks the store of an object selected by a key
+// from the input with a key from the input (preferences[section][key]).
+func TestJSPrototypeTwoKeys(t *testing.T) {
+	src := `export function g() {
+  const params = new URLSearchParams(window.location.search);
+  const section = params.get('section') || 'd';
+  const key = params.get('key') || 'l';
+  const value = params.get('value') || '';
+  const preferences = { d: {}, c: {} };
+  const sp = preferences[section] || (preferences[section] = {});
+  sp[key] = value;
+  return { preferences };
+}
+export function fixed() {
+  const params = new URLSearchParams(window.location.search);
+  const section = params.get('section') || 'd';
+  const key = params.get('key') || 'l';
+  const preferences = { d: {}, c: {} };
+  const sp = preferences[section];
+  sp['x'] = key;
+  sp[section] = 'y';
+}
+export function named() {
+  const params = new URLSearchParams(window.location.search);
+  const section = params.get('section') || 'd';
+  const value = params.get('value') || '';
+  const preferences = { d: {}, c: {} };
+  const sec = preferences[section] || (preferences[section] = {});
+  sec.display = value;
+}`
+	got := jsFlowsIn(t, "p.js", src)
+	if strings.Join(got, " ") != "taint.js-prototype-pollution:26 taint.js-prototype-pollution:8" {
+		t.Errorf("got %q", got)
+	}
+}
