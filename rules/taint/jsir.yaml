@@ -248,6 +248,16 @@ sinks:
     message: A recursive merge or a walk along a path of keys writes a key taken from its input without skipping __proto__, constructor and prototype, so a key named __proto__ changes Object.prototype for the whole process.
     fix: Skip the keys __proto__, constructor and prototype (or write only the target's own properties), or build the result with Object.create(null) or a Map.
 
+  - id: taint.js-regex-dos
+    kind: regex
+    control: D-006
+    cwe: "CWE-1333"
+    title: Regular expression built from untrusted input
+    message: Input chooses the regular expression, so a crafted pattern can backtrack exponentially and block the process (ReDoS), or match what the code did not intend.
+    fix: Do not take a pattern from the client. Match with a fixed pattern, or escape the input (escapeRegExp) and bound its length.
+    calls:
+      - RegExp
+
   - id: taint.js-incomplete-sanitization
     kind: shape
     control: D-006
@@ -273,6 +283,8 @@ sinks:
     fix: Rewrite the pattern so no two parts can match the same text (no nested quantifiers such as (a+)+, no overlapping alternatives), bound the input length before matching, or use a linear-time engine such as RE2.
 
 sanitizers:
+  - kinds: [regex]
+    calls: [lodash.escapeRegExp, escapeRegExp, escape-string-regexp, lodash.escapeRegExp]
   - kinds: [all]
     calls: [Number, parseInt, parseFloat, Boolean, Math.floor, Math.ceil, Math.round, Math.trunc, Math.abs, Math.min, Math.max, isNaN, Number.isInteger, Number.parseInt, Number.parseFloat, encodeURIComponent, len]
     methods: [startsWith, endsWith, includes, indexOf, lastIndexOf, test, match, localeCompare, hasOwnProperty, length]
