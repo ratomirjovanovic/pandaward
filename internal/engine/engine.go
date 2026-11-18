@@ -1023,11 +1023,22 @@ func redecide(results map[string]*model.ControlResult, sigs []model.Signal, deci
 
 // supersededSignals returns the built-in signals, by index, that a bundled
 // Semgrep rule replaces in the signal's file language, each with that rule.
-// The caller uses it only when the semgrep adapter completed.
+// A signal is replaced only where the rule fired in the same file within a
+// few lines of it: a rule that reports nothing there does not decide what
+// the built-in heuristic found (#533). The caller uses it only when the
+// semgrep adapter completed.
 func supersededSignals(sigs []model.Signal, inv *inventory.Inventory) map[int]string {
 	sup, err := adapters.LoadSupersessions()
 	if err != nil || len(sup) == 0 {
 		return nil
+	}
+	type at struct{ rule, file string }
+	fired := map[at][]int{}
+	for _, s := range sigs {
+		if s.Collector == "semgrep" {
+			k := at{s.RuleID, s.File}
+			fired[k] = append(fired[k], s.StartLine)
+		}
 	}
 	out := map[int]string{}
 	for i, s := range sigs {
@@ -1035,12 +1046,23 @@ func supersededSignals(sigs []model.Signal, inv *inventory.Inventory) map[int]st
 		if f == nil {
 			continue
 		}
-		if rule := sup.By(s, f.Lang); rule != "" {
-			out[i] = rule
+		rule := sup.By(s, f.Lang)
+		if rule == "" {
+			continue
+		}
+		for _, l := range fired[at{rule, s.File}] {
+			if l-s.StartLine <= supersedeWindow && s.StartLine-l <= supersedeWindow {
+				out[i] = rule
+				break
+			}
 		}
 	}
 	return out
 }
+
+// supersedeWindow is how many lines apart a replacing rule's finding and
+// the signal it replaces may be.
+const supersedeWindow = 5
 
 // taintPrefix marks a supersession by a builtin-taint signal.
 const taintPrefix = "taint:"
