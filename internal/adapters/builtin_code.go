@@ -138,7 +138,7 @@ var (
 )
 
 var codeRules = []lineRule{
-	{ID: "code.js-eval", Control: "D-001", Title: "Dynamic code evaluation", Langs: jsLike, Re: regexp.MustCompile(`(^|[^.\w])(eval\s*\(|new\s+Function\s*\(|set(?:Timeout|Interval)\(\s*['"\x60])`),
+	{ID: "code.js-eval", Control: "D-001", Title: "Dynamic code evaluation", Demote: jsEvalDemote, Langs: jsLike, Re: regexp.MustCompile(`(^|[^.\w])(eval\s*\(|new\s+Function\s*\(|set(?:Timeout|Interval)\(\s*['"\x60])`),
 		Severity: model.SevHigh, Confidence: model.Confirmed, CWE: "CWE-95", Message: "Strings are evaluated as code. If any part of the string can be influenced by a user, this is code injection.", Fix: "Replace eval/new Function with explicit parsing or a lookup table; never evaluate strings."},
 	{ID: "code.py-eval", Control: "D-001", Title: "Dynamic code evaluation", Langs: py, Re: regexp.MustCompile(`(^|[^.\w])(eval|exec)\s*\(`),
 		Severity: model.SevHigh, Confidence: model.Confirmed, CWE: "CWE-95", Message: "eval/exec evaluates strings as Python code.", Fix: "Use ast.literal_eval for literals or explicit parsing; never eval input."},
@@ -185,6 +185,7 @@ var codeRules = []lineRule{
 		Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-502", Message: "Unsafe deserialization API.", Fix: "Use YAML.safe_load or JSON."},
 
 	{ID: "code.tls-verify-off", Control: "E-003", Title: "TLS certificate verification disabled", Re: regexp.MustCompile(`verify\s*=\s*False|InsecureSkipVerify\s*:\s*true|rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED['"]?\s*[\]=:,]\s*['"]?0|CURLOPT_SSL_VERIFY(PEER|HOST)\s*,\s*(false|0)|_create_unverified_context|ServerCertificateValidationCallback\s*=.*=>\s*true|ssl_verify\s*[:=]\s*false|VERIFY_NONE`),
+		Not:      regexp.MustCompile(`(?i)(jwt|jws|jwe|jose|pyjwt)\w*\.(decode|verify|process)\w*\(`),
 		Severity: model.SevHigh, Confidence: model.Confirmed, CWE: "CWE-295", Message: "Certificate verification is turned off, so any network attacker can impersonate the server.", Fix: "Remove the override; trust a specific CA bundle if a private CA is needed."},
 	{ID: "code.weak-hash-password", Control: "E-004", Title: "Weak hash used near password handling", Re: weakHashPasswordRe,
 		Severity: model.SevMedium, Confidence: model.Hypothesis, CWE: "CWE-327", Message: "MD5/SHA-1 appear in password handling; fast hashes are unsuitable for passwords.", Fix: "Use Argon2id, scrypt or bcrypt through a maintained library."},

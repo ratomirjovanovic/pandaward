@@ -544,6 +544,12 @@ func semgrep() Adapter {
 				// rule still counts, as low at most. Nothing is dropped, since a
 				// hint that is noise in one project can be real in another.
 				sev := sevFrom(r.Extra.Severity)
+				// A bundled rule for dynamic evaluation cannot see that the
+				// file is a shipped library (#509); as in the built-in check
+				// such a result is listed as information.
+				if lastSegment(r.CheckID) == "pandaward-js-eval" && IsVendoredPath(filepath.ToSlash(relPath(c.Root, r.Path))) {
+					sev = model.SevInfo
+				}
 				if !strings.HasPrefix(lastSegment(r.CheckID), "pandaward-") && strings.EqualFold(r.Extra.Metadata.Confidence, "low") {
 					switch {
 					case hasValue(r.Extra.Metadata.Subcategory, "audit"):
