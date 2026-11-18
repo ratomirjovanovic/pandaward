@@ -25,6 +25,10 @@ func TestHTMLSinkProvenSafe(t *testing.T) {
 	}{
 		{"whole string literal over several lines", map[string]string{
 			"src/app/page.tsx": "export const A = () => (\n  <script\n    type=\"text/plain\"\n    dangerouslySetInnerHTML={{\n      __html:\n        \"window.dataLayer=window.dataLayer||[];\",\n    }}\n  />\n)\n"}, false},
+		{"angular bypass through a sanitizer property", map[string]string{
+			"src/app/page.tsx": "export class A {\n  show(m: string) {\n    this.html.set(this.sanitizer.bypassSecurityTrustHtml(m));\n  }\n}\n"}, true},
+		{"innerHTML of a sanitize call", map[string]string{
+			"src/app/page.tsx": "export function A(el: HTMLElement, m: string) {\n  el.innerHTML = sanitizeHtml(m);\n}\n"}, false},
 		{"text/plain script with a dynamic value", map[string]string{
 			"src/app/page.tsx": "export const A = ({ code }) => <script type=\"text/plain\" dangerouslySetInnerHTML={{ __html: code }} />\n"}, true},
 		{"template with interpolation", map[string]string{

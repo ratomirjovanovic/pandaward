@@ -7,6 +7,9 @@
 # first parameter and the response (express.response) as its second.
 
 sources:
+  # NestJS routes: a string returned by a handler is sent as HTML.
+  route_decorators: [Get, Post, Put, Patch, Delete, All, Head, Options]
+  html_return_frameworks: ["@nestjs/common"]
   # NestJS: a parameter bound from the request by a decorator.
   param_annotations: [Query, Body, Param, Headers, Cookies, UploadedFile, UploadedFiles, Ip, HostParam]
   attributes:
@@ -110,6 +113,15 @@ sinks:
     fix: Never evaluate input. Parse it as data (JSON.parse) or map it through a lookup table.
     calls: [eval, Function#*, setTimeout, setInterval, vm.runInNewContext, vm.runInThisContext, vm.runInContext, vm.compileFunction, vm.Script]
 
+  - id: taint.js-template-injection
+    kind: code
+    control: D-001
+    cwe: "CWE-1336"
+    title: Template source built from untrusted input
+    message: Input is compiled as a template, and template languages evaluate expressions, so the client can run code on the server (server-side template injection).
+    fix: Compile only templates the application owns and pass the input as data to render.
+    calls: [dot.template, doT.template, ejs.render, ejs.compile, pug.render, pug.compile, nunjucks.renderString, nunjucks.compile, lodash.template, _.template, handlebars.compile, Handlebars.compile]
+
   - id: taint.js-path-traversal
     kind: path
     control: D-006
@@ -199,6 +211,8 @@ sinks:
     title: Untrusted input written as HTML
     message: Input is written into the page as HTML, so a script in it runs in the user's browser.
     fix: Write it as text (textContent, a template that escapes) or sanitize it with DOMPurify first.
+    # A NestJS handler returns a string as the body of the response.
+    handler_return: true
     calls: [document.write, document.writeln, $, jQuery, express.response.send, express.response.write, express.response.end]
     methods: [insertAdjacentHTML#1, html#0, append#0, prepend#0, after#0, before#0, replaceWith#0]
     method_receivers:
@@ -229,6 +243,9 @@ sinks:
     title: Redirect target built from untrusted input
     message: Input chooses where the user is redirected, so a link can send users to another site.
     fix: Redirect only to relative paths or to an allowlist of hosts.
+    # A NestJS @Redirect() handler returns {url}.
+    handler_decorator: Redirect
+    handler_field: url
     # res.redirect(url), and ctx.redirect or this.redirect in Koa
     calls: [express.response.redirect, express.request.redirect, this.redirect, next/server.NextResponse.redirect, NextResponse.redirect]
     methods: [redirect#0]

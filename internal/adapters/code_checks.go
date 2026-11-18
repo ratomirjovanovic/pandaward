@@ -62,7 +62,7 @@ func definesOwnExec(text string) bool {
 
 var (
 	htmlSinkRe   = regexp.MustCompile(`dangerouslySetInnerHTML|\.(inner|outer)HTML\s*=[^=]|document\.write(ln)?\s*\(|\bv-html\s*=|\bmark_safe\s*\(|\bhtml_safe\b|bypassSecurityTrust\w+\(`)
-	htmlSinkNot  = regexp.MustCompile(`(?i)DOMPurify|sanitize|escape|innerHTML\s*=\s*['"\x60]{2}|innerHTML\s*=\s*['"]\s*['"]|JSON\.stringify\(.*\)\s*\.replace\(\s*/</g\s*,`)
+	htmlSinkNot  = regexp.MustCompile(`(?i)DOMPurify|sanitize([^r]|r\w|$)|escape|innerHTML\s*=\s*['"\x60]{2}|innerHTML\s*=\s*['"]\s*['"]|JSON\.stringify\(.*\)\s*\.replace\(\s*/</g\s*,`)
 	htmlAssignRe = regexp.MustCompile(`\.(inner|outer)HTML\s*=([^=].*)$`)
 	constRHSRe   = regexp.MustCompile(`^\s*([A-Z][A-Z0-9_]*|'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|\x60[^\x60$]*\x60)\s*;?\s*(//.*)?$`)
 	literalRe    = regexp.MustCompile(`^('(?:[^'\\\n]|\\.)*'|"(?:[^"\\\n]|\\.)*"|\x60[^\x60]*\x60)\s*(as\s+const\s*)?(;|\r?\n|$)`)
