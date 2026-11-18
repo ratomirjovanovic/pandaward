@@ -4,6 +4,9 @@ All notable changes to PandaWard. Versions follow the release tags; each release
 
 ## [Unreleased]
 
+### Added
+- A PHP front end for the built-in taint engine (#513): its own lexer and parser (superglobals, string and heredoc interpolation, functions, classes, closures, control flow including the alternative syntax and templates) lower to the shared IR, with a specification in `rules/taint/php.yaml` for command, code, SQL, file inclusion and path, LDAP, SSRF, redirect or header, deserialization and HTML sinks. Each file is analyzed alone: an `include` is a sink and is not followed, so output that another file produces (DVWA builds `$html` in the module and prints it in `index.php`) is not found. A first version, checked on DVWA only and not benchmarked, so the language table calls it experimental. Known false positives on its safe level: a numeric check on elements of an exploded array, and a file extension compared with constants.
+
 ## [0.2.17] - 2026-11-18
 
 ### Added

@@ -1211,6 +1211,15 @@ func (e *Engine) namedCall(names []string) bool {
 // javascript reports that the module being analyzed is JavaScript or
 // TypeScript, where a name nothing declares is a global of the page or of
 // the runtime.
+// php reports that the module being analyzed is PHP.
+func (f *fnRun) php() bool {
+	switch path.Ext(f.mod.Path) {
+	case ".php", ".phtml", ".php3", ".php4", ".php5", ".php7", ".inc", ".phps":
+		return true
+	}
+	return false
+}
+
 func (f *fnRun) javascript() bool {
 	switch path.Ext(f.mod.Path) {
 	case ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts", ".vue", ".svelte":

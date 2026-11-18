@@ -466,6 +466,7 @@ Language coverage today:
 | Language | What PandaWard does |
 |---|---|
 | JavaScript, TypeScript, Python, Java | data flow analysis across files, ReDoS (JavaScript and TypeScript), benchmarked |
+| PHP (experimental) | data flow analysis inside one file, first version, checked on DVWA only and not benchmarked; includes are not followed |
 | Go and other languages | inventory, secrets, dependencies and the bundled Semgrep or Opengrep rules; no data flow analysis |
 
 Next, in this order, and each claimed only once it is measured:
