@@ -175,7 +175,14 @@ func (f *fnRun) callResolved(c *call, st State) *Value {
 
 	for _, n := range c.names {
 		if f.e.srcCalls[n] {
-			return f.source(line, "")
+			r := f.source(line, "")
+			// A source can be safe for some kinds: the path of a request
+			// URL for redirects.
+			if k := f.e.spec.Sanitizes(n); k != 0 && r.T != nil {
+				r = r.copy()
+				r.Safe |= k
+			}
+			return r
 		}
 	}
 	for _, n := range c.names {

@@ -256,6 +256,12 @@ sanitizers:
     calls:
       - net.url.QueryEscape
       - net.url.PathEscape
+  # The path of a request URL has no scheme or host, and http.Redirect cleans
+  # a path, so it cannot become an address on another site.
+  - kinds: [redirect]
+    calls:
+      - net.url.URL.field_Path
+      - net.url.URL.field_RawPath
   # "/" + strings.Trim(path, "/") cannot start with //
   - kinds: [redirect]
     calls:
