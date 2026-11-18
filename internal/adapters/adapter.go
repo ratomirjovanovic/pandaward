@@ -189,6 +189,19 @@ func IsTestPath(p string) bool {
 	return strings.Contains(l, ".test.") || strings.Contains(l, ".spec.") || strings.HasSuffix(l, "_test.go") || strings.HasPrefix(path_base(l), "test_")
 }
 
+// IsVendoredPath reports whether a path looks like third-party or bundled
+// browser code that a project ships rather than writes: vendor and
+// third-party directories, static asset and build output directories.
+func IsVendoredPath(p string) bool {
+	l := "/" + strings.ToLower(strings.ReplaceAll(p, "\\", "/"))
+	for _, s := range []string{"/vendor/", "/vendors/", "/third_party/", "/third-party/", "/thirdparty/", "/bower_components/", "/node_modules/", "/static/", "/dist/", "/assets/", "/public/js/", "/wwwroot/lib/"} {
+		if strings.Contains(l, s) {
+			return true
+		}
+	}
+	return false
+}
+
 func path_base(p string) string {
 	if i := strings.LastIndex(p, "/"); i >= 0 {
 		return p[i+1:]

@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -175,5 +176,59 @@ func TestCodeRuleOneSignalPerLine(t *testing.T) {
 	}
 	if n != 1 {
 		t.Fatalf("code.js-shell reported %d times, want 1", n)
+	}
+}
+
+// Round 1 of the real-application scan (#509): dynamic code evaluation of a
+// constant, or inside bundled third-party browser code, is listed as
+// information; evaluation of a variable in the project's own code stays high.
+func TestJSEvalDemotion(t *testing.T) {
+	sigs := runOn(t, codeAdapter{}, map[string]string{
+		"src/own.js":                "eval(req.body.expr);\n",
+		"src/const.js":              "eval(\"require\");\nvar f = new Function('a', 'b', 'return a + b');\n",
+		"app/static/loader.js":      "eval(code);\n",
+		"web/vendor/menu.js":        "eval(tl + '.x');\n",
+		"src/dist-not-a-dir/own.js": "eval(userInput);\n",
+	})
+	sev := map[string]model.Severity{}
+	for _, s := range sigs {
+		if s.RuleID == "code.js-eval" {
+			sev[s.File+":"+itoaLine(s.StartLine)] = s.Severity
+		}
+	}
+	if sev["src/own.js:1"] != model.SevHigh || sev["src/dist-not-a-dir/own.js:1"] != model.SevHigh {
+		t.Errorf("own code must stay high: %v", sev)
+	}
+	for _, k := range []string{"src/const.js:1", "src/const.js:2", "app/static/loader.js:1", "web/vendor/menu.js:1"} {
+		if sev[k] != model.SevInfo {
+			t.Errorf("%s must be information, got %q (%v)", k, sev[k], sev)
+		}
+	}
+}
+
+func itoaLine(n int) string { return strconv.Itoa(n) }
+
+func TestIsVendoredPath(t *testing.T) {
+	for p, want := range map[string]bool{
+		"app/static/loader.js": true, "web/vendor/x.js": true, `a\static\b.js`: true, "dist/app.js": true,
+		"src/routes/a.js": false, "src/staticfiles.js": false, "lib/insecurity.ts": false,
+	} {
+		if IsVendoredPath(p) != want {
+			t.Errorf("IsVendoredPath(%q) = %v", p, !want)
+		}
+	}
+}
+
+// #510: verify=False on a JWT call is a signature check, not TLS.
+func TestTLSVerifyOffIgnoresJWT(t *testing.T) {
+	sigs := runOn(t, codeAdapter{}, map[string]string{
+		"a.py": "decoded = jwt.decode(token, verify = False)\n",
+		"b.py": "r = requests.get(url, verify=False)\n",
+	})
+	if firedOn(sigs, "code.tls-verify-off", "a.py") {
+		t.Error("jwt.decode(verify=False) is not a TLS finding")
+	}
+	if !firedOn(sigs, "code.tls-verify-off", "b.py") {
+		t.Error("requests verify=False must stay a TLS finding")
 	}
 }
