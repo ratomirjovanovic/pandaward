@@ -10,24 +10,54 @@ import (
 // Parse lowers a PHP file to the IR and counts the statements it could not
 // understand (each skipped up to its end).
 func Parse(path, src string) (*ir.Module, int) {
-	m, errs := parse(path, src)
-	return m, len(errs)
+	m, errs := parse(path, src, nil)
+	return m, len(errs.lines)
+}
+
+// ParseEnv is Parse with the project's other files: an include whose path
+// can be resolved is lowered in place, in the scope of the including file
+// (a PHP include runs in it). The lines of an included file are those of
+// the file plus Slot times its number, in the order of the returned paths.
+func ParseEnv(path, src string, env *Env) (*ir.Module, int, []string) {
+	m, errs := parse(path, src, env)
+	return m, len(errs.lines), errs.slots
+}
+
+// Slot is the line offset of each included file.
+const Slot = 10000
+
+// Source is a file an include can name.
+type Source struct{ Path, Src string }
+
+// Env resolves includes. Include returns the files a path may name: seg is
+// a literal piece of it, at its end (dynamic false) or before a part that
+// is not known (dynamic true, so any file of that directory).
+type Env struct {
+	Include func(seg string, dynamic bool) []Source
+}
+
+type parsed struct {
+	lines []int
+	slots []string
 }
 
 // parse is Parse with the line of each statement it could not understand.
-func parse(path, src string) (*ir.Module, []int) {
-	p := &parser{toks: lex(src, 1, false), mod: &ir.Module{Path: path}}
+func parse(path, src string, env *Env) (*ir.Module, parsed) {
+	p := &parser{toks: lex(src, 1, false), mod: &ir.Module{Path: path}, env: env, stack: []string{path}}
 	p.mod.Init = p.function("<module>", ir.Pos{Line: 1, Col: 1}, nil, "", nil, false, func() {
 		for p.peek().k != tEOF {
 			p.stmt()
 		}
 	})
-	return p.mod, p.errlines
+	return p.mod, parsed{p.errlines, p.slots}
 }
 
 type loopT struct{ cont, exit *ir.Block }
 
 type parser struct {
+	env      *Env
+	stack    []string // files being included
+	slots    []string // included files, by slot number - 1
 	toks     []token
 	p        int
 	mod      *ir.Module

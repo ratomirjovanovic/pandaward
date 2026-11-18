@@ -249,3 +249,6 @@ guards:
       - is_integer
   - kinds: [all]
     allowlist: true
+  # a value equal to a constant of the program is that constant
+  - kinds: [all]
+    eq_const: true

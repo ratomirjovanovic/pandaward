@@ -86,9 +86,42 @@ func (p *parser) exprBP(minBP int) ir.Operand {
 			if op == "." {
 				name = "+"
 			}
+			if (op == "==" || op == "===" || op == "!=" || op == "!==") && (right.Const != nil || left.Const != nil) {
+				// strtolower($x) == 'jpg' constrains $x as well
+				left, right = p.unwrapCase(left), p.unwrapCase(right)
+			}
 			left = p.value(ir.Bin, pos, name, left, right)
 		}
 	}
+}
+
+// unwrapCase returns the argument of the case or space normalization that
+// produced op in the current block, or op.
+func (p *parser) unwrapCase(op ir.Operand) ir.Operand {
+	if op.Var == "" || p.cur == nil {
+		return op
+	}
+	find := func(dst string) *ir.Instr {
+		for i := len(p.cur.Instrs) - 1; i >= 0; i-- {
+			if p.cur.Instrs[i].Dst == dst {
+				return p.cur.Instrs[i]
+			}
+		}
+		return nil
+	}
+	in := find(op.Var)
+	if in == nil || in.Op != ir.Call || len(in.Args) != 1 || in.Name != "" {
+		return op
+	}
+	name := in.A.Var // at module level a function is named directly
+	if fn := find(in.A.Var); fn != nil && fn.Op == ir.Free {
+		name = fn.Name
+	}
+	switch strings.ToLower(name) {
+	case "strtolower", "strtoupper", "trim", "mb_strtolower", "mb_strtoupper":
+		return in.Args[0]
+	}
+	return op
 }
 
 func (p *parser) shortCircuit(op string, left ir.Operand, bp int, pos ir.Pos) ir.Operand {
@@ -252,7 +285,12 @@ func (p *parser) unary() ref {
 			return val(p.callFree(pos, "print", p.exprBP(bpAssign)))
 		case "include", "include_once", "require", "require_once":
 			p.next()
-			return val(p.callFree(pos, strings.ToLower(t.s), p.exprBP(bpAssign)))
+			start := p.p
+			arg := p.exprBP(bpAssign)
+			end := p.p
+			r := p.callFree(pos, strings.ToLower(t.s), arg)
+			p.splice(start, end)
+			return val(r)
 		case "yield":
 			p.next()
 			if p.isOp(";") || p.isOp(")") || p.isOp(",") {
