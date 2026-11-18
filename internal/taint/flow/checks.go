@@ -28,6 +28,15 @@ func (f *fnRun) valueCheck(fn *ir.Function, val func(ir.Operand) *Value, d *ir.I
 			if strictRegex(val(re)) {
 				return subject, g.Kinds, true
 			}
+		case g.EqConst && d.Op == ir.Bin && (d.Name == "==" && edge || d.Name == "!=" && !edge):
+			// a value equal to a constant of the program is that constant
+			a, b := d.A, d.B
+			if sc := val(a); sc.C != nil && (sc.C.Kind == ir.Str || sc.C.Kind == ir.Int) {
+				a, b = b, a
+			}
+			if sb := val(b); sb.C != nil && (sb.C.Kind == ir.Str || sb.C.Kind == ir.Int) && a.Var != "" {
+				return a, g.Kinds, true
+			}
 		case g.Allowlist && d.Op == ir.Call && d.Name == "includes" && len(d.Args) == 1 && edge:
 			if constant(val(d.A)) && val(d.A).C == nil {
 				return d.Args[0], g.Kinds, true
