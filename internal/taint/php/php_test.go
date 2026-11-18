@@ -64,7 +64,7 @@ func TestFlows(t *testing.T) {
 		{"heredoc", "<?php\n$n = $_GET['n'];\necho <<<EOT\nHello $n\nEOT;\n", "xss:3"},
 		{"template", "<html><?php $n = $_GET['n']; ?>\n<p><?php echo $n; ?></p>\n", "xss:2"},
 		{"short echo", "<?php $n = $_GET['n']; ?>\n<p><?= $n ?></p>\n", "xss:2"},
-		{"switch", "<?php\n$o = $_GET['o'];\nswitch ($o) {\n  case 'a':\n    echo $o;\n    break;\n  default:\n    break;\n}\n", "xss:5"},
+		{"switch", "<?php\n$o = $_GET['o'];\nswitch ($o) {\n  case 'a':\n    echo $o;\n    break;\n  default:\n    echo $o;\n}\n", "xss:8"},
 		{"try catch", "<?php\ntry {\n  echo $_GET['t'];\n} catch (Exception $e) {\n  echo 'x';\n}\n", "xss:3"},
 		{"closure", "<?php\n$f = function($s) { echo $s; };\n$f($_GET['c']);\n", "xss:2"},
 		{"arrow", "<?php\n$n = $_GET['n'];\n$f = fn($s) => print($n);\n$f(1);\n", "xss:3"},
@@ -96,6 +96,8 @@ func TestGuards(t *testing.T) {
 		{"numeric value", "<?php\n$id = $_GET['id'];\nif (is_numeric($id)) {\n  mysqli_query($c, \"SELECT * FROM u WHERE id = $id\");\n}\n", ""},
 		{"numeric else", "<?php\n$id = $_GET['id'];\nif (!is_numeric($id)) {\n  die('x');\n}\nmysqli_query($c, \"SELECT * FROM u WHERE id = $id\");\n", ""},
 		{"not checked", "<?php\n$id = $_GET['id'];\nif (strlen($id) > 0) {\n  mysqli_query($c, \"SELECT * FROM u WHERE id = $id\");\n}\n", "sql:4"},
+		{"case folded allowlist", "<?php\n$e = $_GET['e'];\nif (strtolower($e) == 'jpg' || strtolower($e) == 'png') {\n  mysqli_query($c, \"SELECT * FROM u WHERE e = '$e'\");\n}\n", ""},
+		{"case folded other value", "<?php\n$e = $_GET['e'];\nif (strtolower($e) != 'jpg') {\n  mysqli_query($c, \"SELECT * FROM u WHERE e = '$e'\");\n}\n", "sql:4"},
 		{"server is not a source", "<?php\nheader($_SERVER['SERVER_PROTOCOL'] . ' 404 Not Found');\n", ""},
 	} {
 		if got := strings.Join(analyze(t, c.src), " "); got != c.want {
