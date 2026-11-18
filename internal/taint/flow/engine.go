@@ -26,11 +26,14 @@ type sinkTarget struct {
 
 // Engine analyzes modules against one specification.
 type Engine struct {
-	spec         *taint.Spec
-	calls        map[string][]sinkTarget
-	methods      map[string][]sinkTarget
-	stores       map[string]*taint.Sink
-	handlerSink  *taint.Sink
+	spec        *taint.Spec
+	calls       map[string][]sinkTarget
+	methods     map[string][]sinkTarget
+	stores      map[string]*taint.Sink
+	handlerSink *taint.Sink
+	// protoSink is the sink of kind proto: a store into an object that
+	// was selected by a key from the input, with a key from the input.
+	protoSink    *taint.Sink
 	srcAttrs     map[string]bool
 	srcCalls     map[string]bool
 	params       map[string]bool
@@ -110,6 +113,9 @@ func New(spec *taint.Spec) *Engine {
 		}
 		if s.HandlerReturn {
 			e.handlerSink = s
+		}
+		if s.Kind == taint.Proto {
+			e.protoSink = s
 		}
 		if s.RequiresFlag != nil {
 			for _, m := range s.RequiresFlag.Setter {
@@ -732,6 +738,9 @@ func (f *fnRun) instr(in *ir.Instr, st State) {
 			}
 			v := f.val(st, in.B)
 			if f.report {
+				if f.e.protoSink != nil && base.Fields["!protokey"] != nil && v.tainted(taint.Proto) && !f.guardsProto() {
+					f.found(f.e.protoSink, line, v) // o[key].name = value
+				}
 				f.weakStore(in.Name, v, line)
 				f.propSinks(in, f.val(st, in.A), v)
 				f.export(base.Q, in.Name, v)
@@ -891,6 +900,15 @@ func (f *fnRun) index(in *ir.Instr, st State) *Value {
 		r = r.copy()
 		r.Q = base.Q + "[" + k.C.Val + "]"
 	}
+	if k.C == nil && k.tainted(taint.Proto) && f.e.protoSink != nil {
+		// o[key]: with key __proto__ this is Object.prototype, so a store
+		// into the result is a store into it (a flag, kept by joins).
+		r = r.copy()
+		if r.Fields == nil {
+			r.Fields = map[string]*Value{}
+		}
+		r.Fields["!protokey"] = &Value{}
+	}
 	return r
 }
 
@@ -927,6 +945,17 @@ func pySlice(s string, lo, hi int) string {
 	return string(r[lo:hi])
 }
 
+// guardsProto reports a module that names __proto__ or checks own
+// properties: its stores are taken to skip the dangerous keys.
+func (f *fnRun) guardsProto() bool {
+	for _, l := range f.lines {
+		if strings.Contains(l, "__proto__") || strings.Contains(l, "hasOwnProperty") || strings.Contains(l, "Object.create(null)") || strings.Contains(l, "hasOwn(") {
+			return true
+		}
+	}
+	return false
+}
+
 func (f *fnRun) setIndex(in *ir.Instr, st State) {
 	base := f.val(st, in.A)
 	k := f.val(st, in.B)
@@ -938,6 +967,10 @@ func (f *fnRun) setIndex(in *ir.Instr, st State) {
 		if _, ok := f.e.stores[base.Q]; ok {
 			f.weakSession(v, in.Pos.Line)
 		}
+	}
+	if f.report && f.e.protoSink != nil && base.Fields["!protokey"] != nil && k.C == nil && k.tainted(taint.Proto) && v.tainted(taint.Proto) &&
+		!f.guardsProto() {
+		f.found(f.e.protoSink, in.Pos.Line, k)
 	}
 	if s, ok := f.e.stores[base.Q]; ok && f.report {
 		if k.tainted(s.Kind) && !(s.TextOnly && k.Opaque) {
