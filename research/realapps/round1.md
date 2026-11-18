@@ -70,3 +70,13 @@ What it does not find, and why:
 - cryptography, weak session ids, DOM XSS and the JavaScript module: no sink the engine knows.
 
 False positives on the safe (`impossible`) level, two files: `exec/impossible.php` checks each array element with `is_numeric` before joining them, and the engine does not relate the check on `$octet[0]` to the later read of it; `upload/impossible.php` compares the file extension with constants and builds a random name, and the comparison is not understood as a guard. Both are findings that should not be there.
+
+## PHP taint front end on DVWA (#513)
+
+PandaWard now has its own PHP parser and data flow in front of the shared engine (a first version). On DVWA (pinned commit, 168 PHP files, none skipped by the parser) it reports 40 flows: 12 path (file functions), 11 SQL, 8 command, 4 HTML, 3 redirect and 2 code. They add the flow from request input to the sink to findings the line rules already listed (SQL in sqli, sqli_blind, brute and bac, open redirect) and find the command injection of the exec module, which no line rule covered. Counted per module with at least one code-level finding (secret, container, lockfile and HTML-sink findings left out), 14 of the 19 vulnerability modules have one; this count is not the one of the PHP line rules above, which also counted lower-severity findings.
+
+What it does not find, and why:
+- reflected and stored XSS, file inclusion and CSRF: the DVWA source files only build `$html` or set `$file`, and the page that prints or includes it is `index.php`. Each file is analyzed alone, so these flows cross a file boundary the engine does not follow yet.
+- cryptography, weak session ids, DOM XSS and the JavaScript module: no sink the engine knows.
+
+False positives on the safe (`impossible`) level, two files: `exec/impossible.php` checks each array element with `is_numeric` before joining them, and the engine does not relate the check on `$octet[0]` to the later read of it; `upload/impossible.php` compares the file extension with constants and builds a random name, and the comparison is not understood as a guard. Both are findings that should not be there.
