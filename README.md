@@ -460,6 +460,7 @@ Released as of 0.2.17:
 - A built-in data flow (taint) engine for JavaScript, TypeScript, Python and Java, with no other analyzer needed, and ReDoS detection.
 - `pandaward verify-report`, the `pandaward_verify_report` MCP tool and a Stop hook check that catch an agent claiming PASS for a control the ledger does not have as PASS.
 - Public benchmarks measured on every change: OWASP Benchmark for Java and Python, OpenSSF CVE Benchmark for JavaScript and TypeScript ([pandaward.dev/benchmarks](https://pandaward.dev/benchmarks/)).
+- One independent measurement on code the engines were never tuned on: Snyk VulnBench 2.0, 108 attacker-reachable vulnerabilities in 20 real applications. Built-in only, PandaWard located 55 (51%, 95% interval 42% to 60%), far below its OWASP scores, which are development benchmarks. Go (9 of 32) is the largest gap. Protocol, per-case results and limits are in [research/vulnbench](research/vulnbench).
 
 Language coverage today:
 
