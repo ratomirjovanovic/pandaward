@@ -34,3 +34,7 @@ An agent read each finding with the cited source and proposed a verdict. Every r
 - Recall: the authors' own lists of vulnerabilities were not compared with the findings, so misses are not counted yet.
 - General accuracy: these applications are vulnerable on purpose, so a high finding is often real. Ordinary projects come in a second round with its own published list and the projects' disclosure policies.
 - The sample of opened findings is small (6), so the verdicts of the agent that were not changed are still unverified in the source.
+
+## Module-level recall on DVWA (#513)
+
+DVWA has one directory per vulnerability. Before the PHP line rules, PandaWard reported findings in 7 of the 19 vulnerability directories and most of those were secret or HTML sink noise. The PHP rules (SQL built by variable interpolation, request input in HTML, include and redirect from request input, uploads) bring that to findings in 16 of 19, with 35 new findings, all in the low, medium and high levels and none in the `impossible` level, which is the safe version. The three directories without a finding are file inclusion (the request variable is set in one file and included in another), cryptography and weak session ids. Findings are hypotheses at high or medium; they were checked by reading a few of them, not all 35. Stored XSS, CSRF, brute force and access control are not decided by a line rule; they need a PHP data flow front end.
