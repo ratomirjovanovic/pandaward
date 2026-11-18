@@ -702,3 +702,37 @@ func phpIncludesRequestInput(line, text string) bool {
 	}
 	return false
 }
+
+// #515: NoSQL $where built from a template string or by concatenation, and
+// template engines configured without escaping.
+var (
+	jsNoSQLWhereRe          = regexp.MustCompile(`\$where\s*:\s*(\x60[^\x60]*\$\{|['"][^'"]*['"]\s*\+|\w+\s*\+)`)
+	templateAutoescapeOffRe = regexp.MustCompile(`(?i)\bautoescape\s*[:=]\s*(false|False)\b`)
+)
+
+var (
+	whereVarRe  = regexp.MustCompile(`\$\{\s*([A-Za-z_]\w*)\s*\}|\+\s*([A-Za-z_]\w*)\b`)
+	numericCast = `(?:Number|parseInt|parseFloat|Math\.\w+)\s*\(|\+\s*\w`
+)
+
+// jsWhereNotNumeric is true unless every variable in the $where text is set
+// from a numeric conversion in the same file: a number cannot carry code.
+func jsWhereNotNumeric(line, text string) bool {
+	vars := map[string]bool{}
+	for _, m := range whereVarRe.FindAllStringSubmatch(line, -1) {
+		if m[1] != "" {
+			vars[m[1]] = true
+		} else if m[2] != "" {
+			vars[m[2]] = true
+		}
+	}
+	if len(vars) == 0 {
+		return true
+	}
+	for v := range vars {
+		if !regexp.MustCompile(`\b` + regexp.QuoteMeta(v) + `\s*=\s*(?:` + numericCast + `)`).MatchString(text) {
+			return true
+		}
+	}
+	return false
+}
