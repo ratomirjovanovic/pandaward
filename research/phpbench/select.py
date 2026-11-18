@@ -14,7 +14,7 @@ COMMIT = re.compile(r"^https://github\.com/([^/]+/[^/]+)/commit/([0-9a-f]{7,40})
 
 
 def api(path):
-    out = subprocess.run(["gh", "api", path], capture_output=True, text=True)
+    out = subprocess.run(["gh", "api", path], capture_output=True, text=True, encoding="utf-8", errors="replace")
     return json.loads(out.stdout) if out.returncode == 0 else None
 
 
