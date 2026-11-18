@@ -216,6 +216,8 @@ func (l *lowerer) function(name string, line int, params []Expr, body []Stmt, ex
 		ann := ""
 		if id, ok := p.(*Ident); ok && (id.Type == "Request" || id.Type == "NextRequest") {
 			ann = id.Type
+		} else if ok && id.Type != "" && id.Type[0] >= 'A' && id.Type[0] <= 'Z' {
+			ann = id.Type // a class: constructor injection
 		}
 		fn.Params = append(fn.Params, ir.Param{Name: pname, Kind: kind, Ann: ann, Pos: at(p.Ln())})
 	}
@@ -1379,6 +1381,16 @@ func (l *lowerer) class(c *Class) ir.Operand {
 		}
 		stmts = append(stmts, f.Body...)
 		fn := l.function(name+"."+mname, f.Line, f.Params, stmts, f.ExprBody, body, name, false)
+		for _, d := range f.Decorators {
+			fn.Decorators = append(fn.Decorators, ir.Decorator{Name: d.Name, Call: d.Call, Args: d.Args})
+		}
+		for i, ds := range f.ParamDecorators {
+			for _, d := range ds {
+				if j := i + 1; j < len(fn.Params) {
+					fn.Params[j].Decorators = append(fn.Params[j].Decorators, ir.Decorator{Name: d.Name, Call: d.Call, Args: d.Args})
+				}
+			}
+		}
 		if m.Static {
 			fn.Decorators = append(fn.Decorators, ir.Decorator{Name: "staticmethod"})
 			fn.Params = fn.Params[1:]

@@ -62,13 +62,15 @@ func flowPragma(src string) bool {
 }
 
 type parser struct {
-	lx    *lexer
-	src   string
-	tok   Token
-	ts    bool
-	jsx   bool
-	errs  []Error
-	depth int
+	// paramDecs are the decorators of the parameters last parsed.
+	paramDecs [][]Decorator
+	lx        *lexer
+	src       string
+	tok       Token
+	ts        bool
+	jsx       bool
+	errs      []Error
+	depth     int
 	// noIn forbids the in operator (the init clause of a for loop).
 	noIn bool
 	// inGen and inAsync are set inside generator and async functions;
@@ -602,11 +604,42 @@ func (p *parser) switchStmt() Stmt {
 	return s
 }
 
-// decorators skips @expr decorators.
-func (p *parser) decorators() {
+// decorators parses @expr decorators and returns their names and constant
+// string arguments.
+func (p *parser) decorators() []Decorator {
+	var out []Decorator
 	for p.eat("@") {
-		p.lhs(true)
+		out = append(out, decoratorOf(p.lhs(true)))
 	}
+	return out
+}
+
+// decoratorOf describes a decorator expression: a name or a call of one.
+func decoratorOf(e Expr) Decorator {
+	var d Decorator
+	if c, ok := e.(*Call); ok {
+		d.Call = true
+		for _, a := range c.Args {
+			if l, ok := a.(*Lit); ok && l.Kind == TString {
+				d.Args = append(d.Args, l.Val)
+			}
+		}
+		e = c.Callee
+	}
+	var parts []string
+	for {
+		switch x := e.(type) {
+		case *Member:
+			parts = append([]string{x.Prop}, parts...)
+			e = x.Obj
+			continue
+		case *Ident:
+			parts = append([]string{x.Name}, parts...)
+		}
+		break
+	}
+	d.Name = strings.Join(parts, ".")
+	return d
 }
 
 func (p *parser) importDecl() Stmt {
@@ -940,8 +973,10 @@ func (p *parser) params() ([]Expr, []string) {
 	defer func() { p.noIn = noIn }()
 	var list []Expr
 	var props []string
+	var decs [][]Decorator
+	defer func() { p.paramDecs = decs }()
 	for !p.eat(")") {
-		p.decorators()
+		decs = append(decs, p.decorators())
 		isProp := false
 		if p.ts {
 			for p.tok.Kind == TIdent && tsParamModifiers[p.tok.Val] {
@@ -954,6 +989,7 @@ func (p *parser) params() ([]Expr, []string) {
 			}
 			if p.isWord("this") {
 				if nt := p.peek(); isPunct(nt, ":") {
+					decs = decs[:len(decs)-1]
 					p.next()
 					p.next()
 					p.skipType()
@@ -1030,6 +1066,7 @@ func (p *parser) funcRest(f *Func) []string {
 	}
 	var props []string
 	f.Params, props = p.params()
+	f.ParamDecorators = p.paramDecs
 	if p.ts && p.eat(":") {
 		p.skipReturnType()
 	}
@@ -1120,7 +1157,7 @@ func isKeyStart(t Token) bool {
 }
 
 func (p *parser) member() *ClassMember {
-	p.decorators()
+	decs := p.decorators()
 	m := &ClassMember{Pos: Pos{p.tok.Line}, Kind: "method"}
 	async, gen := false, false
 	kind := ""
@@ -1176,6 +1213,7 @@ func (p *parser) member() *ClassMember {
 	if p.is("(") || p.is("<") {
 		f := &Func{Pos: m.Pos, Name: m.Key, Async: async, Generator: gen}
 		m.ParamProps = p.funcRest(f)
+		f.Decorators = decs
 		m.Value = f
 		switch {
 		case kind != "":

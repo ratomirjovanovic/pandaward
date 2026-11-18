@@ -145,6 +145,8 @@ type run struct {
 	html bool
 	// done are the functions analyzed as roots.
 	done map[*ir.Function]bool
+	// ctor are the instances the constructors of classes build.
+	ctor map[*ir.Function]*Value
 }
 
 // Analyze returns the flows from sources to sinks in one module on its
@@ -265,11 +267,24 @@ func (r *run) root(fn *ir.Function) {
 	req, handler := r.e.requestParams(fn)
 	for _, p := range fn.Params {
 		v := &Value{Inst: p.Ann}
+		// A parameter typed with a class of the project (TypeScript, NestJS
+		// constructor injection) is an instance of it.
+		if p.Ann != "" && p.Name != "this" && isJSPath(r.mod.Path) {
+			if cls := r.p.classNamed(r, p.Ann); cls != nil {
+				if o := r.p.owner[cls]; o != nil {
+					v.Inst = className(o.mod, cls)
+				}
+			}
+		}
 		// this of a JavaScript method: the instance of its class, named as
 		// instances are, so scopes recorded in other analyses join.
 		if p.Name == "this" && p.Ann != "" {
 			if cn := className(r.mod, &ir.Function{Class: p.Ann}); r.p.classes[cn] != nil {
 				v.Inst = cn
+				if self := r.ctorSelf(r.p.classes[cn], cn); self != nil {
+					v = self.copy()
+					v.Inst = cn
+				}
 			}
 		}
 		if req[p.Name] {
@@ -1211,6 +1226,55 @@ func (e *Engine) namedCall(names []string) bool {
 // javascript reports that the module being analyzed is JavaScript or
 // TypeScript, where a name nothing declares is a global of the page or of
 // the runtime.
+// ctorSelf is the instance a class's constructor builds when its parameters
+// hold only what their declared types say (constructor injection, field
+// initializers): a method analyzed on its own starts from it, so
+// this.service.method() reaches the class the field was declared with.
+func (r *run) ctorSelf(class *ir.Function, cn string) *Value {
+	if v, ok := r.ctor[class]; ok {
+		return v
+	}
+	if r.ctor == nil {
+		r.ctor = map[*ir.Function]*Value{}
+	}
+	r.ctor[class] = nil
+	init := r.p.method(class, "__init__", 0)
+	owner := r.p.owner[class]
+	if init == nil || owner == nil || r.p.active[init] || !isJSPath(owner.mod.Path) {
+		return nil
+	}
+	entry := State{}
+	for _, p := range init.Params {
+		v := &Value{Inst: p.Ann}
+		if p.Name == "this" {
+			v.Inst = cn
+		} else if p.Ann != "" {
+			if cls := owner.p.classNamed(owner, p.Ann); cls != nil {
+				if o := owner.p.owner[cls]; o != nil {
+					v.Inst = className(o.mod, cls)
+				}
+			}
+		}
+		entry[p.Name] = v
+	}
+	r.p.active[init] = true
+	_, self, _ := owner.analyzeFn(init, entry, false)
+	delete(r.p.active, init)
+	if self != nil {
+		r.ctor[class] = self
+	}
+	return self
+}
+
+// isJSPath reports a JavaScript or TypeScript file.
+func isJSPath(p string) bool {
+	switch path.Ext(p) {
+	case ".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts", ".vue", ".svelte":
+		return true
+	}
+	return false
+}
+
 // isGo reports that the module being analyzed is Go.
 func (f *fnRun) isGo() bool { return path.Ext(f.mod.Path) == ".go" }
 

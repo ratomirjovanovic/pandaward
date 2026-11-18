@@ -122,6 +122,10 @@ type (
 		Arrow     bool
 		Async     bool
 		Generator bool
+		// Decorators are the decorators of a method (TypeScript, NestJS)
+		// and ParamDecorators those of each parameter, parallel to Params.
+		Decorators      []Decorator
+		ParamDecorators [][]Decorator
 	}
 	Class struct {
 		Pos
@@ -167,6 +171,14 @@ type ClassMember struct {
 	// ParamProps names the constructor parameters declared as properties
 	// (TypeScript `constructor(private x)`).
 	ParamProps []string
+}
+
+// Decorator is @Name or @Name(args): Args are its constant string
+// arguments.
+type Decorator struct {
+	Name string
+	Call bool
+	Args []string
 }
 
 // JSXAttr is name={value}, name="value", a bare name, or {...spread}
