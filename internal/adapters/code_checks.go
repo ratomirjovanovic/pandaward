@@ -473,17 +473,8 @@ var jsEvalConstRe = regexp.MustCompile(`(?:^|[^.\w])(?:eval\s*\(|new\s+Function\
 // injection by its own text (a constant) or that sits in bundled third-party
 // browser code. It is still listed, as information.
 func jsEvalDemote(c lineCtx) *demotion {
-	if jsEvalConstRe.MatchString(c.File.Lines[c.Index]) {
-		return &demotion{Title: "Dynamic code evaluation of a constant string",
-			Message: "The evaluated text is made only of literals, so nothing a user controls reaches it. It is listed for completeness.",
-			Fix:     "Nothing to do; replace it with a direct call if the code is yours."}
-	}
-	if IsVendoredPath(c.File.Path) {
-		return &demotion{Title: "Dynamic code evaluation in bundled or third-party JavaScript",
-			Message: "The file is in a vendor, static or build output directory, so it is most likely a library the project ships and not code it wrote. It is listed for review and does not decide the control.",
-			Fix:     "Keep the library up to date; review the call if the file is your own code."}
-	}
-	return nil
+	d, _ := jsEvalDemoteAt(c.File.Path, c.File.Lines, c.Index)
+	return d
 }
 
 func sqlForFileOnly(c lineCtx) *demotion {

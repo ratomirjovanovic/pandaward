@@ -155,7 +155,11 @@ func (c lineCtx) offset() int {
 }
 
 // demotion is the wording that replaces a demoted signal's own.
-type demotion struct{ Title, Message, Fix string }
+// demotion lowers a signal; Sev is the severity it gets, info when empty.
+type demotion struct {
+	Title, Message, Fix string
+	Sev                 model.Severity
+}
 
 func langs(ls ...string) map[string]bool {
 	m := map[string]bool{}

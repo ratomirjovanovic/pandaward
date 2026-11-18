@@ -321,7 +321,11 @@ func (a codeAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 					goStringDemote(&s)
 				} else if r.Demote != nil {
 					if d := r.Demote(lc); d != nil {
-						s.Severity, s.Confidence, s.Title, s.Message, s.Fix = model.SevInfo, model.Hypothesis, d.Title, d.Message, d.Fix
+						sev := d.Sev
+						if sev == "" {
+							sev = model.SevInfo
+						}
+						s.Severity, s.Confidence, s.Title, s.Message, s.Fix = sev, model.Hypothesis, d.Title, d.Message, d.Fix
 					}
 				}
 				res.Signals = append(res.Signals, s)
