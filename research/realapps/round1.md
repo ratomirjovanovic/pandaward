@@ -80,3 +80,5 @@ What it does not find, and why:
 - cryptography, weak session ids, DOM XSS and the JavaScript module: no sink the engine knows.
 
 False positives on the safe (`impossible`) level, two files: `exec/impossible.php` checks each array element with `is_numeric` before joining them, and the engine does not relate the check on `$octet[0]` to the later read of it; `upload/impossible.php` compares the file extension with constants and builds a random name, and the comparison is not understood as a guard. Both are findings that should not be there.
+
+Clean PHP projects, to see whether the PHP front end invents findings: Slim (72 PHP files) and Monolog (125 PHP files), both at their default branch on 2026-11-18, parse without skipped statements and give 0 PHP taint flows. Two libraries are a small sample and neither handles much request data, so this shows no false positives on them and says nothing about application code.
