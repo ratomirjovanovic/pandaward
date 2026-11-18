@@ -1,6 +1,7 @@
 package flow
 
 import (
+	"path"
 	"strconv"
 	"strings"
 
@@ -607,7 +608,11 @@ func (f *fnRun) sinks(c *call, st State) {
 			}
 			if truth, known := knownTruth(sh); !ok || !known || !truth {
 				// [shell, "-c", command, ...] runs command in a shell too.
-				if cmd := f.shellList(c, t.t.Arg); cmd != nil && cmd.tainted(s.Kind) {
+				cmd := f.shellList(c, t.t.Arg)
+				if cmd == nil {
+					cmd = f.shellArgv(c, t.t.Arg)
+				}
+				if cmd != nil && cmd.tainted(s.Kind) {
 					f.foundSpan(s, c.in.Pos, cmd.T)
 				}
 				continue
@@ -652,6 +657,32 @@ func (f *fnRun) shellList(c *call, arg int) *Value {
 	}
 	r := &Value{}
 	for _, e := range l.Elems[2:] {
+		r = mix(r, e)
+	}
+	return r
+}
+
+// shellArgv returns the command of spawn("sh", ["-c", cmd]): a shell named
+// by a constant and an argument list that starts with its command flag.
+func (f *fnRun) shellArgv(c *call, arg int) *Value {
+	if arg < 0 || arg+1 >= len(c.args) {
+		return nil
+	}
+	sh := c.args[arg]
+	if sh.C == nil || sh.C.Kind != ir.Str {
+		return nil
+	}
+	switch strings.ToLower(path.Base(strings.ReplaceAll(sh.C.Val, "\\", "/"))) {
+	case "sh", "bash", "zsh", "dash", "ksh", "cmd", "cmd.exe", "powershell", "powershell.exe", "pwsh":
+	default:
+		return nil
+	}
+	l := c.args[arg+1]
+	if !l.Known || len(l.Elems) < 2 || l.Elems[0].C == nil || !contains(f.e.spec.ShellFlags, l.Elems[0].C.Val) {
+		return nil
+	}
+	r := &Value{}
+	for _, e := range l.Elems[1:] {
 		r = mix(r, e)
 	}
 	return r

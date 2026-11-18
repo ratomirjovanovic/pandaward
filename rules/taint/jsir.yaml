@@ -7,6 +7,8 @@
 # first parameter and the response (express.response) as its second.
 
 sources:
+  # NestJS: a parameter bound from the request by a decorator.
+  param_annotations: [Query, Body, Param, Headers, Cookies, UploadedFile, UploadedFiles, Ip, HostParam]
   attributes:
     - express.request.query
     - express.request.body
@@ -319,3 +321,6 @@ guards:
     normalized: true
 
 normalizers: [path.resolve, path.normalize, fs.realpathSync]
+
+# the flag of a shell that runs a command string: spawn("sh", ["-c", cmd])
+shell_flags: ["-c", "/c", "/C"]

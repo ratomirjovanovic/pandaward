@@ -438,3 +438,39 @@ export function setup(app: any) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// TestJSNestDecorators checks that a NestJS parameter bound by a decorator
+// is a source and an undecorated one is not.
+func TestJSNestDecorators(t *testing.T) {
+	src := `import { exec } from 'child_process';
+class C {
+  constructor(private readonly n: number) {}
+  run(@Query('c') c: string) {
+    exec('echo ' + c);
+  }
+  safe(c: string) {
+    exec('echo ' + c);
+  }
+  both(@Body() b: string, @Req() r, other: string) {
+    exec(other);
+  }
+}`
+	if got := strings.Join(jsFlowsIn(t, "c.controller.ts", src), " "); got != "taint.js-command-injection:5" {
+		t.Errorf("got %q", got)
+	}
+}
+
+// TestJSSpawnShell checks that a command string passed to a shell with its
+// command flag is a command injection, and a fixed one is not.
+func TestJSSpawnShell(t *testing.T) {
+	src := `const { spawn } = require('child_process');
+function run(c) {
+  spawn('sh', ['-c', 'echo ' + c]);
+  spawn('ls', ['-l', c]);
+  spawn('sh', ['-c', 'echo fixed']);
+}
+module.exports = run;`
+	if got := strings.Join(jsFlows(t, src), " "); got != "taint.js-command-injection:3" {
+		t.Errorf("got %q", got)
+	}
+}
