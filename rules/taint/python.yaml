@@ -249,6 +249,24 @@ sinks:
       - starlette.responses.RedirectResponse
       - fastapi.responses.RedirectResponse
 
+  - id: taint.py-regex-dos
+    kind: regex
+    control: D-006
+    cwe: "CWE-1333"
+    title: Regular expression built from untrusted input
+    message: Input chooses the regular expression, so a crafted pattern can backtrack exponentially and block the process (ReDoS), or match what the code did not intend.
+    fix: Do not take a pattern from the client. Match with a fixed pattern, or escape the input with re.escape and bound its length.
+    calls:
+      - re.match
+      - re.search
+      - re.fullmatch
+      - re.compile
+      - re.findall
+      - re.finditer
+      - re.sub
+      - re.subn
+      - re.split
+
   - id: taint.py-ssrf
     kind: ssrf
     control: D-004
@@ -340,6 +358,8 @@ sinks:
     fix: Set secure=True and httponly=True (and samesite) when setting cookies that carry session or user data.
 
 sanitizers:
+  - kinds: [regex]
+    calls: [re.escape]
   - kinds: [all]
     calls: [int, float, bool, len, hash, id, ord, abs, round, isinstance, callable, uuid.UUID, ipaddress.ip_address, json.dumps]
     methods: [startswith, endswith, isdigit, isnumeric, isdecimal, isalpha, isalnum, isidentifier, isspace, islower, isupper, count, find, rfind, index, rindex, exists, is_file, is_dir]

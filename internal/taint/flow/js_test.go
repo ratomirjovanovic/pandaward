@@ -510,3 +510,25 @@ export function named() {
 		t.Errorf("got %q", got)
 	}
 }
+
+// TestJSRegexFromInput checks that a pattern from input is reported and a
+// constant or escaped one is not.
+func TestJSRegexFromInput(t *testing.T) {
+	src := `const _ = require('lodash');
+function a(req, res) {
+  const r = new RegExp(req.query.q);
+  res.send(String(r.test('x')));
+}
+function b(req, res) {
+  const r = new RegExp('^a+$');
+  res.send(String(r.test(req.query.q)));
+}
+function c(req, res) {
+  const r = new RegExp(_.escapeRegExp(req.query.q));
+  res.send(String(r.test('x')));
+}
+module.exports = { a, b, c };`
+	if got := strings.Join(jsFlows(t, src), " "); got != "taint.js-regex-dos:3" {
+		t.Errorf("got %q", got)
+	}
+}

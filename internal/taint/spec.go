@@ -41,12 +41,14 @@ const (
 	Cookie
 	// WeakCrypto is a broken cipher or mode (Java).
 	WeakCrypto
+	// Regex is a regular expression built from untrusted input.
+	Regex
 	// Shape marks checks found by the shape of the code alone.
 	Shape
 	All Kind = 1<<iota - 1
 )
 
-var kindByName = map[string]Kind{"cmd": Cmd, "code": Code, "path": Path, "sql": SQL, "xss": XSS, "ssrf": SSRF, "redirect": Redirect, "proto": Proto, "deser": Deser, "ldap": LDAP, "xpath": XPath, "trust": Trust, "xxe": XXE, "weakhash": WeakHash, "weakrandom": WeakRandom, "cookie": Cookie, "weakcrypto": WeakCrypto, "shape": Shape, "all": All}
+var kindByName = map[string]Kind{"cmd": Cmd, "code": Code, "path": Path, "sql": SQL, "xss": XSS, "ssrf": SSRF, "redirect": Redirect, "proto": Proto, "deser": Deser, "ldap": LDAP, "xpath": XPath, "trust": Trust, "xxe": XXE, "weakhash": WeakHash, "weakrandom": WeakRandom, "cookie": Cookie, "weakcrypto": WeakCrypto, "regex": Regex, "shape": Shape, "all": All}
 
 // Spec is a parsed taint specification.
 type Spec struct {
