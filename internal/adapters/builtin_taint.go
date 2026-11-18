@@ -251,7 +251,8 @@ func (a taintAdapter) python(ctx context.Context, c *Context, res *Result) (file
 		if len(pf.Errors) > 0 {
 			parseErrors++
 		}
-		mod, pkg := index.Name(f.Path)
+		_, pkg := index.Name(f.Path)
+		mod := index.Key(f.Path)
 		m := pyparse.Lower(pf, mod, pkg)
 		parsed[p] = m
 		return m, f.Lines
@@ -264,8 +265,7 @@ func (a taintAdapter) python(ctx context.Context, c *Context, res *Result) (file
 			return files, parseErrors, nil
 		}
 		files++
-		name, _ := index.Name(p)
-		for _, fd := range proj.Module(name) {
+		for _, fd := range proj.Module(index.Key(p)) {
 			if f := c.Inv.FileByPath(fd.File); f != nil && !IsTestPath(f.Path) {
 				res.Signals = append(res.Signals, taintSignal(fd, f, a.Name()))
 			}

@@ -32,3 +32,18 @@ func TestFiles(t *testing.T) {
 		}
 	}
 }
+
+func TestFilesKeySameName(t *testing.T) {
+	fs := NewFiles([]string{"a/app.py", "b/app.py", "c/__init__.py", "c/app.py"})
+	seen := map[string]string{}
+	for _, p := range []string{"a/app.py", "b/app.py", "c/app.py"} {
+		k := fs.Key(p)
+		if prev, dup := seen[k]; dup {
+			t.Errorf("Key(%s) = %q, already the key of %s", p, k, prev)
+		}
+		seen[k] = p
+		if got := fs.Lookup(k); got != p {
+			t.Errorf("Lookup(Key(%s)) = %q, want %q", p, got, p)
+		}
+	}
+}
