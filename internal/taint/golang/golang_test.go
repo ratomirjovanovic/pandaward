@@ -36,7 +36,7 @@ func analyze(t *testing.T, src string) []string {
 	return out
 }
 
-const head = "package main\n\nimport (\n\t\"database/sql\"\n\t\"fmt\"\n\t\"net/http\"\n\t\"os\"\n\t\"os/exec\"\n\t\"path/filepath\"\n\t\"strconv\"; \"strings\"; \"html/template\"\n)\n\nvar db *sql.DB\n\n"
+const head = "package main\n\nimport (\n\t\"database/sql\"\n\t\"fmt\"\n\t\"net/http\"\n\t\"os\"\n\t\"os/exec\"\n\t\"path/filepath\"\n\t\"strconv\"; \"strings\"; \"html/template\"; \"encoding/json\"\n)\n\nvar db *sql.DB\n\n"
 
 // body is the text after the imports, the first line of it is line 16.
 func TestFlows(t *testing.T) {
@@ -63,6 +63,10 @@ func TestFlows(t *testing.T) {
 		{"loop", "func h(w http.ResponseWriter, r *http.Request) {\n\tfor _, v := range r.Form[\"id\"] {\n\t\tdb.Query(\"SELECT \" + v)\n\t}\n}\n", "sql:17"},
 		{"log writer", "func h(w http.ResponseWriter, r *http.Request) {\n\tfmt.Fprintf(os.Stderr, \"%s\", r.FormValue(\"n\"))\n}\n", ""},
 		{"redirect trimmed", "func h(w http.ResponseWriter, r *http.Request) {\n\thttp.Redirect(w, r, \"/\"+strings.Trim(r.URL.Path, \"/\"), 301)\n}\n", ""},
+		{"redirect own path", "func h(w http.ResponseWriter, r *http.Request) {\n\thttp.Redirect(w, r, r.URL.Path+\"/\", 301)\n}\n", ""},
+		{"redirect query still flagged", "func h(w http.ResponseWriter, r *http.Request) {\n\thttp.Redirect(w, r, r.URL.Query().Get(\"u\")+\"/\", 301)\n}\n", "redirect:16"},
+		{"json marshal write", "func h(w http.ResponseWriter, r *http.Request) {\n\tb, _ := json.Marshal(map[string]string{\"n\": r.FormValue(\"n\")})\n\tw.Write(b)\n}\n", ""},
+		{"json encoder", "func h(w http.ResponseWriter, r *http.Request) {\n\tjson.NewEncoder(w).Encode(r.FormValue(\"n\"))\n}\n", ""},
 		{"template parse", "func h(w http.ResponseWriter, r *http.Request) {\n\tt, _ := template.New(\"x\").Parse(r.FormValue(\"t\"))\n\t_ = t\n}\n", "code:16"},
 		{"switch", "func h(w http.ResponseWriter, r *http.Request) {\n\tswitch r.Method {\n\tcase \"GET\":\n\t\tdb.Query(\"SELECT \" + r.FormValue(\"a\"))\n\t}\n}\n", "sql:18"},
 	} {
