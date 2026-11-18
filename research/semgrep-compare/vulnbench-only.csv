@@ -1,0 +1,44 @@
+id,type,language,only,rule
+app-project-ardanservice-sql-injection-department-search-1,sql-injection,Go,pandaward,code.sql-concat
+app-project-ardanservice-ssrf-webhooktest-1,ssrf,Go,pandaward,taint.go-ssrf
+app-project-ardanservice-open-redirect-preferences-return-1,open-redirect,Go,pandaward,taint.go-open-redirect
+app-project-ardanservice-path-traversal-audit-report-1,path-traversal,Go,pandaward,taint.go-path-traversal
+app-project-blanq-xss-campaign,xss,JavaScript/TypeScript,pandaward,taint.js-xss
+app-project-blanq-xss-referral,xss,JavaScript/TypeScript,pandaward,taint.js-xss
+app-project-boilwater-open-redirect-query,open-redirect,JavaScript/TypeScript,pandaward,taint.js-open-redirect
+app-project-boilwater-path-traversal-download,path-traversal,JavaScript/TypeScript,pandaward,taint.js-path-traversal
+app-project-boilwater-open-redirect-referrer,open-redirect,JavaScript/TypeScript,pandaward,taint.js-open-redirect
+coffeeshop-xss-1,xss,Java,pandaward,taint.java-xss
+coffeeshop-xss-2,xss,Java,pandaward,taint.java-xss
+conduit-v2-sql-injection-search,sql-injection,Python,semgrep,semgrep.python.lang.security.audit.formatted-sql-query.formatted-sql-query sql
+conduit-v2-path-traversal-download,path-traversal,Python,pandaward,taint.py-path-traversal
+conduit-v2-ssrf-avatar-url,ssrf,Python,pandaward,taint.py-ssrf
+app-project-flask-bones-path-traversal-export-1,path-traversal,Python,pandaward,taint.py-path-traversal
+app-project-flask-bones-path-traversal-export-admin-1,path-traversal,Python,pandaward,taint.py-path-traversal
+app-project-gobase-open-redirect-continue-1,open-redirect,Go,pandaward,taint.go-open-redirect
+app-project-gobase-path-traversal-reports-1,path-traversal,Go,pandaward,taint.go-path-traversal
+app-project-gobase-ssrf-branding-preview-1,ssrf,Go,pandaward,taint.go-ssrf
+app-project-gobase-template-injection-preview-1,template-injection,Go,pandaward,taint.go-template-injection
+app-project-goxygen-open-redirect-continue-1,open-redirect,Go,pandaward,taint.go-open-redirect
+app-project-goxygen-path-traversal-reports-1,path-traversal,Go,pandaward,taint.go-path-traversal
+app-project-goxygen-ssrf-branding-preview-1,ssrf,Go,pandaward,taint.go-ssrf
+app-project-iguana-path-traversal-timelog-export,path-traversal,Python,pandaward,taint.py-path-traversal
+app-project-lastsaas-xss-custom-page-1,xss,Go,pandaward,code.html-sink
+app-project-lastsaas-ssrf-remote-logo-1,ssrf,Go,pandaward,taint.go-ssrf
+app-project-lastsaas-path-traversal-media-1,path-traversal,Go,pandaward,taint.go-path-traversal
+app-project-pygmy-path-traversal-export,path-traversal,Python,pandaward,taint.py-path-traversal
+app-project-robs-awesome-ssrf-integrations-preview,ssrf,Python,pandaward,taint.py-ssrf
+app-project-robs-awesome-open-redirect-report-open,open-redirect,Python,pandaward,taint.py-open-redirect
+app-project-saas-starter-kit-open-redirect-login-return-to,open-redirect,Go,pandaward,taint.go-open-redirect
+app-project-saas-starter-kit-path-traversal-account-report-download,path-traversal,Go,pandaward,taint.go-path-traversal
+app-project-saas-starter-kit-sqli-checklist-search,sql-injection,Go,pandaward,taint.go-sql-injection
+app-project-saas-starter-kit-ssrf-account-logo-preview,ssrf,Go,pandaward,taint.go-ssrf
+app-project-saas-starter-kit-ssti-notification-preview,template-injection,Go,pandaward,taint.go-template-injection
+app-project-saas-starter-lite-open-redirect-continue,open-redirect,JavaScript/TypeScript,semgrep,semgrep.typescript.nestjs.security.audit.nestjs-open-redirect.nestjs-open-redirect redirect
+app-project-saas-starter-lite-xss-angular-render,xss,JavaScript/TypeScript,semgrep,semgrep.typescript.angular.security.audit.angular-domsanitizer.angular-bypasssecuritytrust xss
+app-project-saas-starter-lite-sql-injection-export-search,sql-injection,JavaScript/TypeScript,pandaward,taint.js-sql-injection
+app-project-slingshot-xss-referral,xss,JavaScript/TypeScript,pandaward,taint.js-xss
+app-project-slingshot-xss-campaign,xss,JavaScript/TypeScript,pandaward,taint.js-xss
+vinyl-marketplace-path-traversal-1,path-traversal,Java,pandaward,taint.java-path-traversal
+vinyl-marketplace-path-traversal-2,path-traversal,Java,pandaward,taint.java-path-traversal
+vinyl-marketplace-xss-3,xss,Java,pandaward,code.html-sink
