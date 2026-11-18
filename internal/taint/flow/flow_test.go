@@ -223,6 +223,25 @@ def handler():
 	}
 }
 
+// The parser can be passed by keyword, and pulldom parses XML too.
+func TestXXEKeyword(t *testing.T) {
+	src := header + `@app.route('/x', methods=['POST'])
+def handler():
+    from xml.dom.pulldom import parseString
+    from xml.sax import make_parser
+    from xml.sax.handler import feature_external_ges
+    safe = make_parser()
+    parseString(request.data.decode("utf-8"), parser=safe)
+    parser = make_parser()
+    parser.setFeature(feature_external_ges, True)
+    parseString(request.data.decode("utf-8"), parser=parser)
+`
+	got := sinks(analyze(t, src))
+	if strings.Join(got, " ") != "xxe:13" {
+		t.Errorf("got %v", got)
+	}
+}
+
 // A flow keeps its steps from source to sink.
 func TestSteps(t *testing.T) {
 	src := header + `@app.route('/x')
