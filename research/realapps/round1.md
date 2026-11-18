@@ -42,3 +42,17 @@ DVWA has one directory per vulnerability. Before the PHP line rules, PandaWard r
 ## NodeGoat and dvpwa recall check (#515)
 
 NodeGoat documents injection and XSS; PandaWard reported neither. Two rules were added: a MongoDB `$where` built from a string with variables (silent when every variable is set from a numeric conversion in the same file) and a template engine configured with autoescape off. Rescanned: NodeGoat reports the `$where` at `app/data/allocations-dao.js` line 78 (line 73 is silent because both values are parsed as integers) and `autoescape: false` at `server.js` line 137; Juice Shop reports two known NoSQL injection routes; dvpwa reports its `autoescape=False`. The new rules gave no other finding on the five applications rescanned (NodeGoat, Juice Shop, WebGoat, pygoat, dvpwa).
+
+## pygoat and WebGoat recall check (#470)
+
+The authors' own lists are the lab directories of pygoat (`dockerized_labs/`, 21 labs) and the lesson classes of the WebGoat checkout (78 files under `lessons/`, of which about 70 are real lessons). A lab or lesson counts as found when PandaWard reports a code-level finding in its source (a taint flow, a code rule or a Semgrep rule; secrets, container, lockfile and HTML-sink findings do not count).
+
+| Application | Labs or lessons | With a code-level finding |
+|---|---|---|
+| pygoat | 21 | 8 |
+| WebGoat | about 70 | 5 |
+
+- **pygoat, a bug found by this check.** Python files that share a module name (the `app.py` of every lab, no package around them) were analyzed once, so the taint engine reported 2 flows on 116 files. Analyzing each file separately (#517) gives 10 flows: SQL injection, command and code injection, SSRF, path traversal and insecure deserialization labs now have a finding. The XXE lab was missed because its parser is passed by keyword to `xml.dom.pulldom`; that is fixed in #519 (11 flows, the XXE lab has a finding).
+- **pygoat, still missed:** broken authentication and access control, cryptographic failure, insufficient logging, template injection (the lab is patched in this version), security misconfiguration and several dependency labs. These are design or configuration lessons that no line rule or data flow decides.
+- **WebGoat, still missed:** the SQL, command, XPath and XML injection lessons and the XSS lessons. The checkout is the old Servlet and ECS version: input arrives through `s.getParser().getRawParameter(...)`, is kept in a field and used in another method. That accessor is not a known source, and the Java taint engine does not follow a field across methods. Adding the accessor as a source for this one application would raise the number without making PandaWard better on other code, so it was not done.
+- These counts are of labs and lessons with at least one finding, not of vulnerabilities, and the findings were not each read in the source.
