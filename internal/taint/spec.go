@@ -170,6 +170,8 @@ type Guard struct {
 	Methods []string `yaml:"methods"`
 	// Allowlist: `x in <constants>` is true, so x is one of them.
 	Allowlist bool `yaml:"allowlist"`
+	// EqConst: `x == "const"` is true, so x is that constant.
+	EqConst bool `yaml:"eq_const"`
 	// Calls are library checks that return true only for a safe first
 	// argument.
 	Calls []string `yaml:"calls"`

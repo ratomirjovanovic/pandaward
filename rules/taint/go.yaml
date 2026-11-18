@@ -1,0 +1,275 @@
+# Taint specification for Go, read by the built-in taint engine
+# (builtin-taint) over the IR lowered by internal/taint/golang. A library
+# name is its import path with / as . and . inside a segment as _
+# (net/http is net.http, github.com/gin-gonic/gin is
+# github_com.gin-gonic.gin). A method is Type.method of the declared type
+# of its receiver: parameters, composite literals and the returns below
+# give values their type. A field of a library type that holds client
+# input is the call field_<Name> of its value. `name#N` selects argument
+# N (default 0), `name#*` any argument.
+
+sources:
+  calls:
+    # net/http
+    - net.http.Request.FormValue
+    - net.http.Request.PostFormValue
+    - net.http.Request.Cookie
+    - net.http.Request.Cookies
+    - net.http.Request.Referer
+    - net.http.Request.UserAgent
+    - net.http.Request.PathValue
+    - net.http.Request.BasicAuth
+    - net.http.Request.field_RequestURI
+    - net.http.Request.field_Host
+    - net.http.Request.field_Form
+    - net.http.Request.field_PostForm
+    - net.http.Request.field_Body
+    - net.http.Request.field_MultipartForm
+    - net.http.Header.Get
+    - net.http.Header.Values
+    - net.url.Values.Get
+    - net.url.URL.field_Path
+    - net.url.URL.field_RawPath
+    - net.url.URL.field_RawQuery
+    - net.url.URL.field_Fragment
+    - net.url.URL.Query
+    - net.http.RequestBody.Read
+    # gin
+    - github_com.gin-gonic.gin.Context.Query
+    - github_com.gin-gonic.gin.Context.DefaultQuery
+    - github_com.gin-gonic.gin.Context.QueryArray
+    - github_com.gin-gonic.gin.Context.QueryMap
+    - github_com.gin-gonic.gin.Context.GetQuery
+    - github_com.gin-gonic.gin.Context.Param
+    - github_com.gin-gonic.gin.Context.PostForm
+    - github_com.gin-gonic.gin.Context.DefaultPostForm
+    - github_com.gin-gonic.gin.Context.PostFormArray
+    - github_com.gin-gonic.gin.Context.GetPostForm
+    - github_com.gin-gonic.gin.Context.GetHeader
+    - github_com.gin-gonic.gin.Context.Cookie
+    - github_com.gin-gonic.gin.Context.GetRawData
+    - github_com.gin-gonic.gin.Context.BindJSON
+    - github_com.gin-gonic.gin.Context.ShouldBindJSON
+    - github_com.gin-gonic.gin.Context.ShouldBind
+    - github_com.gin-gonic.gin.Context.Bind
+    - github_com.gin-gonic.gin.Context.ShouldBindQuery
+    - github_com.gin-gonic.gin.Context.FormFile
+    # echo
+    - github_com.labstack.echo.v4.Context.QueryParam
+    - github_com.labstack.echo.v4.Context.QueryParams
+    - github_com.labstack.echo.v4.Context.FormValue
+    - github_com.labstack.echo.v4.Context.Param
+    - github_com.labstack.echo.v4.Context.Cookie
+    - github_com.labstack.echo.v4.Context.Bind
+    - github_com.labstack.echo.Context.QueryParam
+    - github_com.labstack.echo.Context.FormValue
+    - github_com.labstack.echo.Context.Param
+    - github_com.labstack.echo.Context.Bind
+    # fiber
+    - github_com.gofiber.fiber.v2.Ctx.Query
+    - github_com.gofiber.fiber.v2.Ctx.Params
+    - github_com.gofiber.fiber.v2.Ctx.FormValue
+    - github_com.gofiber.fiber.v2.Ctx.Get
+    - github_com.gofiber.fiber.v2.Ctx.Cookies
+    - github_com.gofiber.fiber.v2.Ctx.BodyParser
+    # chi and gorilla/mux
+    - github_com.go-chi.chi.v5.URLParam
+    - github_com.go-chi.chi.URLParam
+    - github_com.gorilla.mux.Vars
+
+returns:
+  html.template.New: html.template.Template
+  text.template.New: text.template.Template
+  html.template.Template.Funcs: html.template.Template
+  text.template.Template.Funcs: text.template.Template
+  net.url.URL.Query: net.url.Values
+  net.http.Request.Context: context.Context
+
+sinks:
+  - id: taint.go-command-injection
+    kind: cmd
+    control: D-002
+    cwe: "CWE-78"
+    title: OS command built from untrusted input
+    message: Input reaches a command the program runs, so it can change the program or its arguments, or, through a shell, run extra commands.
+    fix: Run a fixed program with a fixed argument list, never through sh -c, and validate each value against an allowlist.
+    calls:
+      - os.exec.Command#*
+      - os.exec.CommandContext#*
+      - syscall.Exec#*
+      - syscall.ForkExec#*
+      - os.StartProcess#*
+
+  - id: taint.go-sql-injection
+    kind: sql
+    control: D-001
+    cwe: "CWE-89"
+    title: SQL query built from untrusted input
+    message: Input is built into SQL text that is then executed, so it can change the query.
+    fix: Pass values as arguments of the query (db.Query(sql, args...)) with placeholders, never build them into the text.
+    methods:
+      - Query
+      - QueryRow
+      - Exec
+      - Prepare
+      - Raw
+      - QueryContext#1
+      - QueryRowContext#1
+      - ExecContext#1
+      - PrepareContext#1
+      - Queryx
+      - QueryRowx
+      - Where
+
+  - id: taint.go-path-traversal
+    kind: path
+    control: D-003
+    cwe: "CWE-22"
+    title: File path built from untrusted input
+    message: Input chooses the path of a file that is read, written or deleted, so ../ can reach other files.
+    fix: Resolve the path with filepath.Clean and check that it stays under the intended directory, or map names to files from an allowlist.
+    calls:
+      - os.Open
+      - os.OpenFile
+      - os.ReadFile
+      - os.WriteFile
+      - os.Create
+      - os.Remove
+      - os.RemoveAll
+      - os.Mkdir
+      - os.MkdirAll
+      - os.Rename#*
+      - os.ReadDir
+      - os.Stat
+      - os.Chmod
+      - io.ioutil.ReadFile
+      - io.ioutil.WriteFile
+      - io.ioutil.ReadDir
+      - net.http.ServeFile#2
+      - net.http.Dir
+      - archive.zip.OpenReader
+    methods:
+      - File#1
+      - SaveUploadedFile#1
+      - FileAttachment
+      - Attachment
+      - SendFile
+
+  - id: taint.go-open-redirect
+    kind: redirect
+    control: H-001
+    cwe: "CWE-601"
+    title: Redirect to a location from untrusted input
+    message: Input chooses the address users are redirected to, so it can send them to another site.
+    fix: Redirect only to paths of your own site or to an allowlist of hosts.
+    calls:
+      - net.http.Redirect#2
+    methods:
+      - Redirect#1
+      - RedirectToRoute
+
+  - id: taint.go-ssrf
+    kind: ssrf
+    control: D-004
+    cwe: "CWE-918"
+    title: Server request to a URL from untrusted input
+    message: Input chooses the URL the server requests, so it can reach internal services or cloud metadata endpoints.
+    fix: Allow only known hosts and schemes, and resolve and check the address before connecting.
+    calls:
+      - net.http.Get
+      - net.http.Head
+      - net.http.Post
+      - net.http.PostForm
+      - net.http.NewRequest#1
+      - net.http.NewRequestWithContext#2
+      - net.Dial#1
+      - net.DialTimeout#1
+      - net.http.Client.Get
+      - net.http.Client.Post
+      - net.http.Client.Head
+
+  - id: taint.go-xss
+    kind: xss
+    control: D-006
+    cwe: "CWE-79"
+    title: Untrusted input written into an HTML response
+    message: Input is written into the page without escaping, so it can run script in the user's browser.
+    fix: Render with html/template, which escapes by context, or escape the value with html.EscapeString before output.
+    text_only: true
+    calls:
+      # fmt.Fprintf(w, ...) is lowered as a call on w, so only a writer
+      # known to be the response counts (not a log file).
+      - net.http.ResponseWriter.fmt.Fprintf#*
+      - net.http.ResponseWriter.fmt.Fprint#*
+      - net.http.ResponseWriter.fmt.Fprintln#*
+      - net.http.ResponseWriter.io.WriteString#0
+      - html.template.HTML
+      - html.template.JS
+      - html.template.HTMLAttr
+      - html.template.URL
+      - net.http.ResponseWriter.Write
+      - net.http.ResponseWriter.WriteString
+      - github_com.gin-gonic.gin.Context.HTML#1
+      - github_com.gin-gonic.gin.Context.String#1
+      - github_com.gin-gonic.gin.Context.Data#2
+      - github_com.labstack.echo.v4.Context.HTML#1
+      - github_com.labstack.echo.v4.Context.String#1
+      - github_com.gofiber.fiber.v2.Ctx.SendString
+
+  - id: taint.go-template-injection
+    kind: code
+    control: D-001
+    cwe: "CWE-1336"
+    title: Template parsed from untrusted input
+    message: Input is parsed as a template, so it can run template actions and call methods of the data it is executed with.
+    fix: Parse templates only from files or constants of the program, and pass input as data.
+    calls:
+      - html.template.Template.Parse
+      - text.template.Template.Parse
+
+sanitizers:
+  - kinds: [all]
+    calls:
+      - strconv.Atoi
+      - strconv.ParseInt
+      - strconv.ParseUint
+      - strconv.ParseFloat
+      - strconv.ParseBool
+      - strconv.Itoa
+      - len
+      - uuid.Parse
+      - net.ParseIP
+  - kinds: [xss]
+    calls:
+      - html.EscapeString
+      - html.template.HTMLEscapeString
+      - html.template.JSEscapeString
+      - html.template.HTMLEscaper
+      - net.url.QueryEscape
+      - net.url.PathEscape
+      - github_com.microcosm-cc.bluemonday.UGCPolicy
+  - kinds: [path]
+    calls:
+      - path.filepath.Base
+      - path.Base
+  - kinds: [redirect, ssrf]
+    calls:
+      - net.url.QueryEscape
+      - net.url.PathEscape
+  # "/" + strings.Trim(path, "/") cannot start with //
+  - kinds: [redirect]
+    calls:
+      - strings.Trim
+      - strings.TrimLeft
+  - kinds: [cmd]
+    calls:
+      - path.filepath.Base
+  - kinds: [sql]
+    methods:
+      - Quote
+
+guards:
+  - kinds: [all]
+    allowlist: true
+  - kinds: [all]
+    eq_const: true

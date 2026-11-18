@@ -1211,6 +1211,9 @@ func (e *Engine) namedCall(names []string) bool {
 // javascript reports that the module being analyzed is JavaScript or
 // TypeScript, where a name nothing declares is a global of the page or of
 // the runtime.
+// isGo reports that the module being analyzed is Go.
+func (f *fnRun) isGo() bool { return path.Ext(f.mod.Path) == ".go" }
+
 // php reports that the module being analyzed is PHP.
 func (f *fnRun) php() bool {
 	switch path.Ext(f.mod.Path) {

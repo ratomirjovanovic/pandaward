@@ -123,6 +123,10 @@ func (a taintAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 	if err != nil {
 		return res, finish(run, model.ExitError, err.Error(), len(res.Signals))
 	}
+	goFiles, goErrors, err := a.goLang(ctx, c, &res)
+	if err != nil {
+		return res, finish(run, model.ExitError, err.Error(), len(res.Signals))
+	}
 	if ctx.Err() != nil {
 		return res, finish(run, model.ExitTimeout, "cancelled", len(res.Signals))
 	}
@@ -144,6 +148,10 @@ func (a taintAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 	detail += fmt.Sprintf("; %d PHP files", phpFiles)
 	if phpErrors > 0 {
 		detail += fmt.Sprintf(" (%d with syntax the parser skipped)", phpErrors)
+	}
+	detail += fmt.Sprintf("; %d Go files", goFiles)
+	if goErrors > 0 {
+		detail += fmt.Sprintf(" (%d with syntax the parser skipped)", goErrors)
 	}
 	return res, finish(run, model.ExitOK, detail, len(res.Signals))
 }

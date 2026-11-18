@@ -468,7 +468,8 @@ Language coverage today:
 |---|---|
 | JavaScript, TypeScript, Python, Java | data flow analysis across files, ReDoS (JavaScript and TypeScript), benchmarked |
 | PHP (experimental) | data flow analysis inside one file, first version, checked on DVWA only and not benchmarked; includes are not followed |
-| Go and other languages | inventory, secrets, dependencies and the bundled Semgrep or Opengrep rules; no data flow analysis |
+| Go (new) | data flow analysis inside a package and across the packages of the project, for net/http, gin, echo, fiber and chi; checked on one independent suite (29 of 32 references, [research/vulnbench](research/vulnbench)) and not on a public benchmark |
+| Other languages | inventory, secrets, dependencies and the bundled Semgrep or Opengrep rules; no data flow analysis |
 
 Next, in this order, and each claimed only once it is measured:
 
