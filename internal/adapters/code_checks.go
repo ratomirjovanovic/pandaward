@@ -674,3 +674,31 @@ func loggedHashOnly(c lineCtx) *demotion {
 		Fix:     "Fine for a local tool that prints a salted password hash for configuration; elsewhere log identifiers and outcomes only.",
 	}
 }
+
+// PHP line rules (#513). Each is decidable from one line; flows across lines
+// (stored XSS, a variable set from the request earlier) are not seen.
+var (
+	// A double-quoted string that holds a SQL statement and a PHP variable.
+	phpSQLInterpRe = regexp.MustCompile(`(?i)"[^"]*\b(select\s[^"]*\sfrom|insert\s+into|update\s+\S+\s+set|delete\s+from)\b[^"]*(\$\w|\{\$)`)
+	// Request input in the same statement as an echo, a print, a short echo tag or a string built with .=
+	phpXSSEchoRe       = regexp.MustCompile(`(\becho\b|\bprint\b|<\?=|\.=)[^;]*\$_(GET|POST|REQUEST|COOKIE)\b`)
+	phpEscapedRe       = regexp.MustCompile(`(?i)htmlspecialchars|htmlentities|intval|\(int\)|floatval|\(float\)|esc_html|esc_attr|strip_tags|filter_var|urlencode|json_encode|number_format|\bis_numeric`)
+	phpIncludeInputRe  = regexp.MustCompile(`\b(include|require)(_once)?\b[^;]*\$\w`)
+	phpIncludeVarRe    = regexp.MustCompile(`\b(?:include|require)(?:_once)?\b[^;]*?\$(\w+)`)
+	phpRequestRe       = regexp.MustCompile(`\$_(GET|POST|REQUEST|COOKIE)\b`)
+	phpRedirectInputRe = regexp.MustCompile(`(?i)\bheader\s*\(\s*["']location\s*:[^;]*\$_(GET|POST|REQUEST|COOKIE)\b`)
+)
+
+// phpIncludesRequestInput is true when the included path is request input
+// on the line itself or a variable that the same file sets from the request.
+func phpIncludesRequestInput(line, text string) bool {
+	if phpRequestRe.MatchString(line) {
+		return true
+	}
+	for _, m := range phpIncludeVarRe.FindAllStringSubmatch(line, -1) {
+		if regexp.MustCompile(`\$` + regexp.QuoteMeta(m[1]) + `\s*=\s*[^;]*\$_(GET|POST|REQUEST|COOKIE)\b`).MatchString(text) {
+			return true
+		}
+	}
+	return false
+}
