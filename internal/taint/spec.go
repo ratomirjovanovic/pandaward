@@ -269,7 +269,9 @@ type WeakAlgorithms struct {
 // Flag is a flag set on argument Arg by a call such as
 // parser.setFeature(Flag, True).
 type Flag struct {
-	Arg    int      `yaml:"arg"`
+	Arg int `yaml:"arg"`
+	// Kw names the keyword argument that holds the same value.
+	Kw     string   `yaml:"kw"`
 	Flag   string   `yaml:"flag"`
 	Setter []string `yaml:"setters"`
 }

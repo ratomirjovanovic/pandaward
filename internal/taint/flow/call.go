@@ -683,10 +683,16 @@ func (f *fnRun) flagged(s *taint.Sink, c *call) bool {
 	if s.RequiresFlag == nil {
 		return true
 	}
-	if s.RequiresFlag.Arg >= len(c.args) {
+	var arg *Value
+	if s.RequiresFlag.Arg < len(c.args) {
+		arg = c.args[s.RequiresFlag.Arg]
+	} else if s.RequiresFlag.Kw != "" {
+		arg = c.kw[s.RequiresFlag.Kw]
+	}
+	if arg == nil {
 		return false
 	}
-	v, ok := c.args[s.RequiresFlag.Arg].Fields["!"+s.RequiresFlag.Flag]
+	v, ok := arg.Fields["!"+s.RequiresFlag.Flag]
 	if !ok {
 		return false
 	}

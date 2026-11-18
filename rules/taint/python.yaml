@@ -224,8 +224,11 @@ sinks:
       - xml.dom.minidom.parseString
       - xml.dom.minidom.parse
       - xml.sax.parseString
+      - xml.dom.pulldom.parseString
+      - xml.dom.pulldom.parse
     requires_flag:
       arg: 1
+      kw: parser
       flag: xml.sax.handler.feature_external_ges
       setters: [setFeature]
 
