@@ -1,0 +1,251 @@
+# Taint specification for PHP, read by the built-in taint engine
+# (builtin-taint) over the IR lowered by internal/taint/php. Functions are
+# global and lower-case (case-insensitive in PHP); a method is matched by its
+# name. `name#N` selects positional argument N (default 0), `name#*` any
+# argument. The superglobals are the attributes of the module php.
+
+sources:
+  attributes:
+    - php._GET
+    - php._POST
+    - php._REQUEST
+    - php._COOKIE
+    - php._FILES
+  # $_SERVER is not a source: it holds server values (SERVER_PROTOCOL,
+  # DOCUMENT_ROOT) beside the few that come from the client, and a flow
+  # from it was a false positive on real code.
+
+sinks:
+  - id: taint.php-command-injection
+    kind: cmd
+    control: D-002
+    cwe: "CWE-78"
+    title: Shell command built from untrusted input
+    message: Input reaches a command run through a shell, so shell metacharacters in it run extra commands.
+    fix: Validate the value against a strict allowlist and pass it through escapeshellarg.
+    calls:
+      - system
+      - exec
+      - shell_exec
+      - passthru
+      - popen
+      - proc_open
+      - pcntl_exec
+
+  - id: taint.php-code-injection
+    kind: code
+    control: D-001
+    cwe: "CWE-94"
+    title: Code evaluated from untrusted input
+    message: Input is evaluated as PHP code, so it runs with the application's rights.
+    fix: Do not evaluate input; use a lookup table or a parser for the values that are allowed.
+    calls:
+      - eval
+      - assert
+      - create_function
+
+  - id: taint.php-deserialization
+    kind: deser
+    control: D-001
+    cwe: "CWE-502"
+    title: Untrusted data deserialized
+    message: Input is passed to unserialize, which can instantiate objects and run their magic methods.
+    fix: Use json_decode, or pass allowed_classes => false.
+    calls:
+      - unserialize
+
+  - id: taint.php-file-inclusion
+    kind: path
+    control: D-003
+    cwe: "CWE-98"
+    title: File included from untrusted input
+    message: Input chooses the file that is included, so a path outside the intended directory (or a remote URL) can run as PHP code.
+    fix: Include files from a fixed allowlist of names, never from a request value.
+    calls:
+      - include
+      - include_once
+      - require
+      - require_once
+
+  - id: taint.php-path-traversal
+    kind: path
+    control: D-003
+    cwe: "CWE-22"
+    title: File path built from untrusted input
+    message: Input chooses the path of a file that is read, written or deleted, so ../ can reach other files.
+    fix: Resolve the path with realpath and check that it stays under the intended directory, or map names to files from an allowlist.
+    calls:
+      - file_get_contents
+      - file_put_contents
+      - fopen
+      - readfile
+      - file
+      - fpassthru
+      - unlink
+      - rmdir
+      - mkdir
+      - rename
+      - copy#*
+      - move_uploaded_file#1
+      - opendir
+      - scandir
+      - highlight_file
+      - show_source
+      - is_file
+      - file_exists
+      - parse_ini_file
+
+  - id: taint.php-sql-injection
+    kind: sql
+    control: D-001
+    cwe: "CWE-89"
+    title: SQL query built from untrusted input
+    message: Input is built into SQL text that is then executed, so it can change the query.
+    fix: Use prepared statements with bound parameters (mysqli::prepare, PDO::prepare) instead of building the text.
+    calls:
+      - mysql_query
+      - mysql_db_query
+      - mysqli_query#1
+      - mysqli_real_query#1
+      - mysqli_multi_query#1
+      - pg_query#1
+      - pg_send_query#1
+      - sqlite_query#1
+      - sqlite_exec#1
+    methods:
+      - query
+      - exec
+      - multi_query
+      - real_query
+      - prepare
+      - executequery
+      - querysingle
+      - queryexec
+
+  - id: taint.php-ldap-injection
+    kind: ldap
+    control: D-001
+    cwe: "CWE-90"
+    title: LDAP filter built from untrusted input
+    message: Input is built into an LDAP search filter, so it can change which entries the search returns.
+    fix: Escape the value with ldap_escape(..., LDAP_ESCAPE_FILTER).
+    calls:
+      - ldap_search#2
+      - ldap_list#2
+      - ldap_read#2
+
+  - id: taint.php-open-redirect
+    kind: redirect
+    control: H-001
+    cwe: "CWE-601"
+    title: Redirect or header built from untrusted input
+    message: Input is written into a response header such as Location, so it can send users to another site or inject headers.
+    fix: Redirect only to paths of your own site or to an allowlist of hosts.
+    calls:
+      - header
+
+  - id: taint.php-ssrf
+    kind: ssrf
+    control: D-004
+    cwe: "CWE-918"
+    title: Server request to a URL from untrusted input
+    message: Input chooses the URL the server requests, so it can reach internal services or cloud metadata endpoints.
+    fix: Allow only known hosts and schemes, and resolve and check the address before connecting.
+    calls:
+      - curl_init
+      - get_headers
+      - fsockopen
+      - stream_socket_client
+
+  - id: taint.php-xss
+    kind: xss
+    control: D-006
+    cwe: "CWE-79"
+    title: Untrusted input written into an HTML response
+    message: Input is written into the page without escaping, so it can run script in the user's browser.
+    fix: Escape the value with htmlspecialchars($v, ENT_QUOTES, 'UTF-8') before output.
+    text_only: true
+    calls:
+      - echo
+      - print
+      - printf
+      - vprintf
+      - print_r
+      - var_dump
+
+sanitizers:
+  - kinds: [all]
+    calls:
+      - intval
+      - floatval
+      - doubleval
+      - abs
+      - round
+      - floor
+      - ceil
+      - count
+      - strlen
+      - md5
+      - sha1
+      - crc32
+      - hash
+      - json_encode
+      - password_hash
+      - bin2hex
+      - base64_encode
+      - uniqid
+      - time
+      - date
+      - rand
+      - mt_rand
+      - random_int
+  - kinds: [xss]
+    calls:
+      - htmlspecialchars
+      - htmlentities
+      - strip_tags
+      - esc_html
+      - esc_attr
+      - wp_kses
+  - kinds: [sql]
+    calls:
+      - mysqli_real_escape_string
+      - mysql_real_escape_string
+      - mysql_escape_string
+      - pg_escape_string
+      - pg_escape_literal
+      - sqlite_escape_string
+      - addslashes
+    methods:
+      - real_escape_string
+      - quote
+      - escape_string
+  - kinds: [cmd]
+    calls:
+      - escapeshellarg
+      - escapeshellcmd
+  - kinds: [path]
+    calls:
+      - basename
+      - realpath
+  - kinds: [redirect, ssrf]
+    calls:
+      - urlencode
+      - rawurlencode
+      - filter_var
+  - kinds: [ldap]
+    calls:
+      - ldap_escape
+
+guards:
+  # Checks that pass only for a value with nothing that could matter.
+  - kinds: [all]
+    calls:
+      - is_numeric
+      - ctype_digit
+      - ctype_alnum
+      - ctype_alpha
+      - is_int
+      - is_integer
+  - kinds: [all]
+    allowlist: true

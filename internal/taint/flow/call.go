@@ -33,7 +33,7 @@ func (f *fnRun) resolve(in *ir.Instr, st State) *call {
 		}
 		// A name nothing is known of (db in db.query(...), declared
 		// elsewhere) is a receiver like any other.
-		if c.method == "" && f.javascript() && c.recv.Fn == nil && !f.e.namedCall(c.names) {
+		if c.method == "" && (f.javascript() || f.php()) && c.recv.Fn == nil && !f.e.namedCall(c.names) {
 			c.method = in.Name
 		}
 	} else {
