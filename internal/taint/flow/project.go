@@ -15,11 +15,14 @@ type Loader func(name string) (*ir.Module, []string)
 
 // Bounds of the analysis of calls: how deep calls nest, and how many
 // distinct calls the analysis of one module may add before the rest only
-// pass taint through. The bound is per module, so the order in which
-// modules are analyzed does not starve the last ones.
+// pass taint through, and how much work (state entries handled) it may spend
+// before the same happens. The work bound keeps the scan of a project of
+// thousands of large pages in minutes. The bounds are per module, so the
+// order in which modules are analyzed does not starve the last ones.
 const (
 	maxCallDepth = 4
 	maxCalls     = 2000
+	maxWork      = 500_000
 )
 
 type callResult struct {
@@ -53,6 +56,9 @@ type Project struct {
 	invoked map[*ir.Function]bool
 	depth   int
 	calls   int
+	// work counts the state entries the analysis of the current module has
+	// handled, its own functions and the calls it followed.
+	work int
 }
 
 // NewProject starts the analysis of a project whose modules load returns.
@@ -144,7 +150,7 @@ func (p *Project) exported(r *run) {
 			for _, m := range r.mod.Funcs {
 				if m.Parent == class && !strings.HasSuffix(m.Name, ".__init__") && len(m.Params) > 0 {
 					entry := State{m.Params[0].Name: v}
-					p.calls = 0
+					p.calls, p.work = 0, 0
 					r.function(m, p.exportedParams(r, m, name, entry), false)
 				}
 			}
@@ -155,7 +161,7 @@ func (p *Project) exported(r *run) {
 		}
 		params := func(fn *ir.Function, entry State) State { return p.exportedParams(r, fn, name, entry) }
 		if !isClass(v.Fn) {
-			p.calls = 0
+			p.calls, p.work = 0, 0
 			r.function(v.Fn, params(v.Fn, State{}), false)
 			continue
 		}
@@ -164,7 +170,7 @@ func (p *Project) exported(r *run) {
 		class := v.Fn
 		inst := &Value{Inst: className(r.mod, class)}
 		if init := p.method(class, "__init__", 0); init != nil {
-			p.calls = 0
+			p.calls, p.work = 0, 0
 			if _, self, _ := r.analyzeFn(init, params(init, State{init.Params[0].Name: inst}), false); self != nil {
 				inst = self.copy()
 				inst.Inst = className(r.mod, class)
@@ -176,7 +182,7 @@ func (p *Project) exported(r *run) {
 				if !decorated(m, "staticmethod") {
 					entry[m.Params[0].Name] = inst
 				}
-				p.calls = 0
+				p.calls, p.work = 0, 0
 				r.function(m, params(m, entry), false)
 			}
 		}
@@ -224,7 +230,7 @@ func (p *Project) Module(name string) []taint.Finding {
 // recorded since before, which counts the ones loading the module made:
 // add analyzes the module body, and with it the handlers it registers.
 func (p *Project) analyze(r *run, before int) []taint.Finding {
-	p.calls = 0
+	p.calls, p.work = 0, 0
 	for _, fn := range r.mod.Funcs {
 		r.root(fn)
 	}
@@ -509,7 +515,7 @@ func (f *fnRun) invoke(fn *ir.Function, self *Value, c *call) (ret, selfOut *Val
 	if r, ok := p.memo[key]; ok && !closure {
 		return r.ret, r.self, r.validates, true
 	}
-	if p.calls >= maxCalls {
+	if p.calls >= maxCalls || p.work >= maxWork {
 		return nil, nil, false, false
 	}
 	p.calls++
