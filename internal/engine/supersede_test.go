@@ -23,9 +23,23 @@ func TestSupersededSignals(t *testing.T) {
 		{RuleID: "code.js-shell", ControlID: "D-002", Collector: "builtin-code", File: "web/db.js"},
 		{RuleID: "semgrep.pandaward-java-sql-injection", ControlID: "D-003", Collector: "semgrep", File: "src/Dao.java"},
 	}
+	sigs = append(sigs, model.Signal{RuleID: "semgrep.pandaward-js-sql-injection", ControlID: "D-003", Collector: "semgrep", File: "web/db.js"})
 	got := supersededSignals(sigs, inv)
 	if len(got) != 2 || got[0] != "semgrep.pandaward-java-sql-injection" || got[1] != "semgrep.pandaward-js-sql-injection" {
 		t.Fatalf("superseded = %v, want signals 0 and 1", got)
+	}
+	// A replacing rule that reports nothing near the signal does not decide
+	// it: the heuristic finding stays.
+	far := []model.Signal{
+		{RuleID: "code.sql-concat", ControlID: "D-003", Collector: "builtin-code", File: "src/Dao.java", StartLine: 40},
+		{RuleID: "semgrep.pandaward-java-sql-injection", ControlID: "D-003", Collector: "semgrep", File: "src/Dao.java", StartLine: 10},
+	}
+	if got := supersededSignals(far, inv); len(got) != 0 {
+		t.Fatalf("a rule far from the signal must not replace it: %v", got)
+	}
+	near := []model.Signal{far[0], {RuleID: "semgrep.pandaward-java-sql-injection", ControlID: "D-003", Collector: "semgrep", File: "src/Dao.java", StartLine: 42}}
+	if got := supersededSignals(near, inv); len(got) != 1 || got[0] == "" {
+		t.Fatalf("a rule near the signal replaces it: %v", got)
 	}
 }
 
