@@ -400,6 +400,7 @@ func (r *run) analyzeFn(fn *ir.Function, entry State, route bool) (ret, self *Va
 		work = work[1:]
 		queued[b] = false
 		visits[b]++
+		r.p.work += 1 + len(in[b])
 		f.block(b, in[b], push)
 	}
 	// Report from the fixpoint's states only, so a sink is judged once.

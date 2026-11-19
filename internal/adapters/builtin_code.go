@@ -6,8 +6,10 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 
 	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/prefilter"
 	"github.com/ratomirjovanovic/pandaward/internal/redact"
 	"github.com/ratomirjovanovic/pandaward/internal/version"
 )
@@ -136,6 +138,15 @@ var (
 	jsLike = langs("javascript", "typescript", "vue", "svelte")
 	py     = langs("python")
 )
+
+// ruleFilters holds the prefilter of every code rule, by index.
+var ruleFilters = sync.OnceValue(func() []*prefilter.Filter {
+	fs := make([]*prefilter.Filter, len(codeRules))
+	for i, r := range codeRules {
+		fs[i] = prefilter.New(r.Re)
+	}
+	return fs
+})
 
 var codeRules = []lineRule{
 	{ID: "code.js-eval", Control: "D-001", Title: "Dynamic code evaluation", Demote: jsEvalDemote, Langs: jsLike, Re: regexp.MustCompile(`(^|[^.\w])(eval\s*\(|new\s+Function\s*\(|set(?:Timeout|Interval)\(\s*['"\x60])`),
@@ -280,8 +291,12 @@ func (a codeAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 			return gl.verdict(lineStart[i]+loc[0], lineStart[i]+loc[1])
 		}
 		skipFile := map[int]bool{}
+		folded := prefilter.Fold(text)
 		for k, r := range codeRules {
 			if r.SkipFile != nil && r.SkipFile(text) {
+				skipFile[k] = true
+			} else if r.Prep == nil && !ruleFilters()[k].MayMatch(folded) {
+				// No line of this file can match: skip the pattern for the file.
 				skipFile[k] = true
 			}
 		}

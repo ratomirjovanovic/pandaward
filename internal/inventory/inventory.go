@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/ratomirjovanovic/pandaward/internal/model"
+	"github.com/ratomirjovanovic/pandaward/internal/prefilter"
 )
 
 // File is a scanned text file.
@@ -674,6 +675,9 @@ var (
 	paymentRe     = regexp.MustCompile(`(?i)(\bstripe\b|paypal|braintree|adyen|checkout\.sessions|paymentintent|payment_intent|mollie|razorpay|square\.(?:payments|client)|lemonsqueezy|paddle)`)
 	llmRe         = regexp.MustCompile(`(?i)(@anthropic-ai/sdk|from anthropic import|import anthropic|\bopenai\b|@ai-sdk/|from ['"]ai['"]|langchain|llama_index|llamaindex|google\.generativeai|@google/genai|ollama|bedrock-runtime|cohere|mistralai)`)
 	jwtLibRe      = regexp.MustCompile(`(?i)(jsonwebtoken|\bjwt\b|jose|passport|next-auth|auth\.js|@clerk/|firebase/auth|flask_login|django\.contrib\.auth|devise|golang-jwt|spring-security|express-session|cookie-session|iron-session|lucia|better-auth)`)
+	paymentF      = prefilter.New(paymentRe)
+	llmF          = prefilter.New(llmRe)
+	jwtF          = prefilter.New(jwtLibRe)
 )
 
 var (
@@ -927,11 +931,12 @@ func (inv *Inventory) detect() {
 		}
 		if CodeLangs[f.Lang] {
 			joined := strings.Join(f.Lines, "\n")
-			if paymentRe.MatchString(joined) {
+			folded := prefilter.Fold(joined)
+			if paymentF.MayMatch(folded) && paymentRe.MatchString(joined) {
 				inv.feature("payments", f.Path)
 				domains["F"] = true
 			}
-			if llmRe.MatchString(joined) {
+			if llmF.MayMatch(folded) && llmRe.MatchString(joined) {
 				inv.feature("llm", f.Path)
 				domains["P"] = true
 			}
@@ -939,7 +944,7 @@ func (inv *Inventory) detect() {
 				inv.feature("agent_text", f.Path)
 				domains["P"] = true
 			}
-			if jwtLibRe.MatchString(joined) {
+			if jwtF.MayMatch(folded) && jwtLibRe.MatchString(joined) {
 				inv.feature("auth", f.Path)
 				domains["B"] = true
 			}
