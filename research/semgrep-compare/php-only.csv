@@ -1,0 +1,11 @@
+id,cwes,only,rule
+GHSA-25c3-7fvj-v45j,CWE-79,semgrep,semgrep.php.lang.security.exec-use.exec-use code-injection
+GHSA-26hp-cgjj-m2j3,CWE-78,pandaward,code.php-shell
+GHSA-28pv-2j2h-fmhc,CWE-79,semgrep,semgrep.php.lang.security.php-permissive-cors.php-permissive-cors 
+GHSA-2f8p-qqx2-gwr2,CWE-79,pandaward,taint.php-xss
+GHSA-2hch-c97c-g99x,CWE-918,pandaward,taint.php-path-traversal
+GHSA-2mhh-27v7-3vcx,CWE-77,pandaward,code.php-shell
+GHSA-2q8c-gqf4-mg3v,CWE-79,pandaward,taint.php-xss
+GHSA-2wxv-3g4v-p76p,CWE-22,semgrep,semgrep.php.lang.security.injection.tainted-filename.tainted-filename ssrf
+GHSA-3234-gxc3-pq6f,CWE-89,pandaward,code.sql-concat
+GHSA-325v-g5vx-whxc,CWE-79,pandaward,taint.php-xss
