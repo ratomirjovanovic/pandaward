@@ -36,6 +36,11 @@ env:
   OPENGREP_SHA256: 46e8133cc490f9f50518061590ce2f6be5a08afaeda034471c0ceda4b3899808
   # The Opengrep rules (opengrep-rules repository) that opengrep-default runs, pinned.
   OPENGREP_RULES_COMMIT: f1d2b562b414783763fd02a6ed2736eaed622efa
+  # The CodeQL bundle (CLI and standard queries) that codeql-default runs on
+  # Python, pinned with the checksum GitHub publishes next to the release. It is
+  # downloaded for the measurement and never redistributed (CodeQL's terms).
+  CODEQL_BUNDLE_VERSION: 2.27.5
+  CODEQL_BUNDLE_SHA256: a5f205466b976ea9b345957fc133eeea9021e71aeffc99243ec7b9e99b1d6ed5
   GOTOOLCHAIN: local
 
 jobs:
@@ -68,10 +73,20 @@ jobs:
           git -C "$dir" checkout -q FETCH_HEAD
           test "$(git -C "$dir" rev-parse HEAD)" = "$OPENGREP_RULES_COMMIT"
           echo "PANDAWARD_OPENGREP_RULES=$dir" >> "$GITHUB_ENV"
+      - name: Install the CodeQL bundle
+        run: |
+          set -eu
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 10 -o "$RUNNER_TEMP/codeql-bundle.tar.gz" "https://github.com/github/codeql-action/releases/download/codeql-bundle-v${CODEQL_BUNDLE_VERSION}/codeql-bundle-linux64.tar.gz"
+          echo "$CODEQL_BUNDLE_SHA256  $RUNNER_TEMP/codeql-bundle.tar.gz" | sha256sum -c -
+          mkdir "$RUNNER_TEMP/codeql-bundle"
+          tar -xzf "$RUNNER_TEMP/codeql-bundle.tar.gz" -C "$RUNNER_TEMP/codeql-bundle"
+          rm "$RUNNER_TEMP/codeql-bundle.tar.gz"
+          test -x "$RUNNER_TEMP/codeql-bundle/codeql/codeql"
+          echo "PANDAWARD_CODEQL_HOME=$RUNNER_TEMP/codeql-bundle/codeql" >> "$GITHUB_ENV"
       - name: OWASP Benchmark for Java
         run: sh tools/owaspbench/run.sh --suite java --engine builtin,semgrep,opengrep,taint,semgrep-default,opengrep-default --memory --json > owasp-java.json
       - name: OWASP Benchmark for Python
-        run: sh tools/owaspbench/run.sh --suite python --engine builtin,semgrep,opengrep,taint,semgrep-default,opengrep-default --memory --json > owasp-python.json
+        run: sh tools/owaspbench/run.sh --suite python --engine builtin,semgrep,opengrep,taint,semgrep-default,opengrep-default,codeql-default --memory --json > owasp-python.json
       - name: Compare with the baseline
         run: |
           set -o pipefail

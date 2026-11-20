@@ -305,7 +305,7 @@ func parseCVE(b []byte) (*CVE, error) {
 	return c, nil
 }
 
-var engineLabel = map[string]string{"pandaward": "PandaWard", "builtin": "Built-in heuristics", "taint": "Built-in taint engine", "semgrep": "Semgrep", "opengrep": "Opengrep", "semgrep-default": "Semgrep default rules", "opengrep-default": "Opengrep default rules"}
+var engineLabel = map[string]string{"pandaward": "PandaWard", "builtin": "Built-in heuristics", "taint": "Built-in taint engine", "semgrep": "Semgrep", "opengrep": "Opengrep", "semgrep-default": "Semgrep default rules", "opengrep-default": "Opengrep default rules", "codeql-default": "CodeQL default queries"}
 
 var funcs = template.FuncMap{
 	"hasTotals": func(es []Engine) bool {

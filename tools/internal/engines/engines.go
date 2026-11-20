@@ -27,7 +27,7 @@ import (
 // *-default engines run the tool with its own standard rules instead, as a user
 // who installs it and runs it would, so they say how the products compare, not
 // only the execution engines.
-var Names = []string{"builtin", "semgrep", "opengrep", "taint", "semgrep-default", "opengrep-default"}
+var Names = []string{"builtin", "semgrep", "opengrep", "taint", "semgrep-default", "opengrep-default", CodeQL}
 
 // Finding is the part of a signal the benchmarks score.
 type Finding struct {
@@ -86,6 +86,8 @@ func Measure(ctx context.Context, inv *inventory.Inventory, engine string) (Run,
 		return builtin(ctx, inv)
 	case "taint":
 		return taintEngine(ctx, inv)
+	case CodeQL:
+		return codeql(ctx, inv)
 	case "semgrep-default", "opengrep-default":
 		return defaultRules(ctx, inv, engine)
 	}
