@@ -338,7 +338,9 @@ func measureCVE(ctx context.Context, c CVE, work string, selected []string) ([]O
 	var outcomes []Outcome
 	notRun, versions := map[string]string{}, map[string]string{}
 	pre1, post1 := map[string][]engines.Finding{}, map[string][]engines.Finding{}
+	secs := map[string]float64{}
 	for _, e := range selected {
+		started := time.Now()
 		rp, err := engines.Measure(ctx, invPre, e)
 		if err != nil {
 			return nil, nil, nil, err
@@ -353,7 +355,10 @@ func measureCVE(ctx context.Context, c CVE, work string, selected []string) ([]O
 			return nil, nil, nil, err
 		}
 		pre1[e], post1[e] = rp.Findings, ra.Findings
-		outcomes = append(outcomes, Score(c, e, rp.Findings, ra.Findings))
+		o := Score(c, e, rp.Findings, ra.Findings)
+		o.Seconds = time.Since(started).Seconds()
+		secs[e] = o.Seconds
+		outcomes = append(outcomes, o)
 		if emit != nil {
 			emit(LabelFindings(c, e, rp.Findings, ra.Findings, patched))
 		}
@@ -365,7 +370,9 @@ func measureCVE(ctx context.Context, c CVE, work string, selected []string) ([]O
 			// The taint engine runs in every scan since #381; with it
 			// selected, it counts too.
 			mp, mq := merge(pre1["builtin"], pre1[sg], pre1["taint"]), merge(post1["builtin"], post1[sg], post1["taint"])
-			outcomes = append(outcomes, Score(c, Combined, mp, mq))
+			co := Score(c, Combined, mp, mq)
+			co.Seconds = secs["builtin"] + secs[sg] + secs["taint"]
+			outcomes = append(outcomes, co)
 			if emit != nil {
 				emit(LabelFindings(c, Combined, mp, mq, patched))
 			}

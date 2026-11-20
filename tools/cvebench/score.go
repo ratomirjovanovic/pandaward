@@ -110,6 +110,9 @@ type Outcome struct {
 	// FindingsInVulnerableFiles counts the engine's pre-patch findings in the
 	// files that hold a labelled weakness.
 	FindingsInVulnerableFiles int `json:"findings_in_vulnerable_files"`
+	// Seconds is the wall-clock time the engine took to scan the pre-patch
+	// and the post-patch commit of this CVE (#468).
+	Seconds float64 `json:"seconds,omitempty"`
 }
 
 // Score decides one engine's outcome on one CVE from its findings on the
@@ -185,6 +188,11 @@ type Summary struct {
 	CWEMatch      int `json:"detected_with_cwe_match"`
 	FixRecognized int `json:"fix_recognized"`
 	StillFlagged  int `json:"still_flagged_after_fix"`
+	// Seconds adds the scan time of every CVE; MeanSeconds is per CVE. The
+	// engines run in parallel jobs on shared runners, so compare them with
+	// each other within one run, not with other machines (#468).
+	Seconds     float64 `json:"seconds,omitempty"`
+	MeanSeconds float64 `json:"mean_seconds_per_cve,omitempty"`
 	// DetectionRate is Detected / Scored; FixRate is FixRecognized / Detected.
 	DetectionRate float64        `json:"detection_rate"`
 	FixRate       float64        `json:"fix_recognized_rate"`
@@ -209,6 +217,7 @@ func (s *Summary) Add(o Outcome) {
 		s.Rules = map[string]int{}
 	}
 	s.Scored++
+	s.Seconds += o.Seconds
 	c := s.byCWE[o.CWE]
 	if c == nil {
 		c = &CWESummary{CWE: o.CWE}
@@ -236,6 +245,9 @@ func (s *Summary) Add(o Outcome) {
 
 // Finish computes rates and orders the per-CWE rows by size.
 func (s *Summary) Finish() {
+	if s.Scored > 0 {
+		s.MeanSeconds = s.Seconds / float64(s.Scored)
+	}
 	if s.Scored > 0 {
 		s.DetectionRate = float64(s.Detected) / float64(s.Scored)
 	}

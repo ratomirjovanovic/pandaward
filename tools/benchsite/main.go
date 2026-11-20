@@ -78,6 +78,8 @@ type CVEEngine struct {
 	Name, Version, NotRun                         string
 	Scored, Detected, CWEMatch, Fixed, StillFlagd int
 	Rate                                          float64
+	// MeanSeconds is the scan time per CVE; zero when not recorded.
+	MeanSeconds float64
 }
 
 type owaspJSON struct {
@@ -118,6 +120,7 @@ type cveJSON struct {
 		FixRecognized int     `json:"fix_recognized"`
 		StillFlagged  int     `json:"still_flagged_after_fix"`
 		Rate          float64 `json:"detection_rate"`
+		MeanSeconds   float64 `json:"mean_seconds_per_cve"`
 	} `json:"engines"`
 }
 
@@ -291,7 +294,7 @@ func parseCVE(b []byte) (*CVE, error) {
 	}
 	c := &CVE{Commit: o.BenchmarkCommit, Unavailable: len(o.Unavailable)}
 	for _, e := range o.Engines {
-		c.Engines = append(c.Engines, CVEEngine{Name: e.Engine, Version: e.Version, NotRun: e.NotRun, Scored: e.Scored, Detected: e.Detected, CWEMatch: e.CWEMatch, Fixed: e.FixRecognized, StillFlagd: e.StillFlagged, Rate: e.Rate})
+		c.Engines = append(c.Engines, CVEEngine{Name: e.Engine, Version: e.Version, NotRun: e.NotRun, Scored: e.Scored, Detected: e.Detected, CWEMatch: e.CWEMatch, Fixed: e.FixRecognized, StillFlagd: e.StillFlagged, Rate: e.Rate, MeanSeconds: e.MeanSeconds})
 		if e.Scored > c.Scored {
 			c.Scored = e.Scored
 		}

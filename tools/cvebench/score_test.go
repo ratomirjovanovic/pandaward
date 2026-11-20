@@ -66,15 +66,18 @@ func TestScore(t *testing.T) {
 
 func TestSummary(t *testing.T) {
 	var s Summary
-	s.Add(Outcome{CVE: "a", CWE: 79, Detected: true, FixRecognized: true, CWEMatch: true, Rules: []string{"r1"}})
+	s.Add(Outcome{CVE: "a", CWE: 79, Seconds: 3, Detected: true, FixRecognized: true, CWEMatch: true, Rules: []string{"r1"}})
 	s.Add(Outcome{CVE: "b", CWE: 79, Detected: true, Rules: []string{"r1"}})
-	s.Add(Outcome{CVE: "c", CWE: 22})
+	s.Add(Outcome{CVE: "c", CWE: 22, Seconds: 6})
 	s.Finish()
 	if s.Scored != 3 || s.Detected != 2 || s.FixRecognized != 1 || s.StillFlagged != 1 || s.CWEMatch != 1 || s.Rules["r1"] != 2 {
 		t.Fatalf("summary %+v", s)
 	}
 	if s.DetectionRate < 0.66 || s.DetectionRate > 0.67 || s.FixRate != 0.5 {
 		t.Fatalf("rates %v %v", s.DetectionRate, s.FixRate)
+	}
+	if s.Seconds != 9 || s.MeanSeconds != 3 {
+		t.Fatalf("seconds %v mean %v", s.Seconds, s.MeanSeconds)
 	}
 	if len(s.ByCWE) != 2 || s.ByCWE[0].CWE != 79 || s.ByCWE[0].Detected != 2 {
 		t.Fatalf("by CWE %+v", s.ByCWE)
