@@ -52,10 +52,10 @@ const page = `<!doctype html>
     <h2>OpenSSF CVE Benchmark (JavaScript and TypeScript)</h2>
     <p class="sub">{{.Scored}} real CVEs, each checked at the commit before and after its fix{{if .Unavailable}}; {{.Unavailable}} unavailable (repository gone){{end}}. Detected: a finding on a labelled vulnerable line. Fix recognized: that rule reports fewer findings in the file after the fix. PandaWard counts a CVE once when the built-in rules, the built-in taint engine or the bundled rules on Opengrep (Semgrep when Opengrep is not installed) find it, as a scan runs all three. The taint engine follows untrusted data from a source to a sink within and across the files of a JavaScript or TypeScript project. Benchmark commit <code>{{short .Commit}}</code>{{if .Asset}}, <a href="{{.Asset}}">raw results</a>{{end}}.</p>
     <div class="tablewrap"><table>
-      <tr><th>Engine</th><th class="num">Detected</th><th class="num">Rate</th><th class="num">CWE match</th><th class="num">Fix recognized</th><th class="num">Still flagged after fix</th></tr>
+      <tr><th>Engine</th><th class="num">Detected</th><th class="num">Rate</th><th class="num">CWE match</th><th class="num">Fix recognized</th><th class="num">Still flagged after fix</th><th class="num">Scan time per CVE</th></tr>
       {{range .Engines}}
-      {{if .NotRun}}<tr><td>{{engine .Name}}</td><td colspan="5">not run: {{.NotRun}}</td></tr>
-      {{else}}<tr><td class="name">{{engine .Name}}{{with ver .Name .Version}} <small>{{.}}</small>{{end}}</td><td class="num"><b>{{.Detected}}</b> of {{.Scored}}</td><td class="num">{{pct .Rate}}</td><td class="num">{{.CWEMatch}}</td><td class="num">{{.Fixed}}</td><td class="num">{{.StillFlagd}}</td></tr>{{end}}
+      {{if .NotRun}}<tr><td>{{engine .Name}}</td><td colspan="6">not run: {{.NotRun}}</td></tr>
+      {{else}}<tr><td class="name">{{engine .Name}}{{with ver .Name .Version}} <small>{{.}}</small>{{end}}</td><td class="num"><b>{{.Detected}}</b> of {{.Scored}}</td><td class="num">{{pct .Rate}}</td><td class="num">{{.CWEMatch}}</td><td class="num">{{.Fixed}}</td><td class="num">{{.StillFlagd}}</td><td class="num">{{if .MeanSeconds}}{{printf "%.1f" .MeanSeconds}} s{{end}}</td></tr>{{end}}
       {{end}}
     </table></div>
   </section>
