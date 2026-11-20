@@ -236,6 +236,9 @@ type Totals struct {
 	FPPerKLOC float64 `json:"fp_per_kloc,omitempty"`
 	// Seconds is the wall-clock time of the engine's run on the suite.
 	Seconds float64 `json:"seconds,omitempty"`
+	// PeakMiB is the largest resident set of the engine's run, measured in
+	// a process of its own with --memory; zero when it was not measured.
+	PeakMiB float64 `json:"peak_mib,omitempty"`
 }
 
 // Sum builds the totals from the category matrices. Categories nobody covers

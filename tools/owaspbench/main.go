@@ -67,6 +67,7 @@ func main() {
 	engineList := flag.String("engine", "builtin", "comma-separated engines to measure: "+strings.Join(engines.Names, ", "))
 	asJSON := flag.Bool("json", false, "print JSON instead of a table")
 	emitPath := flag.String("emit-findings", "", "also write every engine finding with the benchmark's label (true, false_positive, unlabelled) as JSON lines to this file, the input of the Agent Safety Lab triage measurements")
+	memory := flag.Bool("memory", false, "also measure each engine's peak memory by running it again in a process of its own (Linux and macOS; adds one run per engine)")
 	flag.Parse()
 	if *emitPath != "" {
 		f, err := os.Create(*emitPath)
@@ -106,6 +107,20 @@ func main() {
 	}
 	if out.BenchmarkCommit != suite.PinnedCommit {
 		fmt.Fprintf(os.Stderr, "warning: checkout is at %q, published numbers refer to %s\n", out.BenchmarkCommit, suite.PinnedCommit)
+	}
+	if *memory {
+		for i := range out.Engines {
+			e := &out.Engines[i]
+			if e.NotRun != "" || e.Engine == Combined {
+				continue
+			}
+			mib, err := peakMemory(context.Background(), suite.Key, *repo, *expected, e.Engine)
+			if err != nil {
+				fmt.Fprintf(os.Stderr, "owaspbench: memory of %s: %v\n", e.Engine, err)
+				continue
+			}
+			e.Totals.PeakMiB = mib
+		}
 	}
 	if *asJSON {
 		enc := json.NewEncoder(os.Stdout)
@@ -306,6 +321,9 @@ func printTable(o *Output) {
 		fmt.Printf("\naverage score over covered categories: %+.3f\n", e.AverageCovered)
 		t := e.Totals
 		fmt.Printf("all categories: precision %.3f, recall %.3f, F1 %.3f, %d false positive test cases = %.2f per KLOC of %.1f KLOC\n", t.Precision, t.Recall, t.F1, t.FP, t.FPPerKLOC, t.KLOC)
+		if t.PeakMiB > 0 {
+			fmt.Printf("peak memory of the engine run: %.0f MiB\n", t.PeakMiB)
+		}
 		if t.Seconds > 0 {
 			fmt.Printf("wall-clock time of the engine run: %.1f s\n", t.Seconds)
 		}
