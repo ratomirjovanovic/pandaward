@@ -1341,6 +1341,9 @@ func isJSPath(p string) bool {
 // isGo reports that the module being analyzed is Go.
 func (f *fnRun) isGo() bool { return path.Ext(f.mod.Path) == ".go" }
 
+// python reports that the module being analyzed is Python.
+func (f *fnRun) python() bool { return path.Ext(f.mod.Path) == ".py" }
+
 // php reports that the module being analyzed is PHP.
 func (f *fnRun) php() bool {
 	switch path.Ext(f.mod.Path) {
