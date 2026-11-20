@@ -11,6 +11,39 @@ sources:
     - php._REQUEST
     - php._COOKIE
     - php._FILES
+  # Framework request objects (Laravel, Symfony, CakePHP, Slim, Mautic):
+  # a parameter named $request holds the request, and its accessors return
+  # what the client sent.
+  params: ["$request"]
+  calls:
+    - "$request.input"
+    - "$request.get"
+    - "$request.query"
+    - "$request.post"
+    - "$request.all"
+    - "$request.only"
+    - "$request.except"
+    - "$request.cookie"
+    - "$request.header"
+    - "$request.json"
+    - "$request.file"
+    - "$request.string"
+    - "$request.str"
+    - "$request.getParam"
+    - "$request.getQuery"
+    - "$request.getPost"
+    - "$request.getCookie"
+    - "$request.getHeaderLine"
+    - "$request.getQueryParams"
+    - "$request.getParsedBody"
+    - "$request.getData"
+    - "$request.getQueryParam"
+    - "$request.query.get"
+    - "$request.request.get"
+    - "$request.cookies.get"
+    - "$request.headers.get"
+    - "$request.attributes.get"
+    - "$request.files.get"
   # $_SERVER is not a source: it holds server values (SERVER_PROTOCOL,
   # DOCUMENT_ROOT) beside the few that come from the client, and a flow
   # from it was a false positive on real code.

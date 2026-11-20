@@ -23,7 +23,12 @@ var binBP = map[string]int{
 	"instanceof": 19, "**": 20,
 }
 
-var assignOps = map[string]string{"=": "", "+=": "+", "-=": "-", "*=": "*", "/=": "/", ".=": "+", "%=": "%", "**=": "**", "??=": "??", "&=": "&", "|=": "|", "^=": "^", "<<=": "<<", ">>=": ">>"}
+// numericOps are the operators whose result is a number in PHP: a string
+// operand is converted, so the result cannot carry markup or a path. The
+// result passes through intval like a cast. "." is the concatenation.
+var numericOps = map[string]bool{"+": true, "-": true, "*": true, "/": true, "%": true, "**": true}
+
+var assignOps = map[string]string{"=": "", "+=": "+", "-=": "-", "*=": "*", "/=": "/", ".=": ".", "%=": "%", "**=": "**", "??=": "??", "&=": "&", "|=": "|", "^=": "^", "<<=": "<<", ">>=": ">>"}
 
 // expr parses and lowers an expression and returns its value.
 func (p *parser) expr() ir.Operand { return p.exprBP(0) }
@@ -91,6 +96,9 @@ func (p *parser) exprBP(minBP int) ir.Operand {
 				left, right = p.unwrapCase(left), p.unwrapCase(right)
 			}
 			left = p.value(ir.Bin, pos, name, left, right)
+			if numericOps[op] {
+				left = p.callFree(pos, "intval", left)
+			}
 		}
 	}
 }
@@ -198,6 +206,9 @@ func (p *parser) assignOp(r ref, op string, rhs ir.Operand, pos ir.Pos) ir.Opera
 	if op != "" {
 		cur := p.read(r)
 		bin := op
+		if op == "." {
+			bin = "+"
+		}
 		if op == "??" {
 			t := p.temp()
 			p.emit(&ir.Instr{Op: ir.Copy, Pos: pos, Dst: t, A: cur})
@@ -205,6 +216,9 @@ func (p *parser) assignOp(r ref, op string, rhs ir.Operand, pos ir.Pos) ir.Opera
 			rhs = ir.V(t)
 		} else {
 			rhs = p.value(ir.Bin, pos, bin, cur, rhs)
+			if numericOps[op] {
+				rhs = p.callFree(pos, "intval", rhs)
+			}
 		}
 	}
 	p.assignRef(r, rhs, pos)
