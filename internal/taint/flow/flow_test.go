@@ -174,6 +174,19 @@ func TestFlows(t *testing.T) {
 	root = lxml.etree.parse("f.xml")
 	root.xpath("//u[@id='" + x.replace("'", "&apos;") + "']")
 	root.xpath("//u[@id='" + x + "']")`, []string{"xpath-injection:10"}},
+		{"file response", `	from fastapi.responses import FileResponse
+	x = request.args.get("x")
+	return FileResponse("/srv/docs/" + x)`, []string{"path-traversal:8"}},
+		{"file response, constant", `	from fastapi.responses import FileResponse
+	return FileResponse("/srv/docs/readme.txt")`, nil},
+		{"parent of a path", `	import pathlib
+	x = request.args.get("x")
+	base = pathlib.Path("/srv/app/docs").parent
+	(base / x).read_text()`, []string{"path-traversal:9"}},
+		{"parent of a path, constant name", `	import pathlib
+	x = request.args.get("x")
+	base = pathlib.Path("/srv/app/docs").parent
+	(base / "static").read_text()`, nil},
 		{"int conversion", `	x = int(request.args.get("x"))
 	os.system("kill " + str(x))`, nil},
 	}

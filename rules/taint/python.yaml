@@ -149,6 +149,9 @@ sinks:
       - shutil.move#*
       - shutil.rmtree
       - flask.send_file
+      - fastapi.responses.FileResponse
+      - starlette.responses.FileResponse
+      - fastapi.FileResponse
       - fileinput.input
       # Methods of a path built from untrusted input.
       - pathlib.Path.read_text#self
