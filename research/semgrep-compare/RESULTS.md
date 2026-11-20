@@ -52,3 +52,7 @@ High or critical findings that match no reference, not judged because the applic
 ## What this supports and what it does not
 
 On this suite, PandaWard's engine locates about twice as many references as Semgrep OSS's public rule sets, and the references only PandaWard locates are mostly in classes that need a data flow from a request to a sink (path traversal, SSRF, open redirect, XSS). It does not support saying PandaWard is better than Semgrep in general: the suite is partly tuned for, the sets favor taint flows, and Semgrep Pro (with its interfile taint) was not run.
+
+## PHP set
+
+The second part of the protocol, on the 100 advisories of `../phpbench`, is in `../phpbench/RESULTS.md`. On the 91 advisories both tools scanned, PandaWard locates 12 and Semgrep 8 (4 of Semgrep's in the right class, against 10 of PandaWard's); both together 15. Both miss most of the set. The per reference list is `php-only.csv`, produced with `compare_php.py` from the outputs of `../phpbench/score.py`.
