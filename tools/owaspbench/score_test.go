@@ -274,3 +274,27 @@ func TestLabelFindings(t *testing.T) {
 		}
 	}
 }
+
+func TestTotals(t *testing.T) {
+	cats := []CategoryResult{
+		{Category: "a", Covered: true, Real: 10, NotReal: 10, TP: 8, FN: 2, FP: 2, TN: 8},
+		{Category: "b", Covered: false, Real: 5, NotReal: 5},
+	}
+	tot := SumTotals(cats)
+	if tot.TP != 8 || tot.FP != 2 || tot.FN != 7 || tot.TN != 13 {
+		t.Fatalf("matrix %+v", tot)
+	}
+	if tot.Precision != 0.8 {
+		t.Errorf("precision %v", tot.Precision)
+	}
+	if tot.Recall < 0.533 || tot.Recall > 0.534 {
+		t.Errorf("recall %v", tot.Recall)
+	}
+	tot.SetKLOC(500)
+	if tot.KLOC != 0.5 || tot.FPPerKLOC != 4 {
+		t.Errorf("kloc %v per kloc %v", tot.KLOC, tot.FPPerKLOC)
+	}
+	if z := SumTotals(nil); z.F1 != 0 || z.Precision != 0 {
+		t.Errorf("empty %+v", z)
+	}
+}

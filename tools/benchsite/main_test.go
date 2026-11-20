@@ -139,3 +139,18 @@ func TestRenderCombinedCVE(t *testing.T) {
 		t.Error("PandaWard row is not first")
 	}
 }
+
+func TestOWASPTotals(t *testing.T) {
+	s, err := parseOWASP([]byte(`{"engines":[`+
+		`{"engine":"builtin","average_score_covered":0.1,"totals":{"precision":0.5,"recall":0.25,"f1":0.333,"fp_per_kloc":1.5,"seconds":3.2},"categories":[{"category":"sqli","covered":true,"score":0.1}]},`+
+		`{"engine":"semgrep","average_score_covered":0.2,"categories":[{"category":"sqli","covered":true,"score":0.2}]}]}`), "java", "Java")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !s.Engines[0].HasTotals || s.Engines[0].Precision != 0.5 || s.Engines[0].Seconds != 3.2 {
+		t.Errorf("builtin %+v", s.Engines[0])
+	}
+	if s.Engines[1].HasTotals {
+		t.Errorf("semgrep has no totals: %+v", s.Engines[1])
+	}
+}

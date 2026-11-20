@@ -23,6 +23,7 @@ import (
 	"slices"
 	"strings"
 	"text/tabwriter"
+	"time"
 
 	"github.com/ratomirjovanovic/pandaward/internal/adapters"
 	"github.com/ratomirjovanovic/pandaward/internal/config"
@@ -144,9 +145,11 @@ func measure(ctx context.Context, suite *Suite, repo, expectedPath string, selec
 		return nil, err
 	}
 	out := &Output{Benchmark: suite.Title, BenchmarkCommit: inv.GitCommit, PinnedCommit: suite.PinnedCommit, PandawardVersion: version.Version, SemgrepRulesHash: hash, ExpectedResults: expectedPath}
+	testLines := 0
 	for _, file := range inv.Files {
 		if strings.HasPrefix(file.Path, suite.TestCodeDir+"/") && suite.TestCaseOf(file.Path) != "" {
 			out.TestCaseFiles++
+			testLines += len(file.Lines)
 			if adapters.IsTestPath(file.Path) {
 				out.TestPathExcluded++
 			}
@@ -164,7 +167,9 @@ func measure(ctx context.Context, suite *Suite, repo, expectedPath string, selec
 	semgrepFindings := map[string][]Finding{}
 	var builtinCovered map[string][]string
 	for _, eng := range selected {
+		started := time.Now()
 		run, err := engines.Measure(ctx, inv, eng)
+		elapsed := time.Since(started)
 		if err != nil {
 			return nil, err
 		}
@@ -187,6 +192,8 @@ func measure(ctx context.Context, suite *Suite, repo, expectedPath string, selec
 		}
 		if r.NotRun == "" {
 			r.Score = suite.Compute(expected, findings, covered)
+			r.Totals.SetKLOC(testLines)
+			r.Totals.Seconds = elapsed.Seconds()
 			if eng == "builtin" {
 				builtinFindings, builtinRan, builtinCovered = findings, true, covered
 			} else {
@@ -240,7 +247,9 @@ func measure(ctx context.Context, suite *Suite, repo, expectedPath string, selec
 				}
 			}
 		}
-		out.Engines = append(out.Engines, EngineResult{Engine: Combined, Version: label, Score: suite.Compute(expected, combined, covered)})
+		sc := suite.Compute(expected, combined, covered)
+		sc.Totals.SetKLOC(testLines)
+		out.Engines = append(out.Engines, EngineResult{Engine: Combined, Version: label, Score: sc})
 	}
 	return out, nil
 }
@@ -295,6 +304,11 @@ func printTable(o *Output) {
 		}
 		tw.Flush()
 		fmt.Printf("\naverage score over covered categories: %+.3f\n", e.AverageCovered)
+		t := e.Totals
+		fmt.Printf("all categories: precision %.3f, recall %.3f, F1 %.3f, %d false positive test cases = %.2f per KLOC of %.1f KLOC\n", t.Precision, t.Recall, t.F1, t.FP, t.FPPerKLOC, t.KLOC)
+		if t.Seconds > 0 {
+			fmt.Printf("wall-clock time of the engine run: %.1f s\n", t.Seconds)
+		}
 		fmt.Printf("average score over all %d categories (not covered = 0, as the OWASP scorecard averages): %+.3f\n", len(e.Categories), e.AverageAll)
 	}
 }

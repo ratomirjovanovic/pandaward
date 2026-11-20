@@ -57,6 +57,11 @@ type Engine struct {
 	AverageAll     float64
 	Covered        int
 	Scores         map[string]*float64 // category -> score; nil when not covered
+	// Totals are the metrics over all categories; HasTotals is false for
+	// results measured before they were recorded.
+	HasTotals                        bool
+	Precision, Recall, F1, FPPerKLOC float64
+	Seconds                          float64
 }
 
 // CVE is the OpenSSF CVE Benchmark result.
@@ -83,7 +88,14 @@ type owaspJSON struct {
 		NotRun         string  `json:"not_run"`
 		AverageCovered float64 `json:"average_score_covered"`
 		AverageAll     float64 `json:"average_score_all"`
-		Categories     []struct {
+		Totals         *struct {
+			Precision float64 `json:"precision"`
+			Recall    float64 `json:"recall"`
+			F1        float64 `json:"f1"`
+			FPPerKLOC float64 `json:"fp_per_kloc"`
+			Seconds   float64 `json:"seconds"`
+		} `json:"totals"`
+		Categories []struct {
 			Category string  `json:"category"`
 			Covered  bool    `json:"covered"`
 			Score    float64 `json:"score"`
@@ -246,6 +258,10 @@ func parseOWASP(b []byte, key, title string) (Suite, error) {
 			continue
 		}
 		eng := Engine{Name: e.Engine, Version: e.Version, NotRun: e.NotRun, AverageCovered: e.AverageCovered, AverageAll: e.AverageAll, Scores: map[string]*float64{}}
+		if t := e.Totals; t != nil {
+			eng.HasTotals = true
+			eng.Precision, eng.Recall, eng.F1, eng.FPPerKLOC, eng.Seconds = t.Precision, t.Recall, t.F1, t.FPPerKLOC, t.Seconds
+		}
 		for _, c := range e.Categories {
 			if !seen[c.Category] {
 				seen[c.Category] = true
@@ -286,6 +302,14 @@ func parseCVE(b []byte) (*CVE, error) {
 var engineLabel = map[string]string{"pandaward": "PandaWard", "builtin": "Built-in heuristics", "taint": "Built-in taint engine", "semgrep": "Semgrep", "opengrep": "Opengrep", "semgrep-default": "Semgrep default rules", "opengrep-default": "Opengrep default rules"}
 
 var funcs = template.FuncMap{
+	"hasTotals": func(es []Engine) bool {
+		for _, e := range es {
+			if e.HasTotals {
+				return true
+			}
+		}
+		return false
+	},
 	"engine": func(name string) string {
 		if l, ok := engineLabel[name]; ok {
 			return l
