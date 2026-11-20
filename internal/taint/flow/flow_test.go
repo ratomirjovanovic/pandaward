@@ -187,6 +187,14 @@ func TestFlows(t *testing.T) {
 	x = request.args.get("x")
 	base = pathlib.Path("/srv/app/docs").parent
 	(base / "static").read_text()`, nil},
+		{"session of a project module", `	from proj.database import db
+	x = request.args.get("x")
+	db.session.execute("SELECT * FROM t WHERE a = '" + x + "'")
+	db.session.execute("SELECT * FROM t WHERE a = ?", (x,))`, []string{"sql-injection:8"}},
+		{"unknown receiver, no sink method", `	from proj.database import db
+	x = request.args.get("x")
+	db.session.add(x)
+	db.session.commit()`, nil},
 		{"int conversion", `	x = int(request.args.get("x"))
 	os.system("kill " + str(x))`, nil},
 	}

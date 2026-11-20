@@ -461,13 +461,14 @@ Released as of 0.2.17:
 - `pandaward verify-report`, the `pandaward_verify_report` MCP tool and a Stop hook check that catch an agent claiming PASS for a control the ledger does not have as PASS.
 - Public benchmarks measured on every change: OWASP Benchmark for Java and Python, OpenSSF CVE Benchmark for JavaScript and TypeScript ([pandaward.dev/benchmarks](https://pandaward.dev/benchmarks/)).
 - One independent measurement on code the engines were never tuned on: Snyk VulnBench 2.0, 108 attacker-reachable vulnerabilities in 20 real applications. Built-in only, PandaWard located 55 (51%, 95% interval 42% to 60%), far below its OWASP scores, which are development benchmarks. Go (9 of 32) is the largest gap. Protocol, per-case results and limits are in [research/vulnbench](research/vulnbench).
+- A second independent measurement for PHP, never used to develop the engine: 91 GitHub Advisory fix commits scanned by PandaWard (built-in only) and by Semgrep OSS with its public rule sets. PandaWard located 12 (13%), Semgrep 8 (9%); in the right weakness class 10 and 4. Both miss most of the set, and 10 of PandaWard's 12 are also reported after the fix. 9 advisories (Dolibarr, moodle, AVideo) could not be scanned in time and are not counted. Protocol, per-advisory results and the reasons for the misses are in [research/phpbench](research/phpbench).
 
 Language coverage today:
 
 | Language | What PandaWard does |
 |---|---|
 | JavaScript, TypeScript, Python, Java | data flow analysis across files, ReDoS (JavaScript and TypeScript), benchmarked |
-| PHP (experimental) | data flow analysis inside one file, first version, checked on DVWA only and not benchmarked; includes are not followed |
+| PHP (experimental) | data flow analysis inside one file, with includes followed where the path can be resolved; one independent measurement on 91 GitHub Advisory fix commits located 12 (13%, 95% interval 8% to 22%) and 3 of 56 XSS fixes, so most PHP vulnerabilities are not found ([research/phpbench](research/phpbench)) |
 | Go (new) | data flow analysis inside a package and across the packages of the project, for net/http, gin, echo, fiber and chi; checked on one independent suite (29 of 32 references, [research/vulnbench](research/vulnbench)) and not on a public benchmark |
 | Other languages | inventory, secrets, dependencies and the bundled Semgrep or Opengrep rules; no data flow analysis |
 

@@ -593,10 +593,18 @@ func (f *fnRun) sinks(c *call, st State) {
 	for _, n := range c.names {
 		targets = append(targets, f.e.calls[n]...)
 	}
-	if c.method != "" {
+	// A Python receiver from another module of the project (db in
+	// db.session.execute(q), imported from the project's own database module)
+	// has no model, so its qualified name matches nothing: its method name is
+	// matched against the method sinks as for a receiver of unknown class.
+	method := c.method
+	if method == "" && f.python() && c.in.Name != "" && c.recv.Inst == "" && !f.e.namedCall(c.names) {
+		method = c.in.Name
+	}
+	if method != "" {
 		recvName := f.receiverName(c.in)
-		for _, t := range f.e.methods[c.method] {
-			if rs := t.sink.MethodReceivers[c.method]; len(rs) > 0 && !contains(rs, recvName) && !(c.recv.Inst == "jQuery" && contains(rs, "$")) {
+		for _, t := range f.e.methods[method] {
+			if rs := t.sink.MethodReceivers[method]; len(rs) > 0 && !contains(rs, recvName) && !(c.recv.Inst == "jQuery" && contains(rs, "$")) {
 				continue
 			}
 			if contains(t.sink.ReceiversNot, recvName) {
