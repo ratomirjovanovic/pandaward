@@ -142,6 +142,9 @@ The [OWASP Benchmark for Python](https://github.com/OWASP-Benchmark/BenchmarkPyt
 | Opengrep 1.33.1, bundled rules | 14 | +0.735 | +0.735 |
 | Semgrep 1.182.0, default ruleset (`p/default`) | 14 | +0.069 | +0.069 |
 | Opengrep 1.33.1, default rules (`opengrep-rules`) | 14 | +0.102 | +0.102 |
+| CodeQL 2.27.5, default queries (`python-code-scanning` suite) | 14 | +0.132 | +0.132 |
+
+**CodeQL row.** The same test cases scored the same way, with GitHub's CodeQL bundle and the `python-code-scanning` suite that its default setup runs, no PandaWard rule or option. Overall precision 0.432, recall 0.252, 40 s and 1.9 GB peak on a GitHub Actions runner (single run; one thread, the CodeQL default). It scores 0.000 in six categories (hash, LDAP injection, secure cookie, SQL injection, trust boundary, weak random) and its XSS has no true positive. SQL injection and XSS in this suite go through the benchmark's own helper modules and Flask string responses, which the default queries do not model as sinks; that is what the number says about the default queries on this suite, not about CodeQL on other code. CodeQL is measured on Python only: the Java suite needs a build, which the benchmark runner never runs. Its terms allow analysing an open source codebase hosted on GitHub and academic research and forbid sharing the software; the workflow downloads the pinned bundle from GitHub's release for the run and the repository does not contain it.
 
 Per category (TPR / FPR / score):
 
