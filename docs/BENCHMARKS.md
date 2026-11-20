@@ -22,6 +22,18 @@ The numbers below are guarded so they cannot drop unnoticed:
 
 The baseline is committed. A change that improves a score raises it in the same pull request with `go run ./tools/benchgate --update --owasp owasp-java.json --owasp owasp-python.json` (and `--cve cve.json`), using the JSON from the workflow's artifacts. A score may only go down through the same explicit change, with the reason in the pull request.
 
+## Metrics
+
+The OWASP runs report the Benchmark score per category (TPR minus FPR) and, since #468, these figures over all categories together:
+
+- **Precision**: TP / (TP + FP), the share of flagged test cases that are real vulnerabilities.
+- **Recall**: TP / (TP + FN), the share of real vulnerabilities flagged. Categories no rule of the engine covers count their real test cases as misses.
+- **F1**: the harmonic mean of precision and recall.
+- **FP per KLOC**: test cases flagged although they are not exploitable, per thousand lines of labelled test code. It is a property of the suite's test code, not of a real application, so compare engines with it, not with figures from other suites.
+- **Time**: wall-clock seconds of the engine's run on the suite, measured in the same process on the same machine for every engine in one run. It is shown for results measured since the field was added.
+
+Peak memory is not measured yet; the CVE benchmark does not report these metrics yet either (#468 stays open for both).
+
 ## Built-in heuristics and bundled rules
 
 A scan with Semgrep or Opengrep installed runs both the built-in rules and the bundled Semgrep rules. For Java and Python, a bundled rule lists in its `pandaward-supersedes` metadata the built-in heuristics it replaces in files of its languages, for example `pandaward-java-sql-injection` replaces `code.sql-concat`. When the semgrep adapter completes, signals of those heuristics in those files are dropped: they do not decide a control, the control's reason says how many were replaced, and a finding only they raised is closed with a note naming the rule that replaced it. When Semgrep and Opengrep are missing or fail, the built-in rules report as before. In JavaScript and TypeScript only the SQL heuristics are replaced, by the taint rule `pandaward-js-sql-injection`: on real application code they reported dynamic SQL built from constants and identifier helpers (#352). The other JavaScript built-in rules stay, since they find more real CVEs than the bundled ones (see the CVE benchmark below). In Python files outside test paths, the built-in taint engine replaces the bundled rules for the weaknesses it decides from the data flow (the `supersedes` list in `rules/taint/python.yaml`): on pgAdmin 4 the replaced rules reported 85 findings the taint engine does not, and on review each was a false positive: XSS on JSON responses and templates, redirects to `login_url(...)`, "path traversal" on string escaping, the session holding the application's own objects, and shell calls with an argument list. Rules for what it does not cover, such as TLS verification and template injection, stay. Deserialization is replaced too: the engine reports `pickle` and `yaml.load` for any input it cannot show to come from constants, request data with its flow and anything else as a hypothesis, so it keeps the pattern rule's reach (all 32 calls on pgAdmin 4, on data the server stored itself) without its findings on constants.

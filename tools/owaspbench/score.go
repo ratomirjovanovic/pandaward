@@ -219,6 +219,60 @@ type CategoryResult struct {
 	Score    float64  `json:"score"`
 }
 
+// Totals is the confusion matrix summed over all categories with the
+// metrics derived from it.
+type Totals struct {
+	TP        int     `json:"tp"`
+	FP        int     `json:"fp"`
+	FN        int     `json:"fn"`
+	TN        int     `json:"tn"`
+	Precision float64 `json:"precision"`
+	Recall    float64 `json:"recall"`
+	F1        float64 `json:"f1"`
+	// KLOC is the size of the labelled test case files in thousands of
+	// lines and FPPerKLOC the false positive test cases per KLOC; both are
+	// zero until the caller sets the size with SetKLOC.
+	KLOC      float64 `json:"kloc,omitempty"`
+	FPPerKLOC float64 `json:"fp_per_kloc,omitempty"`
+	// Seconds is the wall-clock time of the engine's run on the suite.
+	Seconds float64 `json:"seconds,omitempty"`
+}
+
+// Sum builds the totals from the category matrices. Categories nobody covers
+// count as misses (FN), as in the average over all categories.
+func SumTotals(cats []CategoryResult) Totals {
+	var t Totals
+	for _, c := range cats {
+		t.TP += c.TP
+		t.FP += c.FP
+		t.FN += c.FN
+		t.TN += c.TN
+		if !c.Covered {
+			t.FN += c.Real
+			t.TN += c.NotReal
+		}
+	}
+	if t.TP+t.FP > 0 {
+		t.Precision = float64(t.TP) / float64(t.TP+t.FP)
+	}
+	if t.TP+t.FN > 0 {
+		t.Recall = float64(t.TP) / float64(t.TP+t.FN)
+	}
+	if t.Precision+t.Recall > 0 {
+		t.F1 = 2 * t.Precision * t.Recall / (t.Precision + t.Recall)
+	}
+	return t
+}
+
+// SetKLOC records the size of the labelled test code and the false positive
+// rate per thousand lines.
+func (t *Totals) SetKLOC(lines int) {
+	t.KLOC = float64(lines) / 1000
+	if t.KLOC > 0 {
+		t.FPPerKLOC = float64(t.FP) / t.KLOC
+	}
+}
+
 // Score is the outcome of scoring findings against the expected results.
 type Score struct {
 	Categories []CategoryResult `json:"categories"`
@@ -226,13 +280,17 @@ type Score struct {
 	AverageCovered float64 `json:"average_score_covered"`
 	// AverageAll averages over all categories with not covered ones as 0,
 	// which is how the OWASP scorecard averages a tool.
-	AverageAll        float64 `json:"average_score_all"`
-	TestCases         int     `json:"test_cases"`
-	Findings          int     `json:"findings"`
-	FindingsInTests   int     `json:"findings_in_test_cases"`
-	OffCategory       int     `json:"findings_other_category"`
-	UnknownTestCases  int     `json:"findings_unlabelled_test_cases"`
-	FindingsElsewhere int     `json:"findings_outside_test_cases"`
+	AverageAll float64 `json:"average_score_all"`
+	// Totals add the confusion matrices of all categories and derive the
+	// metrics a buyer reads: precision, recall, F1 and false positives per
+	// thousand lines of labelled test code (#468).
+	Totals            Totals `json:"totals"`
+	TestCases         int    `json:"test_cases"`
+	Findings          int    `json:"findings"`
+	FindingsInTests   int    `json:"findings_in_test_cases"`
+	OffCategory       int    `json:"findings_other_category"`
+	UnknownTestCases  int    `json:"findings_unlabelled_test_cases"`
+	FindingsElsewhere int    `json:"findings_outside_test_cases"`
 }
 
 // Compute scores findings against the expected results. A test case counts
@@ -325,6 +383,7 @@ func (st *Suite) Compute(expected []Expected, findings []Finding, covered map[st
 	if len(names) > 0 {
 		s.AverageAll /= float64(len(names))
 	}
+	s.Totals = SumTotals(s.Categories)
 	return s
 }
 
