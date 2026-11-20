@@ -63,3 +63,13 @@ The two configurations differ on three references. Semgrep's rule `pandaward-js-
 - One run each, on 20 applications of which 7 are JavaScript or TypeScript projects and 6 are Go; the intervals are Wilson intervals on references that are not independent (several references share a file).
 - The reference set was built with a commercial engine and manual tracing, so a finding that is real and not in it is not rewarded.
 - A first attempt of the run stopped after two applications because the background job of my own harness was killed; it was discarded and the run was repeated from the start with the same binary and no change to the engine or the rules. Nothing else was repeated.
+
+## Default configuration again, after the supersession fix (#533)
+
+A development number, not held out: the suite has been used since the frozen run. Main at `a1fe9e9` (includes #555 supersession only where the replacing rule fired nearby, #563 and #565), built from source; Semgrep 1.182.1 on the PATH, no other change, one run on 20 applications, the same match rule. Files: `default-after-533-refs.csv`, `default-after-533-unmatched.csv`.
+
+**91 of 108 references located (84%), 86 with a rule of the right weakness class, 85 at high or critical.** By language: Go 32/32, Python 30/34, JavaScript and TypeScript 21/30, Java 8/12.
+
+The two references this issue named are located again in the default configuration: `coffeeshop-sql-injection-1` by `code.sql-concat` and `app-project-saas-starter-lite-sql-injection-export-search` by the taint rule `taint.js-sql-injection`. The default configuration now locates at least what the built-in only configuration does (89 on the same suite with an earlier main build; the two differ on `conduit-v2-sql-injection-search`, found by the Python taint engine, and `app1-xss-bank-profile-template-1`, found by the bundled Semgrep XSS rule). The frozen figures above (55 and 54) are unchanged.
+
+The first attempt of this run reported zero for the first application because the report step failed; that application was repeated alone with the same binary and no other change.
