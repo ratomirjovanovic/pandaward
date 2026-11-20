@@ -32,7 +32,9 @@ The OWASP runs report the Benchmark score per category (TPR minus FPR) and, sinc
 - **FP per KLOC**: test cases flagged although they are not exploitable, per thousand lines of labelled test code. It is a property of the suite's test code, not of a real application, so compare engines with it, not with figures from other suites.
 - **Time**: wall-clock seconds of the engine's run on the suite, measured in the same process on the same machine for every engine in one run. It is shown for results measured since the field was added.
 
-Peak memory is not measured yet; the CVE benchmark does not report these metrics yet either (#468 stays open for both).
+- **Peak memory**: the largest resident set of the engine's run in MiB. With `--memory`, `tools/owaspbench` runs every engine a second time in a process of its own and reads the child's peak resident set from the operating system (Linux and macOS; no figure on Windows). The `benchmarks` workflow passes `--memory`, so every engine is measured the same way on the same runner class.
+
+The CVE benchmark does not report these metrics yet (#468 stays open for it).
 
 ## Built-in heuristics and bundled rules
 

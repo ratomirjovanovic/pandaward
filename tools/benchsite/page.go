@@ -39,10 +39,10 @@ const page = `<!doctype html>
       {{else}}<tr><td class="name">{{engine .Name}}{{with ver .Name .Version}} <small>{{.}}</small>{{end}}</td><td class="num"><b>{{score .AverageCovered}}</b></td><td class="num">{{.Covered}} of {{len $s.Categories}}</td>{{$e := .}}{{range $s.Categories}}<td class="num">{{cat $e .}}</td>{{end}}</tr>{{end}}
       {{end}}
     </table></div>
-    {{if hasTotals .Engines}}<p class="sub">All categories together: precision, recall, F1, false positive test cases per thousand lines of test code, and the wall-clock time of the run. A blank time means the figure was not recorded for that row.</p>
+    {{if hasTotals .Engines}}<p class="sub">All categories together: precision, recall, F1, false positive test cases per thousand lines of test code, and the wall-clock time of the run. A blank time or memory means the figure was not recorded for that row. Memory is the peak resident set of a separate run of that engine (Linux).</p>
     <div class="tablewrap"><table>
-      <tr><th>Engine</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">F1</th><th class="num">FP per KLOC</th><th class="num">Time</th></tr>
-      {{range .Engines}}{{if .HasTotals}}<tr><td class="name">{{engine .Name}}</td><td class="num">{{printf "%.3f" .Precision}}</td><td class="num">{{printf "%.3f" .Recall}}</td><td class="num">{{printf "%.3f" .F1}}</td><td class="num">{{printf "%.2f" .FPPerKLOC}}</td><td class="num">{{if .Seconds}}{{printf "%.1f" .Seconds}} s{{end}}</td></tr>{{end}}{{end}}
+      <tr><th>Engine</th><th class="num">Precision</th><th class="num">Recall</th><th class="num">F1</th><th class="num">FP per KLOC</th><th class="num">Time</th><th class="num">Peak memory</th></tr>
+      {{range .Engines}}{{if .HasTotals}}<tr><td class="name">{{engine .Name}}</td><td class="num">{{printf "%.3f" .Precision}}</td><td class="num">{{printf "%.3f" .Recall}}</td><td class="num">{{printf "%.3f" .F1}}</td><td class="num">{{printf "%.2f" .FPPerKLOC}}</td><td class="num">{{if .Seconds}}{{printf "%.1f" .Seconds}} s{{end}}</td><td class="num">{{if .PeakMiB}}{{printf "%.0f" .PeakMiB}} MiB{{end}}</td></tr>{{end}}{{end}}
     </table></div>{{end}}
   </section>
   {{end}}

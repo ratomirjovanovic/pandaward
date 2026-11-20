@@ -69,9 +69,9 @@ jobs:
           test "$(git -C "$dir" rev-parse HEAD)" = "$OPENGREP_RULES_COMMIT"
           echo "PANDAWARD_OPENGREP_RULES=$dir" >> "$GITHUB_ENV"
       - name: OWASP Benchmark for Java
-        run: sh tools/owaspbench/run.sh --suite java --engine builtin,semgrep,opengrep,taint,semgrep-default,opengrep-default --json > owasp-java.json
+        run: sh tools/owaspbench/run.sh --suite java --engine builtin,semgrep,opengrep,taint,semgrep-default,opengrep-default --memory --json > owasp-java.json
       - name: OWASP Benchmark for Python
-        run: sh tools/owaspbench/run.sh --suite python --engine builtin,semgrep,opengrep,taint,semgrep-default,opengrep-default --json > owasp-python.json
+        run: sh tools/owaspbench/run.sh --suite python --engine builtin,semgrep,opengrep,taint,semgrep-default,opengrep-default --memory --json > owasp-python.json
       - name: Compare with the baseline
         run: |
           set -o pipefail

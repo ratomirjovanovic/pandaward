@@ -62,6 +62,7 @@ type Engine struct {
 	HasTotals                        bool
 	Precision, Recall, F1, FPPerKLOC float64
 	Seconds                          float64
+	PeakMiB                          float64
 }
 
 // CVE is the OpenSSF CVE Benchmark result.
@@ -94,6 +95,7 @@ type owaspJSON struct {
 			F1        float64 `json:"f1"`
 			FPPerKLOC float64 `json:"fp_per_kloc"`
 			Seconds   float64 `json:"seconds"`
+			PeakMiB   float64 `json:"peak_mib"`
 		} `json:"totals"`
 		Categories []struct {
 			Category string  `json:"category"`
@@ -261,6 +263,7 @@ func parseOWASP(b []byte, key, title string) (Suite, error) {
 		if t := e.Totals; t != nil {
 			eng.HasTotals = true
 			eng.Precision, eng.Recall, eng.F1, eng.FPPerKLOC, eng.Seconds = t.Precision, t.Recall, t.F1, t.FPPerKLOC, t.Seconds
+			eng.PeakMiB = t.PeakMiB
 		}
 		for _, c := range e.Categories {
 			if !seen[c.Category] {
