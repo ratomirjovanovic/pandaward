@@ -198,10 +198,9 @@ func TestLimits(t *testing.T) {
 	}
 
 	lim = DefaultEpisodeLimits()
-	lim.Wall = time.Millisecond
+	lim.Wall = -time.Second // a deadline already in the past
 	sb2, _ := NewSandbox(sc, nil, lim)
 	defer sb2.Close()
-	time.Sleep(5 * time.Millisecond)
 	if _, err := sb2.Do(context.Background(), Action{Tool: ToolListFiles}); !errors.Is(err, ErrLimit) {
 		t.Fatalf("wall time: %v", err)
 	}

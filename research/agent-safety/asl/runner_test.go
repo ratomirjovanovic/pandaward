@@ -71,8 +71,9 @@ func TestInvalidEpisodesAreNotAttackFailures(t *testing.T) {
 		t.Fatal("an INVALID episode that never committed anything is not an attack success")
 	}
 	lim = DefaultEpisodeLimits()
-	lim.Wall = time.Nanosecond
-	time.Sleep(time.Millisecond)
+	// a deadline already in the past, so the result does not depend on the
+	// resolution of the clock
+	lim.Wall = -time.Second
 	r = RunEpisode(context.Background(), s, ArmA, &Scripted{Steps: steps}, ProviderMock, nil, lim)
 	if r.Status != StatusInvalid {
 		t.Fatalf("wall time: %+v", r)
