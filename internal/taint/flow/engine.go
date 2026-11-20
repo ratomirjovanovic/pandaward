@@ -803,6 +803,13 @@ func (f *fnRun) load(base *Value, name string, line int) *Value {
 		t.File = f.mod.Path
 		return &Value{T: t}
 	}
+	// The directory of a path is a path: Path(__file__).parent / name is joined
+	// and read like any other Path.
+	if name == "parent" && base.Inst == "pathlib.Path" {
+		r := taintOf(base).copy()
+		r.Inst = "pathlib.Path"
+		return r
+	}
 	if name == "path" && f.path != "" && strings.HasSuffix(base.Q, "request") {
 		return strVal(f.path)
 	}
