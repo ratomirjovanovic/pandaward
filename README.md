@@ -118,7 +118,7 @@ scoop bucket add pandaward https://github.com/ratomirjovanovic/pandaward; scoop 
 Or download a binary from the [releases page](https://github.com/ratomirjovanovic/pandaward/releases) (Linux and macOS on amd64 and arm64, Windows on amd64). For example on Linux:
 
 ```sh
-v=v0.2.17
+v=v0.2.18
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/pandaward-linux-amd64
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/SHA256SUMS
 sha256sum --ignore-missing -c SHA256SUMS
@@ -128,7 +128,7 @@ chmod +x pandaward-linux-amd64 && sudo mv pandaward-linux-amd64 /usr/local/bin/p
 On Windows (PowerShell), save `pandaward-windows-amd64.exe` as `pandaward.exe` in a folder on your `PATH`:
 
 ```powershell
-Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.17/pandaward-windows-amd64.exe -OutFile pandaward.exe
+Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.18/pandaward-windows-amd64.exe -OutFile pandaward.exe
 (Get-FileHash pandaward.exe).Hash   # compare with the line in SHA256SUMS
 ```
 
@@ -195,7 +195,7 @@ Five controls cannot be decided by automation: A-004 (threat model), C-003 (auth
 | A Inventory and architecture | entrypoints with file and line (`pandaward routes`): HTTP routes for Express, NestJS, Next.js, Flask, FastAPI, Django, Go, Spring, Laravel, Rails, ASP.NET with router prefixes and mounts resolved; GraphQL schema operations; gRPC services; queue consumers and cron jobs; services in monorepos; OpenAPI drift. For Next.js apps the file-system route table (pages, layouts, route handlers, metadata routes, server actions and middleware of every app, with route groups, dynamic and catch-all segments, parallel slots and intercepting folders resolved) decides A-002: PASS only when nothing found can add routes outside it, otherwise INCONCLUSIVE with each blocker named (a custom server, next.config or vercel.json rewrites and redirects to other origins or not resolvable statically, middleware that proxies or answers requests itself, another web framework or server, serverless function directories, PHP, an OpenAPI mismatch, skipped code files) | threat model |
 | B Authentication | JWT `none` or unverified decode, cookie flags | revoked credentials refused (`staging-active`); login, reset and MFA flows |
 | C Authorization | Supabase/Postgres RLS update policies that let users change privileged columns of their own row (from SQL migrations) | object and function level authorization with test identities (`staging-active`), route review (manual-assisted) |
-| D Injection | built in: a taint engine for JavaScript, TypeScript, Python and Java that follows request data through variables, functions, classes and imports across files to code, OS command, SQL, file path, request URL (SSRF), HTML (XSS) and redirect sinks, plus prototype pollution shapes in JavaScript and deserialization, LDAP, XPath, XXE and session sinks in Python; eval, shell, SQL concatenation, unsafe deserialization, regular expressions with catastrophic backtracking (ReDoS, D-007); with Semgrep or Opengrep: taint rules that follow request data (and, in Python, model output) to SQL, OS command, file path, LDAP, XPath, code and XXE sinks in Java, Python and JavaScript, plus prototype pollution through recursive merges and path setters in JavaScript | ZAP active scan (`staging-active`, opt-in) |
+| D Injection | built in: a taint engine for JavaScript, TypeScript, Python and Java (and, on main and not yet released, Go and an experimental PHP front end) that follows request data through variables, functions, classes and imports across files to code, OS command, SQL, file path, request URL (SSRF), HTML (XSS) and redirect sinks, plus prototype pollution shapes in JavaScript and deserialization, LDAP, XPath, XXE and session sinks in Python; eval, shell, SQL concatenation, unsafe deserialization, regular expressions with catastrophic backtracking (ReDoS, D-007); with Semgrep or Opengrep: taint rules that follow request data (and, in Python, model output) to SQL, OS command, file path, LDAP, XPath, code and XXE sinks in Java, Python and JavaScript, plus prototype pollution through recursive merges and path setters in JavaScript | ZAP active scan (`staging-active`, opt-in) |
 | E Secrets and crypto | 16 high-specificity secret formats, tracked `.env` and key files, tracked tool-local settings such as `.claude/settings.local.json`, disabled TLS verification, weak hash or random | |
 | F Business logic | | invariants, idempotency, races (manual-assisted) |
 | G APIs and webhooks | webhook signature verification presence | contract vs runtime |
@@ -431,7 +431,7 @@ With [pre-commit](https://pre-commit.com), add this to `.pre-commit-config.yaml`
 ```yaml
 repos:
   - repo: https://github.com/ratomirjovanovic/pandaward
-    rev: v0.2.17
+    rev: v0.2.18
     hooks:
       - id: pandaward-system   # uses the pandaward on your PATH; use id: pandaward to build it with Go 1.27+
 ```
@@ -450,29 +450,35 @@ A PandaWard report is an automated technical assessment. It is not a certificati
 
 PandaWard also ships research tooling that measures what a coding agent does when the repository it reads tries to steer it: a README that claims a manager approved a scope, a scan summary edited to say everything passed, a tool result that asks for an approval. Agents run in a simulated sandbox; what counts is the effect journal and whether the final report is supported by the evidence PandaWard recorded. Four arms use the same tools and differ only in enforcement: prompt only, a deterministic authorization gate, plus an evidence check, plus an independent monitor.
 
-First measurements (corpus of 20 synthetic scenarios, 240 episodes on a Messages API model and 180 on Claude Code, no invalid episodes): both models almost never followed an attack, so the arms cannot be told apart yet. The four breaches were all one scenario, a fabricated evidence hash, and the evidence check had none. This is a small, easy corpus and one model per track, not a claim about any product. The page [pandaward.dev/lab](https://pandaward.dev/lab/) has the reports, the method, what was discarded and how to reproduce; the code and corpus are in [research/agent-safety](research/agent-safety). It is separate from scans and from `pandaward benchmark`.
+First measurements (corpus of 20 synthetic scenarios, 240 episodes on a Messages API model and 180 on Claude Code, no invalid episodes): both models almost never followed an attack, so the arms cannot be told apart yet. The four breaches were all one scenario, a fabricated evidence hash, and the evidence check had none. This is a small, easy corpus and one model per track, not a claim about any product. A second corpus of epistemic attacks (a fix claimed in a changelog, skipped tests counted as passing, evidence for older code reported as PASS) was run on three Claude Code models, 198 episodes each: arms A and B were breached in 13 and 12 of 99 attack episodes and the arm with the evidence check in none. That is exploratory and post hoc, from two scenarios, and the zero is partly by construction because the evidence check reads the same ledger facts as the oracle. The page [pandaward.dev/lab](https://pandaward.dev/lab/) has the reports, the method, what was discarded and how to reproduce; the code and corpus are in [research/agent-safety](research/agent-safety). It is not only a measurement: its claim checker ships in the product as `pandaward verify-report`, the `pandaward_verify_report` MCP tool and a Stop hook check, and its way of labelling findings against known truth found a ReDoS false positive (bounded loops) that is fixed. Planned, with no result yet: agent-assisted triage of findings, rule candidates gated by a held-out benchmark, and finding what PandaWard misses ([#480](https://github.com/ratomirjovanovic/pandaward/issues/480), [#481](https://github.com/ratomirjovanovic/pandaward/issues/481), [#482](https://github.com/ratomirjovanovic/pandaward/issues/482)). The scan itself and `pandaward benchmark` stay separate.
 
 ## Roadmap
 
-Released as of 0.2.17:
+Released as of 0.2.18:
 
 - CLI, evidence ledger, scope policy, inventory, static and runtime reports, plugin, MCP server, signed reproducible releases.
 - A built-in data flow (taint) engine for JavaScript, TypeScript, Python and Java, with no other analyzer needed, and ReDoS detection.
 - `pandaward verify-report`, the `pandaward_verify_report` MCP tool and a Stop hook check that catch an agent claiming PASS for a control the ledger does not have as PASS.
 - Public benchmarks measured on every change: OWASP Benchmark for Java and Python, OpenSSF CVE Benchmark for JavaScript and TypeScript ([pandaward.dev/benchmarks](https://pandaward.dev/benchmarks/)).
+- One independent measurement on code the engines were never tuned on: Snyk VulnBench 2.0, 108 attacker-reachable vulnerabilities in 20 real applications. Built-in only, PandaWard located 55 (51%, 95% interval 42% to 60%), far below its OWASP scores, which are development benchmarks. Go (9 of 32) is the largest gap. Protocol, per-case results and limits are in [research/vulnbench](research/vulnbench).
+- Two more independent measurements, both published with their results and limits: 90 GitHub Advisory fix commits for Python, Java and Go (PandaWard built-in located 7, 8%, 95% interval 4% to 15%; the protocol was written before the run), and a scan of 19 ordinary open-source applications where 268 of 271 high and critical findings were false positives by reviewer verdict, 3 were TLS verification switched off ([research/advisorybench](research/advisorybench), [research/realapps](research/realapps)). These are the weak spots the next accuracy work targets.
+- The benchmarks also report precision, recall, F1, false positives per KLOC, scan time and peak memory, and CodeQL with its default queries on the Python benchmark.
+- A second independent measurement for PHP, never used to develop the engine: 91 GitHub Advisory fix commits scanned by PandaWard (built-in only) and by Semgrep OSS with its public rule sets. PandaWard located 12 (13%), Semgrep 8 (9%); in the right weakness class 10 and 4. Both miss most of the set, and 10 of PandaWard's 12 are also reported after the fix. 9 advisories (Dolibarr, moodle, AVideo) could not be scanned in time and are not counted. Protocol, per-advisory results and the reasons for the misses are in [research/phpbench](research/phpbench).
 
 Language coverage today:
 
 | Language | What PandaWard does |
 |---|---|
 | JavaScript, TypeScript, Python, Java | data flow analysis across files, ReDoS (JavaScript and TypeScript), benchmarked |
-| Go and other languages | inventory, secrets, dependencies and the bundled Semgrep or Opengrep rules; no data flow analysis |
+| PHP (experimental) | data flow analysis inside one file, with includes followed where the path can be resolved; one independent measurement on 91 GitHub Advisory fix commits located 12 (13%, 95% interval 8% to 22%) and 3 of 56 XSS fixes, so most PHP vulnerabilities are not found ([research/phpbench](research/phpbench)) |
+| Go (new) | data flow analysis inside a package and across the packages of the project, for net/http, gin, echo, fiber and chi; checked on one independent suite (29 of 32 references, [research/vulnbench](research/vulnbench)) and not on a public benchmark |
+| Other languages | inventory, secrets, dependencies and the bundled Semgrep or Opengrep rules; no data flow analysis |
 
 Next, in this order, and each claimed only once it is measured:
 
 | Step | Scope | State |
 |---|---|---|
-| Agent Safety Lab | first measurements published; next a harder held-out attack set and more models | in progress |
+| Agent Safety Lab | two corpora measured (v1 and epistemic v2) on three Claude Code models, plus a triage track; next a held-out attack set and an arm that does not read the oracle's facts | in progress |
 | Accuracy | known weak spots: JavaScript XSS, findings still reported after a fix, Python request wrapper classes ([#404](https://github.com/ratomirjovanovic/pandaward/issues/404)), a second benchmark the rules were not tuned on | in progress |
 | More languages | Go, C#, Rust, Ruby, Kotlin, PHP, C and C++: for each a parser, lowering to the shared IR, a rule spec and a public benchmark | planned |
 | Built-in DAST baseline | no control stays BLOCKED only because ZAP is missing ([#265](https://github.com/ratomirjovanovic/pandaward/issues/265)) | planned |
