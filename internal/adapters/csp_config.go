@@ -206,7 +206,7 @@ func nextConfigCSP(lines []string) []cspDecl {
 		if commentRe.MatchString(text[lineStart:loc[0]] + "x") {
 			continue
 		}
-		v, ok := jsStaticString(text[loc[1]:])
+		v, ok := jsStaticString(text[loc[1]:], jsConsts(text))
 		if !ok {
 			continue
 		}
@@ -215,47 +215,72 @@ func nextConfigCSP(lines []string) []cspDecl {
 	return out
 }
 
+var jsConstRe = regexp.MustCompile(`(?m)^(?:export\s+)?const\s+([A-Za-z_$][\w$]*)\s*(?::[^=\n]+)?=\s*`)
+
+// jsConsts maps each top-level const name to the text after its `=`. A name
+// declared twice is dropped, never guessed.
+func jsConsts(text string) map[string]string {
+	out := map[string]string{}
+	dup := map[string]bool{}
+	for _, m := range jsConstRe.FindAllStringSubmatchIndex(text, -1) {
+		name := text[m[2]:m[3]]
+		if _, seen := out[name]; seen {
+			dup[name] = true
+		}
+		out[name] = text[m[1]:]
+	}
+	for n := range dup {
+		delete(out, n)
+	}
+	return out
+}
+
 // jsStaticString resolves a JavaScript expression at the start of s that is a
 // string literal or `[literal, ...].join(literal)`, followed by the end of
-// the property (`,` or `}`).
-func jsStaticString(s string) (string, bool) {
+// the property (`,` or `}`). A bare identifier, or `identifier.join(literal)`,
+// is resolved through a top-level `const` of the same file (consts maps a name
+// to the text after its `=`); nothing else is followed.
+func jsStaticString(s string, consts map[string]string) (string, bool) {
 	var v, rest string
-	if strings.HasPrefix(s, "[") {
-		var parts []string
-		rest = s[1:]
-		for {
-			rest = strings.TrimLeft(rest, " \t\r\n")
-			if strings.HasPrefix(rest, "]") {
-				rest = rest[1:]
-				break
-			}
-			p, r, ok := jsLiteral(rest)
-			if !ok {
-				return "", false
-			}
-			parts = append(parts, p)
-			rest = strings.TrimLeft(r, " \t\r\n")
-			if strings.HasPrefix(rest, ",") {
-				rest = rest[1:]
-			} else if !strings.HasPrefix(rest, "]") {
-				return "", false
-			}
-		}
-		rest = strings.TrimLeft(rest, " \t\r\n")
-		if !strings.HasPrefix(rest, ".join(") {
-			return "", false
-		}
-		rest = strings.TrimLeft(rest[len(".join("):], " \t\r\n")
-		sep, r, ok := jsLiteral(rest)
+	switch {
+	case strings.HasPrefix(s, "["):
+		parts, r, ok := jsArray(s)
 		if !ok {
 			return "", false
 		}
-		rest = strings.TrimLeft(r, " \t\r\n")
-		if !strings.HasPrefix(rest, ")") {
+		sep, r, ok := jsJoin(r)
+		if !ok {
 			return "", false
 		}
-		v, rest = strings.Join(parts, sep), rest[1:]
-	} else {
+		v, rest = strings.Join(parts, sep), r
+	case s != "" && (s[0] == '_' || s[0] == '$' || s[0] >= 'A' && s[0] <= 'Z' || s[0] >= 'a' && s[0] <= 'z'):
+		end := 0
+		for end < len(s) && (s[end] == '_' || s[end] == '$' || s[end] >= '0' && s[end] <= '9' || s[end] >= 'A' && s[end] <= 'Z' || s[end] >= 'a' && s[end] <= 'z') {
+			end++
+		}
+		def, found := consts[s[:end]]
+		if !found {
+			return "", false
+		}
+		rest = s[end:]
+		if strings.HasPrefix(strings.TrimLeft(rest, " \t\r\n"), ".join(") {
+			parts, dr, ok := jsArray(def)
+			if !ok || !endsStatement(dr) {
+				return "", false
+			}
+			sep, r, ok := jsJoin(rest)
+			if !ok {
+				return "", false
+			}
+			v, rest = strings.Join(parts, sep), r
+		} else {
+			lit, dr, ok := jsLiteral(def)
+			if !ok || !endsStatement(dr) {
+				return "", false
+			}
+			v = lit
+		}
+	default:
 		lit, r, ok := jsLiteral(s)
 		if !ok {
 			return "", false
@@ -267,6 +292,56 @@ func jsStaticString(s string) (string, bool) {
 		return v, true
 	}
 	return "", false
+}
+
+// endsStatement reports whether s continues with the end of a statement.
+func endsStatement(s string) bool {
+	s = strings.TrimLeft(s, " \t\r")
+	return s == "" || s[0] == ';' || s[0] == '\n'
+}
+
+// jsArray reads an array literal of string literals at the start of s.
+func jsArray(s string) ([]string, string, bool) {
+	if !strings.HasPrefix(s, "[") {
+		return nil, "", false
+	}
+	var parts []string
+	rest := s[1:]
+	for {
+		rest = strings.TrimLeft(rest, " \t\r\n")
+		if strings.HasPrefix(rest, "]") {
+			return parts, rest[1:], true
+		}
+		p, r, ok := jsLiteral(rest)
+		if !ok {
+			return nil, "", false
+		}
+		parts = append(parts, p)
+		rest = strings.TrimLeft(r, " \t\r\n")
+		if strings.HasPrefix(rest, ",") {
+			rest = rest[1:]
+		} else if !strings.HasPrefix(rest, "]") {
+			return nil, "", false
+		}
+	}
+}
+
+// jsJoin reads `.join(literal)` at the start of s and returns the separator.
+func jsJoin(s string) (string, string, bool) {
+	s = strings.TrimLeft(s, " \t\r\n")
+	if !strings.HasPrefix(s, ".join(") {
+		return "", "", false
+	}
+	s = strings.TrimLeft(s[len(".join("):], " \t\r\n")
+	sep, r, ok := jsLiteral(s)
+	if !ok {
+		return "", "", false
+	}
+	r = strings.TrimLeft(r, " \t\r\n")
+	if !strings.HasPrefix(r, ")") {
+		return "", "", false
+	}
+	return sep, r[1:], true
 }
 
 // jsLiteral reads one quoted string literal at the start of s. Template
