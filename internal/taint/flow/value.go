@@ -79,12 +79,20 @@ func hinted(r *Value, parts ...*Value) *Value {
 // port and path). Whatever follows, the string cannot name another host
 // ("/join/" + x is a path, "/" + x may be "//host"), so it is safe as a
 // redirect target. A bare origin followed by text that starts with "@" would
-// change the host; that is a residual the check accepts.
+// change the host; that is a residual the check accepts. A string that
+// starts with "?" or "#" is a query or fragment of the current page: the
+// text after it cannot change the host either.
 func sameSitePath(v *Value) bool {
-	if v == nil || v.C == nil || v.C.Kind != ir.Str || len(v.C.Val) < 2 {
+	if v == nil || v.C == nil || v.C.Kind != ir.Str || v.C.Val == "" {
 		return false
 	}
 	s := v.C.Val
+	if s[0] == '?' || s[0] == '#' {
+		return true
+	}
+	if len(s) < 2 {
+		return false
+	}
 	if s[0] == '/' {
 		return s[1] != '/' && s[1] != '\\'
 	}

@@ -184,6 +184,18 @@ def safe_next(u):
 	if not u or not re.match(r"^/[a-z]+", u):
 		return "/"
 	return u`, nil},
+		{"query string appended to a fixed base", `	x = request.GET.get("q")
+	base = "/list"
+	base += "?" + x
+	return redirect(base)`, nil},
+		{"query string after an unknown base", `	x = request.GET.get("q")
+	def go(base):
+		base += "?" + x
+		return redirect(base)`, nil},
+		{"fragment after request text", `	x = request.args.get("u")
+	return redirect(x + "#top")`, []string{"open-redirect:7"}},
+		{"query text first, request text as the base", `	x = request.args.get("u")
+	return redirect(x + "?a=1")`, []string{"open-redirect:7"}},
 		{"yaml safe loader", `	x = request.data
 	yaml.load(x, Loader=yaml.SafeLoader)
 	yaml.load(x, Loader=yaml.Loader)
