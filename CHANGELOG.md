@@ -2,11 +2,21 @@
 
 All notable changes to PandaWard. Versions follow the release tags; each release page has binaries, checksums, the SBOM and build provenance. PandaWard was called PenSec before 0.2.0.
 
-## [Unreleased]
+## [0.2.18] - 2026-11-21
 
 ### Added
 - A Go front end for the built-in taint engine (#534): the standard library parser lowers each Go file to the shared IR, a directory is one package whose files import each other's names, and packages of the project are imported by their path from go.mod. A specification in `rules/taint/go.yaml` covers net/http, gin, echo, fiber, chi and gorilla/mux sources and command, SQL, file path, redirect, SSRF, HTML and template sinks, with the usual sanitizers. New guard `eq_const`: a value equal to a constant of the program is that constant. On Snyk VulnBench 2.0 (an independent suite) the Go references located went from 9 of 32 to 29 of 32 before any change informed by that suite; see research/vulnbench/RESULTS-go.md for how it was measured and what it reports without a reference.
 - A PHP front end for the built-in taint engine (#513): its own lexer and parser (superglobals, string and heredoc interpolation, functions, classes, closures, control flow including the alternative syntax and templates) lower to the shared IR, with a specification in `rules/taint/php.yaml` for command, code, SQL, file inclusion and path, LDAP, SSRF, redirect or header, deserialization and HTML sinks. Each file is analyzed alone: an `include` is a sink and is not followed, so output that another file produces (DVWA builds `$html` in the module and prints it in `index.php`) is not found. A first version, checked on DVWA only and not benchmarked, so the language table calls it experimental. Known false positives on its safe level: a numeric check on elements of an exploded array, and a file extension compared with constants.
+- Two rules from a project that scans with PandaWard (#576, #577): `code.dns-rebinding-check` (D-006) reports a host that is resolved and checked and then connected to by name, so a second lookup can return a private address; `code.excessive-data-exposure` (new control G-003) reports an ORM find without `select` or `omit` whose rows go straight into a JSON response. Both are low-severity hypotheses read from one file.
+- The H-004 check reads a Content-Security-Policy declared as a top-level `const` array or string in `next.config` (#575): `csp.join("; ")` with `'unsafe-inline'` in `script-src` is now found.
+- The benchmarks report precision, recall, F1, false positives per KLOC, scan time and, with `--memory`, peak memory per engine (#467, #468), scan time per CVE, and CodeQL with its default queries on the Python benchmark (#570).
+- Research, published with protocols written before the runs: an independent measurement on 90 GitHub Advisory fix commits for Python, Java and Go (PandaWard built-in located 7, 8%, interval 4% to 15%; most misses are missing checks and stored values no taint rule sees), the VulnBench 2.0 head-to-head with Semgrep OSS and the default configuration rerun (91 of 108 after tuning), the PHP measurement with its Semgrep comparison, and two rounds of scans of real applications (round 2: 271 high and critical findings, 3 true, 268 false by reviewer verdict).
+- Python, JavaScript, PHP and NestJS taint rules: regular expressions built from untrusted input, prototype pollution through a store, `Path.parent` and `FileResponse`, includes followed in PHP, NestJS returned strings and `@Redirect`, XXE through pulldom, MongoDB `$where` and template autoescape off.
+
+### Changed
+- A redirect to a string that starts with a path of this site (`"/join/" + x`) or the origin of a fixed site is no longer reported as an open redirect (#578); `"/" + x`, `"//" + x`, `"https://" + x` and input first still are.
+- A `generic-api-key` match on a value that a comment documents as public, or on a translated sentence, is listed as info and does not count against E-005 (#579).
+- Faster scans of large projects: a word prefilter for line rules and a work budget per module (#556); a built-in signal is replaced by a taint rule only where the taint rule fired nearby (#533).
 
 ## [0.2.17] - 2026-11-18
 

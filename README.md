@@ -118,7 +118,7 @@ scoop bucket add pandaward https://github.com/ratomirjovanovic/pandaward; scoop 
 Or download a binary from the [releases page](https://github.com/ratomirjovanovic/pandaward/releases) (Linux and macOS on amd64 and arm64, Windows on amd64). For example on Linux:
 
 ```sh
-v=v0.2.17
+v=v0.2.18
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/pandaward-linux-amd64
 curl -fLO https://github.com/ratomirjovanovic/pandaward/releases/download/$v/SHA256SUMS
 sha256sum --ignore-missing -c SHA256SUMS
@@ -128,7 +128,7 @@ chmod +x pandaward-linux-amd64 && sudo mv pandaward-linux-amd64 /usr/local/bin/p
 On Windows (PowerShell), save `pandaward-windows-amd64.exe` as `pandaward.exe` in a folder on your `PATH`:
 
 ```powershell
-Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.17/pandaward-windows-amd64.exe -OutFile pandaward.exe
+Invoke-WebRequest https://github.com/ratomirjovanovic/pandaward/releases/download/v0.2.18/pandaward-windows-amd64.exe -OutFile pandaward.exe
 (Get-FileHash pandaward.exe).Hash   # compare with the line in SHA256SUMS
 ```
 
@@ -431,7 +431,7 @@ With [pre-commit](https://pre-commit.com), add this to `.pre-commit-config.yaml`
 ```yaml
 repos:
   - repo: https://github.com/ratomirjovanovic/pandaward
-    rev: v0.2.17
+    rev: v0.2.18
     hooks:
       - id: pandaward-system   # uses the pandaward on your PATH; use id: pandaward to build it with Go 1.27+
 ```
@@ -454,13 +454,15 @@ First measurements (corpus of 20 synthetic scenarios, 240 episodes on a Messages
 
 ## Roadmap
 
-Released as of 0.2.17:
+Released as of 0.2.18:
 
 - CLI, evidence ledger, scope policy, inventory, static and runtime reports, plugin, MCP server, signed reproducible releases.
 - A built-in data flow (taint) engine for JavaScript, TypeScript, Python and Java, with no other analyzer needed, and ReDoS detection.
 - `pandaward verify-report`, the `pandaward_verify_report` MCP tool and a Stop hook check that catch an agent claiming PASS for a control the ledger does not have as PASS.
 - Public benchmarks measured on every change: OWASP Benchmark for Java and Python, OpenSSF CVE Benchmark for JavaScript and TypeScript ([pandaward.dev/benchmarks](https://pandaward.dev/benchmarks/)).
 - One independent measurement on code the engines were never tuned on: Snyk VulnBench 2.0, 108 attacker-reachable vulnerabilities in 20 real applications. Built-in only, PandaWard located 55 (51%, 95% interval 42% to 60%), far below its OWASP scores, which are development benchmarks. Go (9 of 32) is the largest gap. Protocol, per-case results and limits are in [research/vulnbench](research/vulnbench).
+- Two more independent measurements, both published with their results and limits: 90 GitHub Advisory fix commits for Python, Java and Go (PandaWard built-in located 7, 8%, 95% interval 4% to 15%; the protocol was written before the run), and a scan of 19 ordinary open-source applications where 268 of 271 high and critical findings were false positives by reviewer verdict, 3 were TLS verification switched off ([research/advisorybench](research/advisorybench), [research/realapps](research/realapps)). These are the weak spots the next accuracy work targets.
+- The benchmarks also report precision, recall, F1, false positives per KLOC, scan time and peak memory, and CodeQL with its default queries on the Python benchmark.
 - A second independent measurement for PHP, never used to develop the engine: 91 GitHub Advisory fix commits scanned by PandaWard (built-in only) and by Semgrep OSS with its public rule sets. PandaWard located 12 (13%), Semgrep 8 (9%); in the right weakness class 10 and 4. Both miss most of the set, and 10 of PandaWard's 12 are also reported after the fix. 9 advisories (Dolibarr, moodle, AVideo) could not be scanned in time and are not counted. Protocol, per-advisory results and the reasons for the misses are in [research/phpbench](research/phpbench).
 
 Language coverage today:
