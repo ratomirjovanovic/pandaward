@@ -189,12 +189,12 @@ var codeRules = []lineRule{
 	{ID: "code.ruby-shell", Control: "D-002", Title: "Shell command with interpolation", Langs: langs("ruby"), Re: regexp.MustCompile("(`[^`]*#\\{|\\bsystem\\(\\s*\"[^\"]*#\\{|%x\\()"),
 		Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-78", Message: "Interpolated shell command.", Fix: "Use system with separate arguments (system(cmd, arg1, arg2))."},
 
-	{ID: "code.sql-template", Control: "D-003", Title: "SQL built with string interpolation", Re: regexp.MustCompile(`(?i)(\x60[^\x60]*\b(select\s[^\x60]*\sfrom|insert\s+into|update\s+\w+\s+set|delete\s+from)\b[^\x60]*\$\{|\bf['"][^'"]*\b(select\s.*\sfrom|insert\s+into|update\s+\w+\s+set|delete\s+from)\b[^'"]*\{)`),
+	{ID: "code.sql-template", Control: "D-003", Title: "SQL built with string interpolation", Demote: sqlTemplateDemote, Re: regexp.MustCompile(`(?i)(\x60[^\x60]*\b(select\s[^\x60]*\sfrom|insert\s+into|update\s+\w+\s+set|delete\s+from)\b[^\x60]*\$\{|\bf['"][^'"]*\b(select\s.*\sfrom|insert\s+into|update\s+\w+\s+set|delete\s+from)\b[^'"]*\{)`),
 		Not: regexp.MustCompile(`(?i)\bsql(<[^\x60]*>)?\x60|\b(sql|db|tx)\s*\(\s*\)\s*\x60|\bdb\x60|Prisma\.sql|sql\.raw\(\s*\x60\s*\x60|\$(queryRaw|executeRaw)(<[^\x60]*>)?\x60`), Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-89",
 		Message: "Query text is built with string interpolation.", Fix: "Use bound parameters (tagged sql templates, placeholders) instead of interpolation."},
-	{ID: "code.sql-concat", Control: "D-003", Title: "SQL built with string concatenation", Re: sqlConcatRe, SupersededBy: "code.sql-template", Demote: sqlForFileOnly,
+	{ID: "code.sql-concat", Control: "D-003", Title: "SQL built with string concatenation", Re: sqlConcatRe, SupersededBy: "code.sql-template", Demote: sqlConcatDemote,
 		Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-89", Message: "Query text is concatenated with values; if a value is user controlled this is SQL injection.", Fix: "Use parameterized queries / prepared statements or the ORM query builder."},
-	{ID: "code.sql-unsafe-raw", Control: "D-003", Title: "Unsafe raw query API", Re: regexp.MustCompile(`\$(queryRawUnsafe|executeRawUnsafe)\s*\(|\.raw\(\s*f['"]|sequelize\.query\(\s*\x60[^\x60]*\$\{`),
+	{ID: "code.sql-unsafe-raw", Control: "D-003", Title: "Unsafe raw query API", Demote: sqlTemplateDemote, Re: regexp.MustCompile(`\$(queryRawUnsafe|executeRawUnsafe)\s*\(|\.raw\(\s*f['"]|sequelize\.query\(\s*\x60[^\x60]*\$\{`),
 		Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-89", Message: "Raw query API that does not parameterize input.", Fix: "Use $queryRaw with tagged templates or replacements/bind parameters."},
 
 	{ID: "code.py-deserialize", Control: "D-004", Title: "Unsafe deserialization API", Langs: py, Re: regexp.MustCompile(`\b(pickle|cPickle|dill|shelve|marshal)\.loads?\s*\(|\byaml\.(unsafe_)?load\s*\(`),
