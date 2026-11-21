@@ -313,7 +313,7 @@ sanitizers:
   - kinds: [code]
     calls: [JSON.stringify]
   - kinds: [xss]
-    calls: [escape-html, he.encode, he.escape, lodash.escape, validator.escape, DOMPurify.sanitize, dompurify.sanitize, xss, sanitize-html, encodeURI, JSON.stringify]
+    calls: [escape-html, he.encode, he.escape, lodash.escape, validator.escape, DOMPurify.sanitize, dompurify.sanitize, xss, filterXSS, xss.filterXSS, sanitize-html, encodeURI, JSON.stringify]
   - kinds: [sql]
     calls: [mysql.escape, pg-format, sqlstring.escape]
 
@@ -341,6 +341,10 @@ guards:
   # page (also through a function that returns such a check).
   - kinds: [all]
     anchored_regex: true
+  # A pattern that requires a slash and then a word character makes the value
+  # a path of this site.
+  - kinds: [redirect]
+    site_path_regex: true
   - kinds: [all]
     allowlist: true
   - kinds: [path]

@@ -400,6 +400,10 @@ guards:
   # Library checks that pass only for a safe value.
   - kinds: [redirect, ssrf]
     calls: [django.utils.http.url_has_allowed_host_and_scheme, django.utils.http.is_safe_url]
+  # A match of a pattern that requires a slash and then a word character
+  # makes the value a path of this site.
+  - kinds: [redirect]
+    site_path_regex: true
   # A value that is only letters and digits, or one of a list of
   # constants, cannot change a command, query, path or page.
   - kinds: [all]
