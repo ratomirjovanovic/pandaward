@@ -180,6 +180,11 @@ type Guard struct {
 	// AnchoredRegex: a match of a regular expression anchored at both
 	// ends that admits no arbitrary character (JavaScript re.test(x)).
 	AnchoredRegex bool `yaml:"anchored_regex"`
+	// SitePathRegex: a match of a regular expression anchored at the start
+	// that requires a slash followed by a character other than a slash or a
+	// backslash (re.match(r"^/[a-z]+", x), /^\/[a-z]/.test(x)): the value is
+	// a path of this site.
+	SitePathRegex bool `yaml:"site_path_regex"`
 }
 
 // Escape is x.replace(Old, new) with a new that does not contain Old.

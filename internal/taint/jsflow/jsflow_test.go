@@ -182,6 +182,18 @@ export async function GET(req) {
   NextResponse.redirect(~${id}/join~);
 }`, "~", "`"), false, "open-redirect:8", "open-redirect:9")
 
+	expect(t, "site path pattern and filterXSS", `
+import filterXSS from 'xss';
+app.get('/a', (req, res) => {
+  const to = req.query.to;
+  if (!/^\/[a-z]+/.test(to)) return res.redirect('/');
+  res.redirect(to);
+});
+app.get('/c', (req, res) => {
+  res.send(filterXSS(req.query.q));
+  res.send(req.query.q);
+});`, false, "xss:10")
+
 	expect(t, "express path as redirect target", `
 app.get('*', (req, res) => { res.redirect(req.url + '/'); });
 `, false, "open-redirect:2")

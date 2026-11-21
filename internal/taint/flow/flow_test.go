@@ -162,6 +162,28 @@ func TestFlows(t *testing.T) {
 	return redirect("https://" + x)`, []string{"open-redirect:7"}},
 		{"redirect with credentials in the origin", `	x = request.args.get("room")
 	return redirect("https://user@" + x)`, []string{"open-redirect:7"}},
+		{"redirect after a site path pattern", `	x = request.args.get("next")
+	if not re.match(r"^/[a-z]+", x):
+		return redirect("/")
+	return redirect(x)`, nil},
+		{"redirect after a pattern that admits a slash", `	x = request.args.get("next")
+	if not re.match(r"^/.+", x):
+		return redirect("/")
+	return redirect(x)`, []string{"open-redirect:9"}},
+		{"redirect after a pattern without the start", `	x = request.args.get("next")
+	if not re.match(r"[a-z]+", x):
+		return redirect("/")
+	return redirect(x)`, []string{"open-redirect:9"}},
+		{"site path pattern, compound condition", `	x = request.args.get("next")
+	if not x or not re.match(r"^/[a-z]+", x):
+		return redirect("/")
+	return redirect(x)`, nil},
+		{"site path pattern in a helper", `	x = request.args.get("next")
+	return redirect(safe_next(x))
+def safe_next(u):
+	if not u or not re.match(r"^/[a-z]+", u):
+		return "/"
+	return u`, nil},
 		{"yaml safe loader", `	x = request.data
 	yaml.load(x, Loader=yaml.SafeLoader)
 	yaml.load(x, Loader=yaml.Loader)

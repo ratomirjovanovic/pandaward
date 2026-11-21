@@ -173,6 +173,23 @@ func (f *fnRun) refine(st State, cond ir.Operand, edge bool) State {
 			markOp(d.Args[0], g.Kinds)
 		case g.Allowlist && isIn && !absent && constant(f.val(st, d.B)) && f.val(st, d.B).C == nil:
 			markOp(d.A, g.Kinds)
+		case g.SitePathRegex && d.Op == ir.Call && edge:
+			pat, target := "", ir.Operand{}
+			switch {
+			case len(d.Args) >= 2 && f.calls(d, st, []string{"re.match", "re.search", "re.fullmatch"}):
+				if v := f.val(st, d.Args[0]); v.C != nil && v.C.Kind == ir.Str {
+					pat, target = v.C.Val, d.Args[1]
+				}
+			case d.Name == "test" && len(d.Args) == 1:
+				if re := f.val(st, d.A); re.C != nil && re.C.Kind == ir.Other && strings.HasPrefix(re.C.Val, "/") {
+					if i := strings.LastIndex(re.C.Val, "/"); i > 0 {
+						pat, target = re.C.Val[1:i], d.Args[0]
+					}
+				}
+			}
+			if sitePathRegex(pat) {
+				markOp(target, g.Kinds)
+			}
 		case g.Netloc:
 			// url.netloc in [...] on this edge, url = urlparse(x)
 			var host ir.Operand
@@ -336,4 +353,38 @@ func (f *fnRun) root(o ir.Operand) string {
 		}
 	}
 	return ""
+}
+
+// sitePathRegex reports a pattern anchored at the start that needs a slash
+// and then a letter, a digit, a word class or a character class without a
+// slash, a backslash or a dot: whatever matches is a path of this site.
+func sitePathRegex(p string) bool {
+	rest, ok := strings.CutPrefix(p, "^")
+	if !ok {
+		return false
+	}
+	rest, ok = strings.CutPrefix(rest, "/")
+	if !ok {
+		rest, ok = strings.CutPrefix(rest, `\/`)
+		if !ok {
+			return false
+		}
+	}
+	if rest == "" {
+		return false
+	}
+	switch c := rest[0]; {
+	case c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-':
+		return true
+	case c == '\\':
+		return len(rest) > 1 && (rest[1] == 'w' || rest[1] == 'd')
+	case c == '[':
+		end := strings.IndexByte(rest, ']')
+		if end < 0 {
+			return false
+		}
+		class := rest[1:end]
+		return class != "" && class[0] != '^' && !strings.ContainsAny(class, `/\.`)
+	}
+	return false
 }
