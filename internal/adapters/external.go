@@ -344,7 +344,7 @@ func gitleaks() Adapter {
 					placeholders++
 					sev, conf = model.SevInfo, model.Hypothesis
 					title = "Placeholder-shaped value matched a secret rule: " + it.Description
-					msg += " The value is shaped like a placeholder (sequential or repeated characters, a placeholder word, a dummy JWT or a workflow secrets fallback), so it is listed for review and not counted against E-005."
+					msg += " The value is shaped like a placeholder (sequential or repeated characters, a placeholder word, a dummy JWT, a workflow secrets fallback, a value documented as public or a translated sentence), so it is listed for review and not counted against E-005."
 					fix = "Confirm the value is not a real credential. If it is real, rotate it and load it at runtime from a secret manager."
 				}
 				out = append(out, model.Signal{RuleID: "gitleaks." + it.RuleID, ControlID: "E-005", Title: title, Severity: sev, Confidence: conf, CWE: "CWE-798",
@@ -431,8 +431,14 @@ func placeholderHit(root, rel, rule string, startLine, endLine, startCol, endCol
 	if startLine != endLine || strings.Contains(rule, "private-key") {
 		return false
 	}
-	value, line, ok := matchedValue(root, rel, startLine, startCol, endCol)
-	return ok && placeholderSecret(value, rel, line)
+	value, line, prev, ok := matchedValue(root, rel, startLine, startCol, endCol)
+	if !ok {
+		return false
+	}
+	if strings.HasSuffix(rule, "generic-api-key") && (documentedPublic(line, prev) || proseLine(line)) {
+		return true
+	}
+	return placeholderSecret(value, rel, line)
 }
 
 func semgrep() Adapter {

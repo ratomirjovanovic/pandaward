@@ -161,33 +161,35 @@ func workflowFallback(value, file, line string) bool {
 }
 
 // matchedValue re-reads line n of rel under root and returns the token gitleaks
-// matched between the 1-based columns start and end, with the whole line.
+// matched between the 1-based columns start and end, with the whole line and
+// the line before it.
 // Paths that leave the root, also through symlinks, are refused. ok is false
 // when the line cannot be read or the columns do not fit it.
-func matchedValue(root, rel string, n, start, end int) (value, line string, ok bool) {
+func matchedValue(root, rel string, n, start, end int) (value, line, prev string, ok bool) {
 	if root == "" || rel == "" || rel == "(outside-root)" || n < 1 || start < 1 || end < start {
-		return "", "", false
+		return "", "", "", false
 	}
 	rootAbs, err := filepath.EvalSymlinks(root)
 	if err != nil {
-		return "", "", false
+		return "", "", "", false
 	}
 	abs, err := filepath.EvalSymlinks(filepath.Join(root, filepath.FromSlash(rel)))
 	if err != nil {
-		return "", "", false
+		return "", "", "", false
 	}
 	if r, err := filepath.Rel(rootAbs, abs); err != nil || r == ".." || strings.HasPrefix(r, ".."+string(filepath.Separator)) || filepath.IsAbs(r) {
-		return "", "", false
+		return "", "", "", false
 	}
 	fh, err := os.Open(abs)
 	if err != nil {
-		return "", "", false
+		return "", "", "", false
 	}
 	defer fh.Close()
 	sc := bufio.NewScanner(fh)
 	sc.Buffer(make([]byte, 64*1024), 1<<20)
 	for i := 1; sc.Scan(); i++ {
 		if i < n {
+			prev = sc.Text()
 			continue
 		}
 		line = strings.TrimRight(sc.Text(), "\r")
@@ -202,12 +204,12 @@ func matchedValue(root, rel string, n, start, end int) (value, line string, ok b
 			e = len(line)
 		}
 		if s >= e {
-			return "", "", false
+			return "", "", "", false
 		}
 		value = lastToken(line[s:e])
-		return value, line, value != ""
+		return value, line, strings.TrimRight(prev, "\r"), value != ""
 	}
-	return "", "", false
+	return "", "", "", false
 }
 
 // lastToken returns the last run of secret-like characters in s. For a rule
@@ -231,3 +233,26 @@ func lastToken(s string) string {
 	}
 	return tok
 }
+
+var (
+	publicDocRe  = regexp.MustCompile(`(?i)\bpublic\b.*\b(key|token|id)\b|\b(key|token|id)\b.*\bpublic\b`)
+	docCommentRe = regexp.MustCompile(`^\s*(//|#|/\*|\*|--|<!--)`)
+	proseRe      = regexp.MustCompile(`["'][^"']*\p{L}{2,}( +\p{L}{2,}[,.;:]?){4,}`)
+)
+
+// documentedPublic reports a match on a line whose own comment, or the
+// comment line before it, says the value is a public key or token.
+func documentedPublic(line, prev string) bool {
+	if docCommentRe.MatchString(prev) && publicDocRe.MatchString(prev) {
+		return true
+	}
+	if i := strings.Index(line, "//"); i >= 0 && publicDocRe.MatchString(line[i:]) {
+		return true
+	}
+	return false
+}
+
+// proseLine reports a line whose quoted text is a sentence (five or more
+// words of letters), as a translated message in a locale file is: the entropy
+// of ordinary words is not a credential.
+func proseLine(line string) bool { return proseRe.MatchString(line) }
