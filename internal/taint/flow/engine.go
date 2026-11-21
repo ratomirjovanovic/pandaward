@@ -728,6 +728,10 @@ func (f *fnRun) instr(in *ir.Instr, st State) {
 		if in.Name == "+" {
 			r = hinted(r, a, b)
 		}
+		if (in.Name == "+" || in.Name == "%") && sameSitePath(a) && r.T != nil {
+			r = r.copy()
+			r.Safe |= taint.Redirect
+		}
 		f.set(st, in.Dst, r, line)
 	case ir.Unary:
 		a := f.val(st, in.A)
@@ -1065,6 +1069,10 @@ func (f *fnRun) build(in *ir.Instr, st State) *Value {
 		}
 		if allConst && r.T == nil {
 			return strVal(sb.String())
+		}
+		if len(in.Args) > 0 && sameSitePath(f.val(st, in.Args[0])) && r.T != nil {
+			r = r.copy()
+			r.Safe |= taint.Redirect
 		}
 		if r.Opaque || allPure {
 			r = r.copy()

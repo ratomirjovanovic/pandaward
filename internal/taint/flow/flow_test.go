@@ -142,6 +142,26 @@ func TestFlows(t *testing.T) {
 	return redirect(x)`, nil},
 		{"open redirect", `	x = request.args.get("next")
 	return redirect(x)`, []string{"open-redirect:7"}},
+		{"redirect to a path of this site", `	x = request.args.get("room")
+	return redirect("/join/" + x)`, nil},
+		{"redirect to a path of this site, f-string", `	x = request.args.get("room")
+	return redirect(f"/login?room={x}")`, nil},
+		{"redirect to a path of this site, format", `	x = request.args.get("room")
+	return redirect("/join/%s" % x)`, nil},
+		{"redirect after a bare slash", `	x = request.args.get("room")
+	return redirect("/" + x)`, []string{"open-redirect:7"}},
+		{"redirect after a double slash", `	x = request.args.get("room")
+	return redirect("//" + x)`, []string{"open-redirect:7"}},
+		{"redirect with the input first", `	x = request.args.get("room")
+	return redirect(x + "/join/")`, []string{"open-redirect:7"}},
+		{"redirect to a fixed origin", `	x = request.args.get("room")
+	return redirect("https://app.example.com" + x)`, nil},
+		{"redirect to a fixed origin, f-string", `	x = request.args.get("room")
+	return redirect(f"https://app.example.com/join?room={x}")`, nil},
+		{"redirect to a scheme only", `	x = request.args.get("room")
+	return redirect("https://" + x)`, []string{"open-redirect:7"}},
+		{"redirect with credentials in the origin", `	x = request.args.get("room")
+	return redirect("https://user@" + x)`, []string{"open-redirect:7"}},
 		{"yaml safe loader", `	x = request.data
 	yaml.load(x, Loader=yaml.SafeLoader)
 	yaml.load(x, Loader=yaml.Loader)

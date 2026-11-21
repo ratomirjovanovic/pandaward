@@ -171,6 +171,17 @@ export async function GET(req) {
   NextResponse.redirect(new URL(new URL(req.url).searchParams.get('to'), req.url));
 }`, false, "open-redirect:7")
 
+	expect(t, "redirect to a fixed site and a path of this site", strings.ReplaceAll(`
+import { NextResponse } from 'next/server';
+const SITE_URL = 'https://app.example.com';
+export async function GET(req) {
+  const id = new URL(req.url).searchParams.get('id');
+  NextResponse.redirect(~${SITE_URL}/done?id=${id}~, 303);
+  NextResponse.redirect(~/join/${id}~);
+  NextResponse.redirect('/' + id);
+  NextResponse.redirect(~${id}/join~);
+}`, "~", "`"), false, "open-redirect:8", "open-redirect:9")
+
 	expect(t, "express path as redirect target", `
 app.get('*', (req, res) => { res.redirect(req.url + '/'); });
 `, false, "open-redirect:2")

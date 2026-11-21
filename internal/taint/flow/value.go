@@ -73,6 +73,30 @@ func hinted(r *Value, parts ...*Value) *Value {
 	return r
 }
 
+// sameSitePath reports a constant that starts a string with a fixed target:
+// a path of this site (a slash followed by a character other than a slash or
+// a backslash) or the origin of a fixed site ("https://host" with an optional
+// port and path). Whatever follows, the string cannot name another host
+// ("/join/" + x is a path, "/" + x may be "//host"), so it is safe as a
+// redirect target. A bare origin followed by text that starts with "@" would
+// change the host; that is a residual the check accepts.
+func sameSitePath(v *Value) bool {
+	if v == nil || v.C == nil || v.C.Kind != ir.Str || len(v.C.Val) < 2 {
+		return false
+	}
+	s := v.C.Val
+	if s[0] == '/' {
+		return s[1] != '/' && s[1] != '\\'
+	}
+	for _, scheme := range []string{"https://", "http://"} {
+		if rest, ok := strings.CutPrefix(s, scheme); ok {
+			host, _, _ := strings.Cut(rest, "/")
+			return host != "" && !strings.ContainsAny(host, "@\\?#")
+		}
+	}
+	return false
+}
+
 // isPure reports a value known to come from constants only.
 func isPure(v *Value) bool {
 	if v == nil {
