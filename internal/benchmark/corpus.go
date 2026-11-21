@@ -189,6 +189,12 @@ func Corpus() []Case {
 	add(pair("code.weak-csp", "builtin-code",
 		map[string]string{"next.config.ts": "const csp = [\n  \"default-src 'self'\",\n  \"script-src 'self' 'unsafe-inline'\",\n];\nexport default { async headers() { return [{ source: '/:path*', headers: [{ key: 'Content-Security-Policy', value: csp.join('; ') }] }]; } };\n"},
 		map[string]string{"next.config.ts": "const csp = [\n  \"default-src 'self'\",\n  \"script-src 'self' https://cdn.example.com\",\n];\nexport default { async headers() { return [{ source: '/:path*', headers: [{ key: 'Content-Security-Policy', value: csp.join('; ') }] }]; } };\n"}))
+	add(pair("code.dns-rebinding-check", "builtin-code",
+		map[string]string{"src/page.ts": "import { lookup } from \"node:dns/promises\";\nexport async function readPage(url: string) {\n  const u = new URL(url);\n  const addrs = await lookup(u.hostname, { all: true });\n  if (!addrs.every((a) => isPublicAddress(a.address))) return null;\n  const res = await fetch(u);\n  return res.text();\n}\n"},
+		map[string]string{"src/page.ts": "import { lookup } from \"node:dns/promises\";\nimport { Agent } from \"undici\";\nconst agent = new Agent({ connect: { lookup: checkedLookup } });\nexport async function readPage(url: string) {\n  const u = new URL(url);\n  const addrs = await lookup(u.hostname, { all: true });\n  if (!addrs.every((a) => isPublicAddress(a.address))) return null;\n  const res = await fetch(u, { dispatcher: agent });\n  return res.text();\n}\n"}))
+	add(pair("code.excessive-data-exposure", "builtin-code",
+		map[string]string{"src/route.ts": "export async function GET() {\n  const events = await db.usageEvent.findMany({ where: { userId: user.id } });\n  return NextResponse.json({ events });\n}\n"},
+		map[string]string{"src/route.ts": "export async function GET() {\n  const events = await db.usageEvent.findMany({ where: { userId: user.id }, select: { id: true, type: true } });\n  return NextResponse.json({ events });\n}\n"}))
 	// Hidden characters are written as escapes so this file stays readable.
 	add(pair("prompt.hidden-unicode", "builtin-code",
 		map[string]string{"CLAUDE.md": "# Project\nRun the tests before committing.\u200b\U000E0049\U000E0067\U000E006E\U000E006F\U000E0072\U000E0065\n"},

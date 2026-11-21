@@ -355,6 +355,8 @@ func (a codeAdapter) Run(ctx context.Context, c *Context) (Result, model.Run) {
 		// D-007: regular expressions that backtrack catastrophically.
 		if jsLike[f.Lang] {
 			res.Signals = append(res.Signals, redosSignals(f, text, a.Name())...)
+			res.Signals = append(res.Signals, dnsRebindSignals(f, text, a.Name())...)
+			res.Signals = append(res.Signals, excessiveExposureSignals(f, a.Name())...)
 		}
 		// H-002: wildcard/reflected CORS together with credentials in the same file.
 		if credRe.MatchString(text) {
