@@ -104,6 +104,7 @@ var Controls = []Control{
 
 	{ID: "G-001", Domain: "G", Title: "Webhook handlers verify a signature before acting on the payload", Method: MethodStatic, Adapter: "builtin-code", Requires: "webhooks", Refs: []string{"CWE-345"}},
 	{ID: "G-002", Domain: "G", Title: "Runtime API authorization matches the declared contract", Method: MethodRuntime, Adapter: "contract", Requires: "web", Profile: "staging-active", Refs: []string{"API1:2023", "API3:2023"}},
+	{ID: "G-003", Domain: "G", Title: "API responses return selected fields, not whole database rows", Method: MethodStatic, Adapter: "builtin-code", Requires: "code", Refs: []string{"CWE-213", "API3:2023"}},
 
 	{ID: "H-001", Domain: "H", Title: "No raw HTML injection sinks (innerHTML, dangerouslySetInnerHTML, v-html, |safe)", Method: MethodStatic, Adapter: "builtin-code", Requires: "code", Refs: []string{"CWE-79"}},
 	{ID: "H-002", Domain: "H", Title: "CORS is not configured as wildcard together with credentials", Method: MethodStatic, Adapter: "builtin-code", Requires: "web", Refs: []string{"CWE-942"}},
