@@ -2,6 +2,7 @@ package adapters
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -150,5 +151,40 @@ func TestTaintSignalMessage(t *testing.T) {
 	}
 	if strings.Contains(s.Message, "hunter2") {
 		t.Errorf("secret in a step not redacted: %s", s.Message)
+	}
+}
+
+// #588: a call of a small check that throws on what it rejects is followed
+// even when the module has used up its budget of followed calls, so the
+// code after it is judged with the argument as checked.
+func TestTaintCheckCallPastBudget(t *testing.T) {
+	var sb strings.Builder
+	sb.WriteString("const fs = require('fs');\nconst path = require('path');\n")
+	sb.WriteString("function id(n) { return n; }\n")
+	sb.WriteString("function ensureName(req, name) {\n  if (!isValidName(name)) { throw new Error('bad'); }\n}\n")
+	sb.WriteString("function noteName(req, name) {\n  console.log(name);\n}\n")
+	sb.WriteString("app.get('/busy', (req, res) => {\n")
+	for i := 0; i < 2600; i++ {
+		fmt.Fprintf(&sb, "  id(%d);\n", i)
+	}
+	sb.WriteString("  res.send('ok');\n});\n")
+	for _, c := range []struct {
+		route, call string
+		want        bool
+	}{
+		{"/checked", "ensureName(req, name);", false},
+		{"/unchecked", "noteName(req, name);", true},
+	} {
+		src := sb.String() + "app.get('" + c.route + "', (req, res) => {\n  const name = req.query.name;\n  " + c.call + "\n  res.send(fs.readFileSync(path.join('/data', name)));\n});\n"
+		sigs := runOn(t, taintAdapter{}, map[string]string{"src/a.js": src})
+		got := false
+		for _, s := range sigs {
+			if s.RuleID == "taint.js-path-traversal" {
+				got = true
+			}
+		}
+		if got != c.want {
+			t.Errorf("%s: path traversal reported=%v, want %v", c.route, got, c.want)
+		}
 	}
 }

@@ -23,6 +23,10 @@ const (
 	maxCallDepth = 4
 	maxCalls     = 2000
 	maxWork      = 500_000
+	// maxCheckCalls is how many calls of checking functions are followed
+	// after maxCalls is reached; maxCheckBlocks is the size of one.
+	maxCheckCalls  = 2000
+	maxCheckBlocks = 40
 )
 
 type callResult struct {
@@ -516,7 +520,12 @@ func (f *fnRun) invoke(fn *ir.Function, self *Value, c *call) (ret, selfOut *Val
 		return r.ret, r.self, r.validates, true
 	}
 	if p.calls >= maxCalls || p.work >= maxWork {
-		return nil, nil, false, false
+		// A check that raises on what it rejects is small and is what
+		// makes the code after its call safe, so a call of one is followed
+		// past the budget, up to a hard limit (#588).
+		if p.calls >= maxCalls+maxCheckCalls || p.work >= maxWork*4 || !isRaiseOnly(fn) {
+			return nil, nil, false, false
+		}
 	}
 	p.calls++
 	p.invoked[fn] = true
@@ -692,4 +701,25 @@ func (f *fnRun) export(q, name string, v *Value) {
 			f.stored[k] = fv
 		}
 	}
+}
+
+// isRaiseOnly reports a small function that returns no value and raises on
+// some path: a check such as validateRequest(req, name) that throws on what
+// it rejects.
+func isRaiseOnly(fn *ir.Function) bool {
+	if len(fn.Blocks) > maxCheckBlocks {
+		return false
+	}
+	raises := false
+	for _, b := range fn.Blocks {
+		switch b.Term.Kind {
+		case ir.Raise:
+			raises = true
+		case ir.Return:
+			if v := b.Term.Value; !v.IsZero() && !(v.Const != nil && v.Const.Kind == ir.None) {
+				return false
+			}
+		}
+	}
+	return raises
 }
