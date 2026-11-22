@@ -532,3 +532,28 @@ module.exports = { a, b, c };`
 		t.Errorf("got %q", got)
 	}
 }
+
+// TestJSObjectResponseIsNotHTML checks that an object literal written with
+// res.send is JSON and not a cross-site scripting flow, while the same input
+// sent as text is.
+func TestJSObjectResponseIsNotHTML(t *testing.T) {
+	src := `const express = require('express');
+const app = express();
+app.get('/a', (req, res) => {
+  res.send({ redirect_url: req.query.next });
+});
+app.get('/b', (req, res) => {
+  res.status(200).send({
+    items: [req.query.q]
+  });
+});
+app.get('/c', (req, res) => {
+  res.send(req.query.q);
+});
+app.get('/d', (req, res) => {
+  res.send('<p>' + req.query.q + '</p>');
+});`
+	if got := strings.Join(jsFlows(t, src), " "); got != "taint.js-xss:12 taint.js-xss:15" {
+		t.Errorf("got %q", got)
+	}
+}

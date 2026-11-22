@@ -650,7 +650,7 @@ func (f *fnRun) sinks(c *call, st State) {
 			vals = []*Value{c.args[t.t.Arg]}
 		}
 		for _, v := range vals {
-			if v.tainted(s.Kind) && !(s.TextOnly && v.Opaque) {
+			if v.tainted(s.Kind) && !(s.TextOnly && v.Opaque) && !(s.Kind == taint.XSS && f.javascript() && jsonObject(v)) {
 				f.foundSpan(s, c.in.Pos, v.T)
 				break
 			}
@@ -1069,4 +1069,11 @@ func formatKeepsHost(c *call) bool {
 		return false
 	}
 	return true
+}
+
+// jsonObject reports an object literal: written to a response it is
+// serialized as JSON (Express res.send) or as text with no markup, so a
+// value inside it does not become HTML.
+func jsonObject(v *Value) bool {
+	return v != nil && v.Inst == "dict" && v.Fields != nil
 }
