@@ -37,3 +37,7 @@ chi (55 Go files) gave 4 findings with the first version of the specification an
 
 - The measurement has the limits of RESULTS.md (a sink within 2 lines, one run, a reference set from a commercial engine) and these: the front end reads one directory as one package and ignores build tags and test files; a type's methods are found only when they are in the file that declares the type; generics, `go:generate` and cgo are not followed; struct values lose their class when built by a composite literal that is then stored in a field.
 - Sources of other frameworks are not in the specification (beego, goa, buffalo, fasthttp) and a handler registered by one of them is analyzed only through the standard library types its parameters declare.
+
+## Update, 21 November 2026: the three chi redirects
+
+The two `http.Redirect(w, r, r.RequestURI+"/", ...)` findings in chi's profiler and the `fmt.Sprintf("%s?%s", path, r.URL.RawQuery)` redirect in `strip.go` are no longer reported. `net/http` cleans a path-only redirect target, so the request URI is treated like the request path, and a `fmt.Sprintf` with a constant format is safe as a redirect target when every unsafe value comes after a `?` or `#` of the format or after a constant that starts a path of this site. A value placed first (`"%s?a=1"`) or as the host (`"https://%s/"`) still reports. chi now gives no taint finding and echo none. The VulnBench Go redirect references (ardanservice, gobase, goxygen, saas-starter-kit) are located exactly as before. The published runs above are unchanged.

@@ -262,6 +262,7 @@ sanitizers:
     calls:
       - net.url.URL.field_Path
       - net.url.URL.field_RawPath
+      - net.http.Request.field_RequestURI
   # "/" + strings.Trim(path, "/") cannot start with //
   - kinds: [redirect]
     calls:

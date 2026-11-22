@@ -230,6 +230,10 @@ func (f *fnRun) callResolved(c *call, st State) *Value {
 	for _, a := range c.all {
 		r = mix(r, a)
 	}
+	if r.T != nil && formatKeepsHost(c) {
+		r = r.copy()
+		r.Safe |= taint.Redirect
+	}
 	// A method of the input itself (a string or the request's dicts)
 	// returns text; any other call returns an object built from it.
 	if r.T != nil {
@@ -1016,4 +1020,53 @@ func taintedScope(env State) bool {
 		}
 	}
 	return false
+}
+
+// formatKeepsHost reports a fmt.Sprintf with a constant format whose result
+// cannot name another host (#534): every argument that is untrusted and not
+// safe as a redirect target comes after a "?" or "#" of the format, or after
+// a constant that starts a path of this site, as in
+// fmt.Sprintf("%s?%s", path, r.URL.RawQuery) with a path that is itself safe.
+func formatKeepsHost(c *call) bool {
+	named := false
+	for _, n := range c.names {
+		named = named || n == "fmt.Sprintf"
+	}
+	if !named || len(c.args) == 0 || c.args[0].C == nil || c.args[0].C.Kind != ir.Str {
+		return false
+	}
+	format, args := c.args[0].C.Val, c.args[1:]
+	hostSafe := false
+	var prefix strings.Builder
+	ai := 0
+	for i := 0; i < len(format); {
+		if format[i] != '%' {
+			if format[i] == '?' || format[i] == '#' {
+				hostSafe = true
+			}
+			prefix.WriteByte(format[i])
+			i++
+			continue
+		}
+		if i+1 < len(format) && format[i+1] == '%' {
+			prefix.WriteByte('%')
+			i += 2
+			continue
+		}
+		j := i + 1
+		for j < len(format) && strings.IndexByte("+-# 0123456789.*", format[j]) >= 0 {
+			j++
+		}
+		if j >= len(format) || ai >= len(args) {
+			return false
+		}
+		i = j + 1
+		v := args[ai]
+		ai++
+		if v.T == nil || hostSafe || v.Safe&taint.Redirect != 0 || sameSitePath(strVal(prefix.String())) {
+			continue
+		}
+		return false
+	}
+	return true
 }
