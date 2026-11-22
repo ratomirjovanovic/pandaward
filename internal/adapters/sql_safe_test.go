@@ -61,6 +61,20 @@ func TestSQLSafePartsDemotion(t *testing.T) {
 		{"reassigned const js", "a.js", "let T = 'users';\nT = req.query.t;\ndb.query(`SELECT * FROM ${T}`);\n", false},
 		// Continuation after a plus is read.
 		{"continuation value js", "a.js", "db.query(\"SELECT * FROM u WHERE id = \" +\n  id);\n", false},
+		{"ctor name ts", "a.ts", "class S {\n  constructor(tableName: string) {\n    this.tableName = tableName;\n  }\n  get(id) {\n    return this.db.query(`SELECT * FROM ${this.tableName} WHERE id = $1`, [id]);\n  }\n}\n", true},
+		{"ctor parameter property ts", "a.ts", "class S {\n  constructor(private tableName: string) {}\n  get(id) {\n    return this.db.query(`SELECT * FROM ${this.tableName} WHERE id = $1`, [id]);\n  }\n}\n", true},
+		{"ctor name py", "a.py", "class S:\n    def __init__(self, table_name):\n        self.table_name = table_name\n    def get(self, i):\n        self.cur.execute(f\"SELECT * FROM {self.table_name} WHERE id = ?\", (i,))\n", true},
+		{"member from request js", "a.js", "class S {\n  run(req) {\n    this.t = req.query.t;\n    db.query(`SELECT * FROM ${this.t}`);\n  }\n}\n", false},
+		{"member from a setter js", "a.js", "class S {\n  setTable(t) { this.t = t; }\n  get() { db.query(`SELECT * FROM ${this.t}`); }\n}\n", false},
+		{"percent placeholders py", "a.py", "ph = \", \".join([\"%s\"] * len(ids))\ncur.execute(f\"DELETE FROM t WHERE id IN ({ph})\", ids)\n", true},
+		{"placeholder attribute py", "a.py", "class S:\n    def __init__(self):\n        self._param = \"?\"\n    def drop(self, sid):\n        self.cur.execute(f\"DELETE FROM t WHERE id = {self._param}\", (sid,))\n", true},
+		{"migration file js", "db/migrations/a.js", "await queryInterface.sequelize.query(`DROP TRIGGER IF EXISTS ${triggerName}`);\n", true},
+		{"not a migration js", "db/models/a.js", "await queryInterface.sequelize.query(`DROP TRIGGER IF EXISTS ${triggerName}`);\n", false},
+		{"parameter default is not a constant py", "a.py", "def get(table: str = \"t\"):\n    cur.execute(f\"SELECT * FROM {table}\")\n", false},
+		{"validator call result py", "a.py", "class S:\n    def __init__(self, table=\"t\"):\n        self.table = _validate_identifier(table, \"table\")\n    def n(self):\n        self.cur.execute(f\"SELECT COUNT(*) FROM {self.table}\")\n", true},
+		{"validator statement py", "a.py", "class S:\n    def __init__(self, table_prefix=\"p_\"):\n        validate_identifier(table_prefix, \"table_prefix\")\n        self.table_prefix = table_prefix\n        self.sessions_table = f\"{table_prefix}sessions\"\n    def get(self, sid):\n        self.cur.execute(f\"SELECT * FROM {self.sessions_table} WHERE session_id = %s\", (sid,))\n", true},
+		{"passed on, not checked py", "a.py", "class S:\n    def go(self, table_prefix):\n        self.table_prefix = table_prefix\n        self.sessions_table = f\"{table_prefix}sessions\"\n        self.cur.execute(f\"SELECT * FROM {self.sessions_table}\")\n", false},
+		{"mysql backticks in an f-string py", "a.py", "class S:\n    def __init__(self, bucket):\n        self.bucket = bucket\n    def n(self):\n        q = f\"SELECT COUNT(*) FROM `{self.bucket}`.`c`\"\n        self.run(q)\n", true},
 	}
 	for _, c := range cases {
 		sigs := runOn(t, codeAdapter{}, map[string]string{"src/" + c.file: c.src})
