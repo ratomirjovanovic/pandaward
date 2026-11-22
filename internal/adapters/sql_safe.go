@@ -41,6 +41,11 @@ func sqlSafeDemote(c lineCtx, concat bool) *demotion {
 	if c.File == nil || c.Index < 0 || c.Index >= len(c.File.Lines) {
 		return nil
 	}
+	if sqlMigrationPath.MatchString(strings.ReplaceAll(c.File.Path, `\`, "/")) {
+		return &demotion{Title: "SQL built in a database migration",
+			Message: "The statement is in a migration file, which an operator runs against the project's own database when it is deployed and which no request reaches. It is listed because a migration can still build a statement from data it reads.",
+			Fix:     "Nothing to do if the migration only uses its own constants; check any value it reads from the database or a file."}
+	}
 	line := c.File.Lines[c.Index]
 	// A statement continued after a trailing plus is read to its end.
 	for k := 1; k <= 3 && strings.HasSuffix(strings.TrimSpace(line), "+") && c.Index+k < len(c.File.Lines); k++ {
@@ -54,14 +59,14 @@ func sqlSafeDemote(c lineCtx, concat bool) *demotion {
 			return nil
 		}
 	}
-	exprs, ok := sqlOperands(line)
+	exprs, ok := sqlOperands(line, c.File.Lang == "python")
 	if !ok {
 		return nil
 	}
 	if !concat && len(exprs) == 0 {
 		return nil
 	}
-	env := sqlEnv{lines: c.File.Lines, text: strings.Join(c.File.Lines, "\n"), at: c.Index}
+	env := sqlEnv{lines: c.File.Lines, text: strings.Join(c.File.Lines, "\n"), at: c.Index, py: c.File.Lang == "python"}
 	for _, e := range exprs {
 		if !env.safe(e, 0) {
 			return nil
@@ -72,7 +77,7 @@ func sqlSafeDemote(c lineCtx, concat bool) *demotion {
 
 // sqlOperands lists the parts of a statement that are not text: ${} and
 // f-string expressions inside literals, and operands joined with +.
-func sqlOperands(line string) ([]string, bool) {
+func sqlOperands(line string, py bool) ([]string, bool) {
 	type token struct {
 		text             string
 		prevLit, nextLit bool
@@ -120,6 +125,12 @@ func sqlOperands(line string) ([]string, bool) {
 			prevLit = true
 			i = j + len(quote)
 		case '`':
+			if py {
+				// a backtick is an ordinary character in Python (MySQL quoting)
+				out.WriteByte(ch)
+				i++
+				continue
+			}
 			j := i + 1
 			for j < n && line[j] != '`' {
 				if line[j] == '\\' {
@@ -295,14 +306,17 @@ type sqlEnv struct {
 	lines []string
 	text  string
 	at    int
+	py    bool
 }
 
 var (
 	sqlLitRe        = regexp.MustCompile(`^(?:'[^'\\]*'|"[^"\\]*"|\d+(?:\.\d+)?)$`)
 	sqlNumConvRe    = regexp.MustCompile(`^(?:Number|parseInt|parseFloat|int|float|len|Math\.(?:floor|ceil|round|min|max|abs|trunc)|Integer\.parseInt|Long\.parseLong|Integer\.valueOf)\s*\(`)
+	sqlCheckCallRe  = regexp.MustCompile(`^(?:[\w$]+\.)*_*(?:validate|sanitize|sanitise|check|ensure|assert|verify|safe)\w*\s*\(`)
+	sqlCheckStmtRe  = regexp.MustCompile(`^\s*(?:await\s+)?(?:[\w$]+\.)*_*(?:validate|check|ensure|assert|verify)\w*\s*\(`)
 	sqlLengthRe     = regexp.MustCompile(`\.length$|\.size\(\)$`)
 	sqlQuoteCallRe  = regexp.MustCompile(`^(?:[\w$.]*\.)?(?:escapeId|escapeIdentifier|quoteIdent\w*|quote_ident\w*|quoteName|quote_name|quoteIdentifier|identifier|ident|escape|escapeLiteral)\s*\(`)
-	sqlPlaceholdRe  = regexp.MustCompile(`\.fill\(\s*['"]\?['"]\s*\)|['"]\?['"]\s*\.repeat\(|['"]\?['"]\s+for\s+\w+|['"]\?['"]\s*\*|\*\s*['"]\?['"]|\[\s*['"]\?['"]\s*\]\s*\*|=>\s*['"\x60]\?['"\x60]|=>\s*['"\x60]\$['"\x60]\s*\+|=>\s*\x60\$\$\{`)
+	sqlPlaceholdRe  = regexp.MustCompile(`\.fill\(\s*['"](?:\?|%s)['"]\s*\)|['"](?:\?|%s)['"]\s*\.repeat\(|['"](?:\?|%s)['"]\s+for\s+\w+|['"](?:\?|%s)['"]\s*\*|\*\s*['"](?:\?|%s)['"]|\[\s*['"](?:\?|%s)['"]\s*\]\s*\*|=>\s*['"\x60](?:\?|%s)['"\x60]|=>\s*['"\x60]\$['"\x60]\s*\+|=>\s*\x60\$\$\{`)
 	sqlBareChainRe  = regexp.MustCompile(`^[A-Za-z_$][\w$]*(?:\??\.[A-Za-z_$][\w$]*)*$`)
 	sqlLookupRe     = regexp.MustCompile(`^((?:this\.|self\.|cls\.)?[A-Za-z_$][\w$]*)\s*(?:\[[^\]]*\]|\.get\(.*\))(?:\s*(?:\?\?|\|\||\bor\b)\s*(?:'[^']*'|"[^"]*"))?$`)
 	sqlTernaryRe    = regexp.MustCompile(`^.+?\s\?\s(.+?)\s:\s(.+)$`)
@@ -328,7 +342,7 @@ func (e sqlEnv) safe(x string, depth int) bool {
 	}
 	// Template literals and f-strings inside the expression.
 	if strings.HasPrefix(x, "`") && strings.HasSuffix(x, "`") && len(x) >= 2 {
-		inner, ok := sqlOperands(x)
+		inner, ok := sqlOperands(x, e.py)
 		if !ok {
 			return false
 		}
@@ -340,7 +354,7 @@ func (e sqlEnv) safe(x string, depth int) bool {
 		return true
 	}
 	if m := regexp.MustCompile(`^[fF][rR]?['"]`).FindString(x); m != "" {
-		inner, ok := sqlOperands(x)
+		inner, ok := sqlOperands(x, e.py)
 		if !ok {
 			return false
 		}
@@ -380,6 +394,10 @@ func (e sqlEnv) safe(x string, depth int) bool {
 	case sqlNumConvRe.MatchString(x) && endsCall(x), sqlLengthRe.MatchString(x):
 		return true
 	case sqlQuoteCallRe.MatchString(x) && endsCall(x):
+		return true
+	case sqlCheckCallRe.MatchString(x) && endsCall(x):
+		// _validate_identifier(table, "table name"): a function named for
+		// what it checks returns the checked value or raises.
 		return true
 	case sqlPlaceholdRe.MatchString(x):
 		return true
@@ -460,14 +478,92 @@ func splitTopStr(s, sep string) []string {
 
 // assignments returns the right-hand sides assigned to name in the file.
 func (e sqlEnv) assignments(name string) []string {
-	re := regexp.MustCompile(`(?:^|[^\w$.])` + regexp.QuoteMeta(name) + `\s*(?::\s*[\w<>\[\], |.]+\s*)?(?:=|\+=|:=)\s*([^=\n].*)$`)
 	var out []string
-	for _, l := range e.lines {
+	for _, a := range e.assigns(name, false) {
+		out = append(out, a.rhs)
+	}
+	return out
+}
+
+// assign is one assignment of a name: the text assigned and its line.
+type assign struct {
+	rhs  string
+	line int
+}
+
+// assigns lists the assignments to name or to this.name, self.name and
+// cls.name.
+func (e sqlEnv) assigns(name string, member bool) []assign {
+	prefix := ""
+	if member {
+		prefix = `(?:this|self|cls)\.`
+	}
+	re := regexp.MustCompile(`(?:^|[^\w$.])` + prefix + regexp.QuoteMeta(name) + `\s*(?::\s*[\w<>\[\], |.]+\s*)?(?:=|\+=|:=)\s*([^=\n].*)$`)
+	var out []assign
+	for i, l := range e.lines {
 		if m := re.FindStringSubmatch(l); m != nil {
-			out = append(out, strings.TrimRight(strings.TrimSpace(m[1]), ";,"))
+			// A parameter with a default value (`table: str = "x",`) is not an
+			// assignment: the caller chooses the value.
+			if t := strings.TrimSpace(l); strings.HasSuffix(t, ",") || strings.HasSuffix(t, "):") || strings.HasSuffix(t, ") {") || strings.HasPrefix(t, "def ") {
+				continue
+			}
+			out = append(out, assign{strings.TrimRight(strings.TrimSpace(stripComment(m[1])), ";,"), i})
 		}
 	}
 	return out
+}
+
+// sqlMigrationPath matches a file in a migrations directory (db/migrate,
+// migrations, alembic, knex migrations).
+var sqlMigrationPath = regexp.MustCompile(`(?i)(^|/)(migrations?|migrate|alembic|\w*_migrations)/`)
+
+var sqlCtorRe = regexp.MustCompile(`\bconstructor\s*\(|\bdef\s+__init__\s*\(|\bdef\s+initialize\s*\(|\bfunc\s+New\w*\(`)
+
+// ctorParams returns the text of the parameter list of the constructor
+// that encloses line i (the nearest one above it, within 60 lines), or "".
+func (e sqlEnv) ctorParams(i int) string {
+	for j := i; j >= 0 && j > i-60; j-- {
+		loc := sqlCtorRe.FindStringIndex(e.lines[j])
+		if loc == nil {
+			continue
+		}
+		text := e.lines[j][loc[0]:]
+		for k := j + 1; k < len(e.lines) && k < j+12 && !strings.Contains(text, ")"); k++ {
+			text += " " + e.lines[k]
+		}
+		if c := strings.Index(text, ")"); c >= 0 {
+			text = text[:c]
+		}
+		return text
+	}
+	return ""
+}
+
+// ctorConfigured reports an instance name that the constructor takes as a
+// parameter: this.table = table, self.table = table_name, or a TypeScript
+// parameter property. The value comes from the code that creates the
+// object, which is configuration; a request that reaches the constructor is
+// a flow the taint rules report on their own.
+func (e sqlEnv) ctorConfigured(name string, as []assign) bool {
+	word := regexp.MustCompile(`(?:^|[^\w$])` + regexp.QuoteMeta(name) + `(?:[^\w$]|$)`)
+	if len(as) == 0 {
+		for i, l := range e.lines {
+			if sqlCtorRe.MatchString(l) && word.MatchString(e.ctorParams(i)) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, a := range as {
+		if !sqlBareChainRe.MatchString(a.rhs) || strings.Contains(a.rhs, ".") {
+			return false
+		}
+		p := regexp.MustCompile(`(?:^|[^\w$])` + regexp.QuoteMeta(a.rhs) + `(?:[^\w$]|$)`)
+		if !p.MatchString(e.ctorParams(a.line)) {
+			return false
+		}
+	}
+	return true
 }
 
 // constCollection reports whether name is declared as a literal list, map
@@ -484,10 +580,20 @@ func (e sqlEnv) constCollection(name string) bool {
 func (e sqlEnv) nameSafe(chain string, depth int) bool {
 	name := sqlLastSegment(chain)
 	dotted := strings.Contains(chain, ".")
-	if as := e.assignments(name); len(as) > 0 {
+	member := strings.HasPrefix(chain, "this.") || strings.HasPrefix(chain, "self.") || strings.HasPrefix(chain, "cls.")
+	// self.x = x only passes a parameter on: it says nothing about the value.
+	var as []assign
+	for _, a := range e.assigns(name, member) {
+		if a.rhs != name {
+			as = append(as, a)
+		}
+	}
+	if len(as) > 0 {
 		all := true
-		for _, rhs := range as {
-			if !e.safe(rhs, depth+1) {
+		for _, a := range as {
+			at := e
+			at.at = a.line
+			if !at.safe(a.rhs, depth+1) {
 				all = false
 				break
 			}
@@ -495,6 +601,15 @@ func (e sqlEnv) nameSafe(chain string, depth int) bool {
 		if all {
 			return true
 		}
+	}
+	if !dotted && len(as) == 0 {
+		// a parameter of the constructor that encloses this line
+		if p := e.ctorParams(e.at); p != "" && regexp.MustCompile(`(?:^|[^\w$])`+regexp.QuoteMeta(name)+`(?:[^\w$]|$)`).MatchString(p) {
+			return true
+		}
+	}
+	if member && e.ctorConfigured(name, as) {
+		return true
 	}
 	return e.validated(name, dotted)
 }
@@ -544,6 +659,11 @@ func (e sqlEnv) validated(name string, member bool) bool {
 	}
 	for i := lo; i < hi && i < len(e.lines); i++ {
 		l := e.lines[i]
+		// validate_identifier(name, "table"): a call statement of a function
+		// named for what it checks, which raises on a bad value.
+		if word.MatchString(l) && sqlCheckStmtRe.MatchString(l) {
+			return true
+		}
 		if !word.MatchString(l) || !sqlNegationRe.MatchString(l) {
 			continue
 		}
@@ -583,4 +703,28 @@ func sqlConcatDemote(c lineCtx) *demotion {
 		return d
 	}
 	return sqlForFileOnly(c)
+}
+
+// stripComment drops a trailing # or // comment that follows whitespace
+// outside a string literal.
+func stripComment(s string) string {
+	var quote byte
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if quote != 0 {
+			if c == '\\' {
+				i++
+			} else if c == quote {
+				quote = 0
+			}
+			continue
+		}
+		switch {
+		case c == '\'' || c == '"' || c == '`':
+			quote = c
+		case i > 0 && (s[i-1] == ' ' || s[i-1] == '\t') && (c == '#' || c == '/' && i+1 < len(s) && s[i+1] == '/'):
+			return s[:i]
+		}
+	}
+	return s
 }
