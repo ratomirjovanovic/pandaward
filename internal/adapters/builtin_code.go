@@ -151,7 +151,7 @@ var ruleFilters = sync.OnceValue(func() []*prefilter.Filter {
 var codeRules = []lineRule{
 	{ID: "code.js-eval", Control: "D-001", Title: "Dynamic code evaluation", Demote: jsEvalDemote, Langs: jsLike, Re: regexp.MustCompile(`(^|[^.\w])(eval\s*\(|new\s+Function\s*\(|set(?:Timeout|Interval)\(\s*['"\x60])`),
 		Severity: model.SevHigh, Confidence: model.Confirmed, CWE: "CWE-95", Message: "Strings are evaluated as code. If any part of the string can be influenced by a user, this is code injection.", Fix: "Replace eval/new Function with explicit parsing or a lookup table; never evaluate strings."},
-	{ID: "code.py-eval", Control: "D-001", Title: "Dynamic code evaluation", Langs: py, Re: regexp.MustCompile(`(^|[^.\w])(eval|exec)\s*\(`),
+	{ID: "code.py-eval", Control: "D-001", Title: "Dynamic code evaluation", Demote: pyTextDemote(pyEvalRe, "eval or exec"), Langs: py, Re: pyEvalRe,
 		Severity: model.SevHigh, Confidence: model.Confirmed, CWE: "CWE-95", Message: "eval/exec evaluates strings as Python code.", Fix: "Use ast.literal_eval for literals or explicit parsing; never eval input."},
 	{ID: "code.php-eval", Control: "D-001", Title: "Dynamic code evaluation", Langs: langs("php"), Re: regexp.MustCompile(`(^|[^\w>])(eval|assert|create_function)\s*\(`),
 		Severity: model.SevHigh, Confidence: model.Confirmed, CWE: "CWE-95", Message: "PHP code evaluation construct.", Fix: "Remove dynamic evaluation."},
@@ -164,7 +164,7 @@ var codeRules = []lineRule{
 	{ID: "code.js-shell", Control: "D-002", Title: "Shell command built from a string", Langs: jsLike, Re: regexp.MustCompile(`shell\s*:\s*true`),
 		Not: regexp.MustCompile(`\.exec\(|regex|RegExp|\bdb\.\w+\(|\.query\(`), Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-78",
 		Message: "child_process.exec or shell:true runs the command through a shell; interpolated values allow command injection.", Fix: "Use execFile/spawn with an argument array and shell:false; validate arguments against an allowlist."},
-	{ID: "code.py-shell", Control: "D-002", Title: "Shell command execution", Langs: py, Re: regexp.MustCompile(`shell\s*=\s*True|os\.system\s*\(|os\.popen\s*\(|commands\.getoutput\(`),
+	{ID: "code.py-shell", Control: "D-002", Title: "Shell command execution", Demote: pyTextDemote(pyShellRe, "a shell call"), Langs: py, Re: pyShellRe,
 		Severity: model.SevHigh, Confidence: model.Confirmed, CWE: "CWE-78", Message: "Command runs through a shell interpreter.", Fix: "Use subprocess.run([...], shell=False) with an argument list."},
 	{ID: "code.go-shell", Control: "D-002", Title: "Shell command execution", Langs: langs("go"), Re: regexp.MustCompile(`exec\.Command(Context)?\([^)]*"(sh|bash|/bin/sh|/bin/bash|cmd|cmd\.exe|powershell|pwsh)"\s*,\s*(ctx\s*,\s*)?"(-c|/c|/C|-Command)"`),
 		Severity: model.SevHigh, Confidence: model.Confirmed, CWE: "CWE-78", Message: "Command runs through a shell interpreter.", Fix: "Call the binary directly with exec.Command(bin, args...)."},
