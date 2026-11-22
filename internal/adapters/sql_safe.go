@@ -41,7 +41,7 @@ func sqlSafeDemote(c lineCtx, concat bool) *demotion {
 	if c.File == nil || c.Index < 0 || c.Index >= len(c.File.Lines) {
 		return nil
 	}
-	if sqlMigrationPath.MatchString(strings.ReplaceAll(c.File.Path, `\`, "/")) {
+	if mp := strings.ReplaceAll(c.File.Path, `\`, "/"); sqlMigrationPath.MatchString(mp) && !sqlHandlerPath.MatchString(mp) {
 		return &demotion{Title: "SQL built in a database migration",
 			Message: "The statement is in a migration file, which an operator runs against the project's own database when it is deployed and which no request reaches. It is listed because a migration can still build a statement from data it reads.",
 			Fix:     "Nothing to do if the migration only uses its own constants; check any value it reads from the database or a file."}
@@ -310,10 +310,14 @@ type sqlEnv struct {
 }
 
 var (
-	sqlLitRe        = regexp.MustCompile(`^(?:'[^'\\]*'|"[^"\\]*"|\d+(?:\.\d+)?)$`)
-	sqlNumConvRe    = regexp.MustCompile(`^(?:Number|parseInt|parseFloat|int|float|len|Math\.(?:floor|ceil|round|min|max|abs|trunc)|Integer\.parseInt|Long\.parseLong|Integer\.valueOf)\s*\(`)
-	sqlCheckCallRe  = regexp.MustCompile(`^(?:[\w$]+\.)*_*(?:validate|sanitize|sanitise|check|ensure|assert|verify|safe)\w*\s*\(`)
-	sqlCheckStmtRe  = regexp.MustCompile(`^\s*(?:await\s+)?(?:[\w$]+\.)*_*(?:validate|check|ensure|assert|verify)\w*\s*\(`)
+	sqlLitRe     = regexp.MustCompile(`^(?:'[^'\\]*'|"[^"\\]*"|\d+(?:\.\d+)?)$`)
+	sqlNumConvRe = regexp.MustCompile(`^(?:Number|parseInt|parseFloat|int|float|len|Math\.(?:floor|ceil|round|min|max|abs|trunc)|Integer\.parseInt|Long\.parseLong|Integer\.valueOf)\s*\(`)
+	// A call named for checking an identifier: validate_identifier,
+	// sanitize_table_name, assertSafeColumn. A name that checks something
+	// else (check_exists, check_rate_limit, validate_user) does not count.
+	sqlCheckCallRe  = regexp.MustCompile(`(?i)^(?:await\s+)?(?:[\w$]+\.)*_*(?:(?:validate|sanitize|sanitise|check|ensure|assert|verify|safe)_?\w*(?:identifier|ident|table|column|field|sql|name)\w*|sanitize\w*|sanitise\w*)\s*\(`)
+	sqlCheckOtherRe = regexp.MustCompile(`(?i)exist|permission|rate|limit|auth|access|user|role|csrf|token|session`)
+	sqlRequestRe    = regexp.MustCompile(`(?i)request|req|params|query|body|input|argv|form|\.args|getparameter|\$_(get|post|request)|ctx|event`)
 	sqlLengthRe     = regexp.MustCompile(`\.length$|\.size\(\)$`)
 	sqlQuoteCallRe  = regexp.MustCompile(`^(?:[\w$.]*\.)?(?:escapeId|escapeIdentifier|quoteIdent\w*|quote_ident\w*|quoteName|quote_name|quoteIdentifier|identifier|ident|escape|escapeLiteral)\s*\(`)
 	sqlPlaceholdRe  = regexp.MustCompile(`\.fill\(\s*['"](?:\?|%s)['"]\s*\)|['"](?:\?|%s)['"]\s*\.repeat\(|['"](?:\?|%s)['"]\s+for\s+\w+|['"](?:\?|%s)['"]\s*\*|\*\s*['"](?:\?|%s)['"]|\[\s*['"](?:\?|%s)['"]\s*\]\s*\*|=>\s*['"\x60](?:\?|%s)['"\x60]|=>\s*['"\x60]\$['"\x60]\s*\+|=>\s*\x60\$\$\{`)
@@ -395,7 +399,7 @@ func (e sqlEnv) safe(x string, depth int) bool {
 		return true
 	case sqlQuoteCallRe.MatchString(x) && endsCall(x):
 		return true
-	case sqlCheckCallRe.MatchString(x) && endsCall(x):
+	case sqlCheckedCall(x) && endsCall(x):
 		// _validate_identifier(table, "table name"): a function named for
 		// what it checks returns the checked value or raises.
 		return true
@@ -517,6 +521,10 @@ func (e sqlEnv) assigns(name string, member bool) []assign {
 // migrations, alembic, knex migrations).
 var sqlMigrationPath = regexp.MustCompile(`(?i)(^|/)(migrations?|migrate|alembic|\w*_migrations)/`)
 
+// sqlHandlerPath marks request-handling code: a route called "migrate" is
+// not a migration.
+var sqlHandlerPath = regexp.MustCompile(`(?i)(^|/)(routes?|controllers?|handlers?|api|pages|views|endpoints|resolvers?|actions?)/`)
+
 var sqlCtorRe = regexp.MustCompile(`\bconstructor\s*\(|\bdef\s+__init__\s*\(|\bdef\s+initialize\s*\(|\bfunc\s+New\w*\(`)
 
 // ctorParams returns the text of the parameter list of the constructor
@@ -528,11 +536,21 @@ func (e sqlEnv) ctorParams(i int) string {
 			continue
 		}
 		text := e.lines[j][loc[0]:]
+		end := j
 		for k := j + 1; k < len(e.lines) && k < j+12 && !strings.Contains(text, ")"); k++ {
 			text += " " + e.lines[k]
+			end = k
 		}
 		if c := strings.Index(text, ")"); c >= 0 {
 			text = text[:c]
+		}
+		// The line must be in the constructor body: a later line at the
+		// indent of the constructor, such as the next method, ends it.
+		ind := indentOf(e.lines[j])
+		for k := end + 1; k <= i && k < len(e.lines); k++ {
+			if t := strings.TrimSpace(e.lines[k]); t != "" && !strings.HasPrefix(t, "#") && !strings.HasPrefix(t, "//") && indentOf(e.lines[k]) <= ind {
+				return ""
+			}
 		}
 		return text
 	}
@@ -545,6 +563,9 @@ func (e sqlEnv) ctorParams(i int) string {
 // object, which is configuration; a request that reaches the constructor is
 // a flow the taint rules report on their own.
 func (e sqlEnv) ctorConfigured(name string, as []assign) bool {
+	if e.builtFromRequest() {
+		return false
+	}
 	word := regexp.MustCompile(`(?:^|[^\w$])` + regexp.QuoteMeta(name) + `(?:[^\w$]|$)`)
 	if len(as) == 0 {
 		for i, l := range e.lines {
@@ -661,7 +682,7 @@ func (e sqlEnv) validated(name string, member bool) bool {
 		l := e.lines[i]
 		// validate_identifier(name, "table"): a call statement of a function
 		// named for what it checks, which raises on a bad value.
-		if word.MatchString(l) && sqlCheckStmtRe.MatchString(l) {
+		if word.MatchString(l) && sqlCheckedStmt(l, name) {
 			return true
 		}
 		if !word.MatchString(l) || !sqlNegationRe.MatchString(l) {
@@ -727,4 +748,50 @@ func stripComment(s string) string {
 		}
 	}
 	return s
+}
+
+// sqlCheckedCall reports a call of an identifier validator whose arguments
+// do not mention the request: it returns the checked value or raises.
+func sqlCheckedCall(x string) bool {
+	m := sqlCheckCallRe.FindString(x)
+	if m == "" || sqlCheckOtherRe.MatchString(m) {
+		return false
+	}
+	return !sqlRequestRe.MatchString(x[len(m):])
+}
+
+// sqlCheckedStmt reports a statement `validate_identifier(name, ...)` that
+// passes the name as its first argument to an identifier validator.
+func sqlCheckedStmt(l, name string) bool {
+	t := strings.TrimSpace(l)
+	m := sqlCheckCallRe.FindString(t)
+	if m == "" || sqlCheckOtherRe.MatchString(m) {
+		return false
+	}
+	return regexp.MustCompile(`^\s*(?:this\.|self\.)?` + regexp.QuoteMeta(name) + `\s*[,)]`).MatchString(t[len(m):])
+}
+
+// builtFromRequest reports an instantiation, in this file, of a class that
+// has a constructor, with an argument that mentions the request. The
+// Python taint engine does not follow a value through a constructor into
+// a member, so the name cannot be called configuration then.
+func (e sqlEnv) builtFromRequest() bool {
+	classRe := regexp.MustCompile(`^\s*(?:export\s+)?(?:default\s+)?(?:abstract\s+)?class\s+(\w+)`)
+	for _, l := range e.lines {
+		m := classRe.FindStringSubmatch(l)
+		if m == nil {
+			continue
+		}
+		call := regexp.MustCompile(`(?:^|[^\w$.])(?:new\s+)?` + regexp.QuoteMeta(m[1]) + `\s*\(([^)
+]*)\)`)
+		for _, u := range e.lines {
+			if classRe.MatchString(u) {
+				continue
+			}
+			if c := call.FindStringSubmatch(u); c != nil && sqlRequestRe.MatchString(c[1]) {
+				return true
+			}
+		}
+	}
+	return false
 }

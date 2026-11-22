@@ -75,6 +75,12 @@ func TestSQLSafePartsDemotion(t *testing.T) {
 		{"validator statement py", "a.py", "class S:\n    def __init__(self, table_prefix=\"p_\"):\n        validate_identifier(table_prefix, \"table_prefix\")\n        self.table_prefix = table_prefix\n        self.sessions_table = f\"{table_prefix}sessions\"\n    def get(self, sid):\n        self.cur.execute(f\"SELECT * FROM {self.sessions_table} WHERE session_id = %s\", (sid,))\n", true},
 		{"passed on, not checked py", "a.py", "class S:\n    def go(self, table_prefix):\n        self.table_prefix = table_prefix\n        self.sessions_table = f\"{table_prefix}sessions\"\n        self.cur.execute(f\"SELECT * FROM {self.sessions_table}\")\n", false},
 		{"mysql backticks in an f-string py", "a.py", "class S:\n    def __init__(self, bucket):\n        self.bucket = bucket\n    def n(self):\n        q = f\"SELECT COUNT(*) FROM `{self.bucket}`.`c`\"\n        self.run(q)\n", true},
+		{"method parameter below a constructor with the same name py", "a.py", "class S:\n    def __init__(self, table):\n        self.table = table\n    def get(self, table):\n        self.cur.execute(f\"SELECT * FROM {table} WHERE id = ?\", (1,))\n", false},
+		{"existence check is not validation py", "a.py", "def h():\n    table = check_exists(request.args[\"t\"])\n    cur.execute(f\"SELECT * FROM {table}\")\n", false},
+		{"rate limit statement is not validation py", "a.py", "def h():\n    table = request.args[\"t\"]\n    check_rate_limit(user, table)\n    cur.execute(f\"SELECT * FROM {table}\")\n", false},
+		{"validator of the request value is not a constant py", "a.py", "def h():\n    table = validate_identifier(request.args[\"t\"])\n    cur.execute(f\"SELECT * FROM {table}\")\n", false},
+		{"constructor fed from a request py", "a.py", "class Repo:\n    def __init__(self, table):\n        self.table = table\n    def get(self, i):\n        self.cur.execute(f\"SELECT * FROM {self.table} WHERE id = ?\", (i,))\n\n@app.route('/x')\ndef h():\n    r = Repo(request.args['t'])\n    r.get(1)\n", false},
+		{"route directory named migrate js", "routes/migrate/a.js", "app.get('/m', (req, res) => { db.query(`SELECT * FROM ${req.query.t}`); });\n", false},
 	}
 	for _, c := range cases {
 		sigs := runOn(t, codeAdapter{}, map[string]string{"src/" + c.file: c.src})
