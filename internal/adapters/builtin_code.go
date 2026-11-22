@@ -209,7 +209,7 @@ var codeRules = []lineRule{
 	{ID: "code.ruby-deserialize", Control: "D-004", Title: "Ruby unsafe load", Langs: langs("ruby"), Re: regexp.MustCompile(`Marshal\.load|YAML\.load\(|Psych\.load\(`), Not: regexp.MustCompile(`safe_load`),
 		Severity: model.SevHigh, Confidence: model.Hypothesis, CWE: "CWE-502", Message: "Unsafe deserialization API.", Fix: "Use YAML.safe_load or JSON."},
 
-	{ID: "code.tls-verify-off", Control: "E-003", Title: "TLS certificate verification disabled", Re: regexp.MustCompile(`verify\s*=\s*False|InsecureSkipVerify\s*:\s*true|rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED['"]?\s*[\]=:,]\s*['"]?0|CURLOPT_SSL_VERIFY(PEER|HOST)\s*,\s*(false|0)|_create_unverified_context|ServerCertificateValidationCallback\s*=.*=>\s*true|ssl_verify\s*[:=]\s*false|VERIFY_NONE`),
+	{ID: "code.tls-verify-off", Control: "E-003", Title: "TLS certificate verification disabled", Demote: tlsOptInDemote, Re: regexp.MustCompile(`verify\s*=\s*False|InsecureSkipVerify\s*:\s*true|rejectUnauthorized\s*:\s*false|NODE_TLS_REJECT_UNAUTHORIZED['"]?\s*[\]=:,]\s*['"]?0|CURLOPT_SSL_VERIFY(PEER|HOST)\s*,\s*(false|0)|_create_unverified_context|ServerCertificateValidationCallback\s*=.*=>\s*true|ssl_verify\s*[:=]\s*false|VERIFY_NONE`),
 		Not:      regexp.MustCompile(`(?i)(jwt|jws|jwe|jose|pyjwt)\w*\.(decode|verify|process)\w*\(`),
 		Severity: model.SevHigh, Confidence: model.Confirmed, CWE: "CWE-295", Message: "Certificate verification is turned off, so any network attacker can impersonate the server.", Fix: "Remove the override; trust a specific CA bundle if a private CA is needed."},
 	{ID: "code.weak-hash-password", Control: "E-004", Title: "Weak hash used near password handling", Re: weakHashPasswordRe,
