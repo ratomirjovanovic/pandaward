@@ -30,6 +30,24 @@ By application (high and critical findings, all findings): Commafeed 0 of 0, Con
 - That the 268 are certainly false: they are reviewer verdicts with a spot check.
 - Anything about Java and PHP beyond three Java applications and none in PHP.
 
+## Rescan after the fixes
+
+The clusters above became fixes (#589, #590, #591, #592, #593, #594, #596, #597, #598, #599). The same 19 applications at the same pinned commits were scanned again with the built-in adapters of main (`e6eee83`), and each remaining high or critical finding was matched to its verdict by file, rule and line.
+
+| Rule group | High or critical before | After |
+|---|---|---|
+| SQL built from strings (`code.sql-template`, `code.sql-concat`, `code.sql-unsafe-raw`) | 117 | 50 |
+| TLS verification off (`code.tls-verify-off`) | 19 | 7 |
+| `eval` and `exec` in Python (`code.py-eval`) | 16 | 5 |
+| Shell calls in Python (`code.py-shell`) | 13 | 6 |
+| Open redirect, JavaScript (`taint.js-open-redirect`) | 16 | 5 |
+| Cross-site scripting, JavaScript (`taint.js-xss`) | 9 | 6 |
+| All rules | 271 | 153 |
+
+Of the 153, 150 are findings that carry a false-positive verdict and 3 are the true TLS findings, which are still reported (no fix removed a true finding). Four groups were not touched and remain whole: path traversal in Python and Go, deserialization with `yaml.FullLoader`, constant `bash -c` commands in Go, and the JavaScript SQL flows.
+
+What this does not show: the fixes were written from these same findings, so the drop measures that the clusters are fixed, not that the engines are more precise on code they have not seen. The verdicts of the pattern rules were not rechecked in the source one by one (see above). Round 3 on new applications is the way to measure that.
+
 ## Follow-up
 
 The false positive clusters become issues, each with the cases as a regression set (the constant-prefix redirect first, because it is a plain engine gap and 13 findings). See #470.
