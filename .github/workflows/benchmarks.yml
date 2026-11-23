@@ -125,11 +125,13 @@ jobs:
           install -m 0755 "$RUNNER_TEMP/opengrep" "$bin/opengrep"
           pipx install "semgrep==${SEMGREP_VERSION}"
           echo "$bin" >> "$GITHUB_PATH"
+      # Two jobs per shard, not four: under the heavier load Opengrep lost
+      # CVE-2017-16083 and the gate failed (#603).
       - name: OpenSSF CVE Benchmark, shard ${{ matrix.shard }} of 8
         env:
           CVEBENCH_WORK: ${{ runner.temp }}/cvebench
           SHARD: ${{ matrix.shard }}
-        run: sh tools/cvebench/run.sh --engine builtin,semgrep,opengrep,taint --jobs 4 --shard "$SHARD/8" --json > "cve-shard-$SHARD.json"
+        run: sh tools/cvebench/run.sh --engine builtin,semgrep,opengrep,taint --jobs 2 --shard "$SHARD/8" --json > "cve-shard-$SHARD.json"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: cve-shard-${{ matrix.shard }}
